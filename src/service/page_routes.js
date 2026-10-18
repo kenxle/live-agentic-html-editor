@@ -1387,7 +1387,7 @@ function renderMarkdown(file, options) {
   var stat = fs.statSync(file);
   var mounts = options.mounts || {};
   var key = [file, stat.mtimeMs, stat.size, options.assetPrefix, options.noFollow ? 1 : 0,
-    options.note === null ? "\u0001readonly" : options.note, JSON.stringify(mounts)].join("\u0000");
+    options.note === null ? "\u0001readonly" : options.note, JSON.stringify(mounts), markdown.engineKey()].join("\u0000");
   var hit = renderCache.get(key);
   if (hit) {
     renderCache.delete(key);

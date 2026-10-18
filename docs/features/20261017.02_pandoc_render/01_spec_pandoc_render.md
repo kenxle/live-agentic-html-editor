@@ -1,10 +1,10 @@
 # Render Markdown with pandoc
 
-Status: built; code review and requirements check running. Reviewed before code (architecture and security, 2026-10-17; dispositions at the bottom).
+Status: built and reviewed (architecture and security before code, 2026-10-17; code review and requirements check after, 2026-10-18; dispositions at the bottom).
 
 ## Needs Ken
 
-Updated 2026-10-18 18:51. Nothing needs Ken yet. The code is committed and pushed: the pandoc runner, the Lua filter with the fenced-div mapping, the card components, and the missing-pandoc rail line, with unit and browser tests and before/after screenshots in [shots](shots/). A code review and an independent requirements check are running; the PR follows them and a full local gate.
+Updated 2026-10-18 18:58. Nothing needs Ken yet. Code review and the independent requirements check are done and their findings are fixed (table at the bottom). Next: the full local gate, then the PR, which waits on Ken's approval.
 
 ### Decided 2026-10-17
 
@@ -85,7 +85,7 @@ Emoji, alerts and footnotes stay on, as in the builds. When pandoc is first foun
 
 **Speed.** `renderPage` is synchronous and stays synchronous: `spawnSync` blocks the helper's one event loop, so the timeout is 5 seconds and the process is killed with SIGKILL. A rebuild renders on each save, and the handled check renders the file on every check. So `pandoc.js` keeps a bounded cache of pandoc's raw output keyed by a hash of the Markdown text, the pandoc version and the filter. Failures and timeouts are cached too, so a slow document stalls once, then renders with marked. Link classification and URL rewriting run on every render, cached or not, because they depend on the page's folder and registry. Measured during build and reported.
 
-**The pandoc call.** `pandoc --from gfm+fenced_divs-gfm_auto_identifiers --to html5 --wrap=preserve --sandbox --lua-filter <src/service/lahe_render.lua>`, Markdown on stdin, HTML on stdout, `spawnSync` with an argument array, `shell: false`, a 10-second timeout and an output cap.
+**The pandoc call.** `pandoc --from gfm+fenced_divs-gfm_auto_identifiers-yaml_metadata_block-tex_math_dollars-tex_math_gfm --to html5 --wrap=preserve --sandbox --data-dir <absent> --metadata lahe-nonce=<nonce> --lua-filter <src/service/lahe_render.lua>`, Markdown on stdin, HTML on stdout, `spawnSync` with an argument array, `shell: false`, a 5-second timeout and an output cap.
 
 - `--sandbox` stops pandoc's readers and writers opening files or URLs. It does not limit Lua, so the filter uses no `io`, `os`, `pandoc.pipe` or mediabag call (a unit test greps for them), and `--data-dir` points at a folder that does not exist, so a user's `init.lua` never runs inside LAHE.
 - The child gets `cwd` set to the temp folder and a minimal environment (`HOME`, `LANG=C.UTF-8`), without `LUA_PATH`, `LUA_CPATH` or `XDG_DATA_HOME`. Output is capped at 32 MB and input at 8 MB. Pandoc is only ever handed text, never a path, so a notes review's no-follow read stays the only read. Nothing from the document reaches the argument list.
@@ -212,3 +212,22 @@ Architecture review (review-architect, opus) and security review (review-securit
 | S9 | noFollow not weakened, given text-only input and no document values in argv | <span class="status-dot status-dot--sage">Accepted</span> | Stated in the pandoc call section |
 
 Accepted all but A7's CI install. `rimage` maps to the existing `figure.plate` rather than a new component, under Ken's own rule for kinds with a house twin.
+
+### After the build
+
+Code review (feature-dev:code-reviewer, opus) and an independent requirements check (opus), 2026-10-18, on the integrated diff.
+
+| # | Finding | Disposition | What changed |
+|---|---|---|---|
+| C1 | The page server's render cache kept a marked page, notice and all, after pandoc was installed | <span class="status-dot status-dot--sage">Accepted</span> | The cache key carries which engine renders (`markdown.engineKey`) |
+| C2 | No tests for a nonzero exit, a timeout, the input cap or failure caching | <span class="status-dot status-dot--sage">Accepted</span> | A stand-in pandoc script drives six new unit tests |
+| C3 | A pandoc uninstalled after it was found failed every page as "could not render" | <span class="status-dot status-dot--sage">Accepted</span> | ENOENT forgets the binary and the cache, and the note says not installed |
+| C4 | Merged callouts compared only `data-label`, so `label=` runs merged and lost a label | <span class="status-dot status-dot--sage">Accepted</span> | The run key reads both |
+| C5 | The house-twin lookup walked a Lua map, whose order is not fixed | <span class="status-dot status-dot--sage">Accepted</span> | A fixed list |
+| C6 | An eyebrow dropped a list; `label=` and `data-label=` wrote the attribute twice | <span class="status-dot status-dot--sage">Accepted</span> | Blocks after the line are kept; the first label wins |
+| C7 | A rail comment sat over the wrong element | <span class="status-dot status-dot--sage">Accepted</span> | Moved |
+| Q1 | The rebuilt `dist/lahe-layer.js` was not committed | <span class="status-dot status-dot--sage">Accepted</span> | Committed with the fixes |
+| Q2 | pandoc left `"` bare in text and inline code, so the relative-URL pass rewrote `href="./x"` written in prose or a code span | <span class="status-dot status-dot--sage">Accepted</span> | The filter escapes them as marked does. Across the repo's 362 Markdown files with no fenced div, 360 now read the same under both engines; the other two are lazy lines starting "7817." and "5)" that marked wrongly turns into list numbers and pandoc keeps as text |
+| Q3 | Spec said 10 seconds and a shorter `--from` in one place | <span class="status-dot status-dot--sage">Accepted</span> | Corrected |
+| Q4 | The Playwright text search runs on a made-up page, not the two real documents | <span class="status-dot status-dot--faint">Deferred</span> | Both real documents sit outside this repo, so a spec cannot read them on another machine. They were checked with a script (zero `:::` lines each) and screenshotted |
+| Q5 | The README badge still says "runtime dependencies: none" | <span class="status-dot status-dot--purple">Rejected</span> | Still true for npm, which is what the badge links to; the Requirements section names pandoc as optional |

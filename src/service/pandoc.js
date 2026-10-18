@@ -214,6 +214,8 @@ function childEnv() {
  * @param {string} markdown the body, frontmatter already removed. Text only:
  *   pandoc is never handed a path, so a notes review's no-follow read is the
  *   only read.
+ * @param {{ignoreEnv?: boolean, timeoutMs?: number}} [options] timeoutMs is
+ *   for tests; the helper always uses TIMEOUT_MS.
  * @returns {{html: string|null, reason: string|null, note: string|null}}
  *   html null means render with marked; note is the sentence to say once.
  */
@@ -231,7 +233,15 @@ function render(markdown, options) {
     cache.set(key, hit);
     return hit;
   }
-  var outcome = run(where.path, text);
+  var outcome = run(where.path, text, (options && options.timeoutMs) || TIMEOUT_MS);
+  if (outcome.reason === "gone") {
+    // pandoc was found once and has been uninstalled since. Forget it, so the
+    // next render looks again and the notice says "not installed", not
+    // "could not render".
+    located = { path: null, reason: "missing", at: Date.now() };
+    cache.clear();
+    return { html: null, reason: "missing", note: noteFor("missing") };
+  }
   remember(key, outcome);
   return outcome;
 }
@@ -242,7 +252,7 @@ function failed(detail) {
   return { html: null, reason: "failed", note: noteFor("failed", detail) };
 }
 
-function run(file, text) {
+function run(file, text, timeoutMs) {
   if (Buffer.byteLength(text, "utf8") > MAX_INPUT) return failed("larger than " + (MAX_INPUT / 1024 / 1024) + " MB");
   var result = childProcess.spawnSync(file, [
     "--from", FROM,
@@ -258,13 +268,14 @@ function run(file, text) {
     shell: false,
     cwd: os.tmpdir(),
     env: childEnv(),
-    timeout: TIMEOUT_MS,
+    timeout: timeoutMs,
     killSignal: "SIGKILL",
     maxBuffer: MAX_OUTPUT,
     windowsHide: true
   });
   if (result.error) {
-    var code = result.error.code === "ETIMEDOUT" ? "timed out after " + (TIMEOUT_MS / 1000) + "s" : String(result.error.code || result.error.message);
+    if (result.error.code === "ENOENT") return { html: null, reason: "gone", note: null };
+    var code = result.error.code === "ETIMEDOUT" ? "timed out after " + (timeoutMs / 1000) + "s" : String(result.error.code || result.error.message);
     return failed(code);
   }
   if (result.status !== 0) {
@@ -272,6 +283,17 @@ function run(file, text) {
     return failed(first.slice(0, 200));
   }
   return { html: result.stdout, reason: null, note: null };
+}
+
+/**
+ * What a cached page depends on: which pandoc renders, or none. The page
+ * server's render cache keys on it, so a page cached while pandoc was missing
+ * renders again once pandoc is found.
+ */
+function engineKey() {
+  if (forcedMarked()) return "marked:forced";
+  var where = locate();
+  return where.path ? "pandoc:" + where.path + ":" + where.version : "marked:" + where.reason;
 }
 
 /** For tests: forget the located binary, the cache and the filter hash. */
@@ -291,6 +313,7 @@ module.exports = {
   TIMEOUT_MS: TIMEOUT_MS,
   parseVersion: parseVersion,
   locate: locate,
+  engineKey: engineKey,
   noteFor: noteFor,
   render: render,
   reset: reset

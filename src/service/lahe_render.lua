@@ -86,6 +86,19 @@ local function task_item(blocks)
   return true
 end
 
+-- Inline text keeps marked's escaping. pandoc writes a double quote in text
+-- and in inline code as a bare ", and markdown.js's relative-URL pass would
+-- then read `href="./x"` inside a sentence or a code span as a real attribute
+-- and rewrite the words on the page. marked writes &quot;, so these do too.
+local function inline_code(el)
+  return pandoc.RawInline("html", "<code>" .. escape(el.text) .. "</code>")
+end
+
+local function str(el)
+  if el.text:find('"', 1, true) then return pandoc.RawInline("html", escape(el.text)) end
+  return el
+end
+
 local function bullet_list(el)
   for _, item in ipairs(el.content) do task_item(item) end
   return el
@@ -168,10 +181,16 @@ end
 
 local function attr_string(id, classes, attributes)
   local parts = {}
+  local written = {}
   if id and id ~= "" then table.insert(parts, ' id="' .. escape(id) .. '"') end
   if classes and #classes > 0 then table.insert(parts, ' class="' .. escape(table.concat(classes, " ")) .. '"') end
   for _, pair in ipairs(attributes or {}) do
-    table.insert(parts, " " .. attr_name(pair[1]) .. '="' .. escape(pair[2]) .. '"')
+    -- label= and data-label= both become data-label; the first one wins.
+    local name = attr_name(pair[1])
+    if not written[name] then
+      written[name] = true
+      table.insert(parts, " " .. name .. '="' .. escape(pair[2]) .. '"')
+    end
   end
   return table.concat(parts)
 end
@@ -253,17 +272,21 @@ local function map_pullquote(blocks)
   return out
 end
 
--- eyebrow: one short line, so the paragraphs become one line.
+-- eyebrow: one short line, so the paragraphs become one line. Anything that
+-- is not a paragraph follows the line rather than vanish.
 local function map_eyebrow(blocks)
   local line = {}
+  local rest = {}
   for _, block in ipairs(blocks) do
     local inlines = inline_blocks(block)
     if inlines then
       if #line > 0 then table.insert(line, pandoc.Space()) end
       append_all(line, inlines)
+    else
+      table.insert(rest, block)
     end
   end
-  return line
+  return line, rest
 end
 
 -- rimage: the image, then the caption with its source and license.
@@ -309,12 +332,14 @@ end
 
 -- Kinds with a house twin, by the div's class. Each returns the component's
 -- classes and its content.
+-- A list, not a map, so a div carrying two of these classes renders the
+-- same way on every run (Lua does not order a map's keys).
 local TWINS = {
-  ["stat"] = function (el) return { "stat" }, map_stat(el.content) end,
-  ["stat-row"] = function (el) return { "stats" }, el.content end,
-  ["keytakeaway"] = function (el) return { "callout" }, el.content end,
-  ["card"] = function (el) return { "card" }, map_card(el.content) end,
-  ["cardgrid"] = function (el) return { "cards" }, el.content end,
+  { "stat", function (el) return { "stat" }, map_stat(el.content) end },
+  { "stat-row", function (el) return { "stats" }, el.content end },
+  { "keytakeaway", function (el) return { "callout" }, el.content end },
+  { "card", function (el) return { "card" }, map_card(el.content) end },
+  { "cardgrid", function (el) return { "cards" }, el.content end },
 }
 
 local function without(classes, drop)
@@ -361,12 +386,16 @@ local function div(el)
   if has_class(el, "eyebrow") then
     local classes = without(el.classes, { eyebrow = true })
     table.insert(classes, 1, "eyebrow")
+    local text, rest = map_eyebrow(el.content)
     local line = { pandoc.RawInline("html", "<p" .. attr_string(el.identifier, classes, attributes) .. ">") }
-    append_all(line, map_eyebrow(el.content))
+    append_all(line, text)
     table.insert(line, pandoc.RawInline("html", "</p>"))
-    return { pandoc.Plain(line) }
+    local out = { pandoc.Plain(line) }
+    append_all(out, rest)
+    return out
   end
-  for name, map in pairs(TWINS) do
+  for _, twin in ipairs(TWINS) do
+    local name, map = twin[1], twin[2]
     if has_class(el, name) then
       local classes, content = map(el)
       local drop = {}
@@ -386,7 +415,7 @@ local function run_key(block)
   if block.t ~= "Div" then return nil end
   local kind = callout_kind(block)
   if not kind or not CALLOUTS[kind].merge then return nil end
-  return table.concat(block.classes, " ") .. "\0" .. (block.attributes["data-label"] or "")
+  return table.concat(block.classes, " ") .. "\0" .. (block.attributes["data-label"] or block.attributes["label"] or "")
 end
 
 local function anchored(item)
@@ -419,6 +448,9 @@ end
 return {
   { Meta = read_nonce },
   { Link = link, CodeBlock = code_block, Table = table_block, BulletList = bullet_list },
+  -- Top down, so an image's alt text is left alone: pandoc writes alt from
+  -- plain text, and a raw piece there would drop words.
+  { traverse = "topdown", Image = function (el) return el, false end, Code = inline_code, Str = str },
   { Blocks = merge_runs },
   { Pandoc = split },
   { Div = div }

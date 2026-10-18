@@ -600,6 +600,8 @@ module.exports = {
   artifactPath: artifactPath,
   sourceNote: sourceNote,
   hasFencedDiv: hasFencedDiv,
+  // Which engine renders right now, for a render cache's key.
+  engineKey: pandoc.engineKey,
   render: render,
   renderPage: renderPage,
   writeArtifact: writeArtifact

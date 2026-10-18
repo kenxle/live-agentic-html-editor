@@ -2671,13 +2671,15 @@
       head.appendChild(collapseBtn);
       rail.appendChild(head);
 
-      // THE OVERDUE BANNER, at the top where it is read first. Built once and
-      // shown or hidden by renderWaitBanner, like every other piece of chrome.
+      // THE MISSING-PANDOC LINE, under the head. Shown when the page says its
+      // fenced divs are plain text because pandoc is missing.
       var renderNote = el("div", "render-note", RENDER_NOTE_TEXT);
       renderNote.setAttribute("data-lahe-render-note", "true");
       renderNote.hidden = !pageNeedsPandoc();
       rail.appendChild(renderNote);
 
+      // THE OVERDUE BANNER, at the top where it is read first. Built once and
+      // shown or hidden by renderWaitBanner, like every other piece of chrome.
       var late = el("div", "late");
       late.setAttribute("role", "alert");
       late.setAttribute("data-lahe-late-banner", "true");

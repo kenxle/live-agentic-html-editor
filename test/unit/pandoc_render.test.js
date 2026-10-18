@@ -100,6 +100,105 @@ test("the extensions LAHE names are spelled into one --from value", () => {
   assert.equal(pandoc.FROM, "gfm+fenced_divs-gfm_auto_identifiers-yaml_metadata_block-tex_math_dollars-tex_math_gfm");
 });
 
+// A stand-in pandoc: answers --version and --list-extensions like pandoc 3.9,
+// and on a real call does what `mode` says, appending one line per call to a
+// counter file so a test can see whether it ran again.
+function fakePandoc(mode) {
+  const root = folder();
+  const counter = path.join(root, "calls");
+  const script = path.join(root, "pandoc");
+  const action = mode === "fail" ? "echo boom >&2; exit 3" : mode === "slow" ? "sleep 3; exit 0" : "exit 0";
+  fs.writeFileSync(script, [
+    "#!/bin/sh",
+    "case \"$1\" in",
+    "  --version) echo 'pandoc 3.9.0.2'; exit 0 ;;",
+    "  --list-extensions=gfm) printf '%s\\n' +fenced_divs +gfm_auto_identifiers +yaml_metadata_block +tex_math_dollars +tex_math_gfm; exit 0 ;;",
+    "esac",
+    "echo call >> " + JSON.stringify(counter),
+    action
+  ].join("\n") + "\n");
+  fs.chmodSync(script, 0o755);
+  return { script, calls: () => (fs.existsSync(counter) ? fs.readFileSync(counter, "utf8").split("\n").filter(Boolean).length : 0) };
+}
+
+const POSIX = process.platform === "win32" ? "the stand-in pandoc is a shell script" : false;
+
+test("a pandoc that exits nonzero falls back, says why, and is not run again for the same text", { skip: POSIX }, () => {
+  const fake = fakePandoc("fail");
+  withEnv({ LAHE_MARKDOWN_ENGINE: undefined, LAHE_PANDOC: fake.script }, () => {
+    const first = pandoc.render("::: callout-req\nx\n:::\n");
+    assert.equal(first.html, null);
+    assert.equal(first.reason, "failed");
+    assert.match(first.note, /boom/);
+    const second = pandoc.render("::: callout-req\nx\n:::\n");
+    assert.equal(second.reason, "failed");
+    assert.equal(fake.calls(), 1, "the failure was cached");
+  });
+});
+
+test("a pandoc that runs past the timeout is killed, falls back, and is not run again", { skip: POSIX }, () => {
+  const fake = fakePandoc("slow");
+  withEnv({ LAHE_MARKDOWN_ENGINE: undefined, LAHE_PANDOC: fake.script }, () => {
+    const started = Date.now();
+    const first = pandoc.render("slow text", { timeoutMs: 300 });
+    assert.ok(Date.now() - started < 2500, "killed at the timeout, not after the sleep");
+    assert.equal(first.reason, "failed");
+    assert.match(first.note, /timed out/);
+    pandoc.render("slow text", { timeoutMs: 300 });
+    assert.equal(fake.calls(), 1, "the timeout was cached");
+  });
+});
+
+test("a page whose pandoc fails still renders, with marked", { skip: POSIX }, () => {
+  const fake = fakePandoc("fail");
+  withEnv({ LAHE_MARKDOWN_ENGINE: undefined, LAHE_PANDOC: fake.script }, () => {
+    const page = renderWith("# T\n\n::: callout-req\nR1\n:::\n", { engine: undefined });
+    assert.equal(page.engine, "marked");
+    assert.match(page.note, /could not render/);
+    assert.match(page.html, /<h1>T<\/h1>/);
+  });
+});
+
+test("a pandoc uninstalled after it was found is forgotten, and the note says not installed", { skip: POSIX }, () => {
+  const fake = fakePandoc("ok");
+  withEnv({ LAHE_MARKDOWN_ENGINE: undefined, LAHE_PANDOC: fake.script }, () => {
+    assert.ok(pandoc.locate().path, "found the stand-in");
+    fs.renameSync(fake.script, fake.script + ".gone");
+    const out = pandoc.render("after uninstall");
+    assert.equal(out.reason, "missing");
+    assert.match(out.note, /not installed/);
+  });
+});
+
+test("input over the cap is refused before pandoc starts", { skip: POSIX }, () => {
+  const fake = fakePandoc("ok");
+  withEnv({ LAHE_MARKDOWN_ENGINE: undefined, LAHE_PANDOC: fake.script }, () => {
+    const out = pandoc.render("x".repeat(8 * 1024 * 1024 + 1));
+    assert.equal(out.reason, "failed");
+    assert.match(out.note, /larger than/);
+    assert.equal(fake.calls(), 0);
+  });
+});
+
+test("a pandoc that lacks a named extension counts as too old", { skip: POSIX }, () => {
+  const root = folder();
+  const script = path.join(root, "pandoc");
+  fs.writeFileSync(script, "#!/bin/sh\ncase \"$1\" in --version) echo 'pandoc 3.0'; exit 0 ;; --list-extensions=gfm) echo +fenced_divs; exit 0 ;; esac\nexit 0\n");
+  fs.chmodSync(script, 0o755);
+  withEnv({ LAHE_MARKDOWN_ENGINE: undefined, LAHE_PANDOC: script }, () => {
+    const where = pandoc.locate();
+    assert.equal(where.path, null);
+    assert.equal(where.reason, "too-old");
+  });
+});
+
+test("the page cache key changes when pandoc goes from missing to found", { skip: NEEDS_PANDOC }, () => {
+  const missing = withEnv({ LAHE_MARKDOWN_ENGINE: undefined, LAHE_PANDOC: "none" }, () => markdown.engineKey());
+  const found = withEnv({ LAHE_MARKDOWN_ENGINE: undefined, LAHE_PANDOC: undefined }, () => markdown.engineKey());
+  assert.notEqual(missing, found);
+  assert.match(found, /^pandoc:/);
+});
+
 // --- fenced divs ------------------------------------------------------------
 
 test("a requirement run is one eyebrow label over every item, ids kept as anchors", { skip: NEEDS_PANDOC }, () => {
@@ -176,7 +275,7 @@ test("report kinds map onto their house twins", { skip: NEEDS_PANDOC }, () => {
     ":::"
   ].join("\n"));
   assert.match(body, /<div class="stats">\n<div class="stat">\n<p class="stat-value"><strong>73%<\/strong><\/p>\n<p class="stat-meta">conceptual, not prompt skill<\/p>\n<\/div>\n<\/div>/);
-  assert.match(body, /<blockquote class="pullquote">\n<p>"The line\."<\/p>\n<footer>— A Person \(<a href="https:\/\/example\.com\/q" target="_blank" rel="noopener noreferrer">source<\/a>\)<\/footer>\n<\/blockquote>/);
+  assert.match(body, /<blockquote class="pullquote">\n<p>&quot;The line\.&quot;<\/p>\n<footer>— A Person \(<a href="https:\/\/example\.com\/q" target="_blank" rel="noopener noreferrer">source<\/a>\)<\/footer>\n<\/blockquote>/);
   assert.match(body, /<div class="callout">\n<p>Copy the <em>grammar<\/em>\.<\/p>\n<\/div>/);
   assert.match(body, /<p class="eyebrow">Competitive landscape<\/p>/);
   assert.match(body, /<figure class="plate">\n<img src="\/\.lahe-source\/[a-f0-9]+\/images\/ui\.png" alt="Product UI" \/>\n<figcaption>Screenshot: example\.com, fair use<\/figcaption>\n<\/figure>/);
@@ -283,6 +382,20 @@ test("Mermaid and code blocks keep marked's markup; task items are bare checkbox
   assert.match(page.html, /<pre><code class="language-js">let a = 1 &lt; 2;<\/code><\/pre>/);
   assert.match(page.html, /<ul>\n<li><input disabled="" type="checkbox"> open<\/li>\n<li><input checked="" disabled="" type="checkbox"> done<\/li>\n<\/ul>/);
   assert.match(page.html, /<div class="scrollx">\n<table>/);
+});
+
+test("a quote in text or inline code stays escaped, so href= in prose is never rewritten", { skip: NEEDS_PANDOC }, () => {
+  const body = pandocBody('Use `<link href="./style.css">` and src="./a.png" in words. ![a "q"](i.png)\n');
+  assert.match(body, /<code>&lt;link href=&quot;\.\/style\.css&quot;&gt;<\/code>/);
+  assert.match(body, /src=&quot;\.\/a\.png&quot; in words/);
+  assert.match(body, /alt="a &quot;q&quot;"/);
+});
+
+test("an eyebrow keeps a list that follows its line; label= on two metrics keeps both labels", { skip: NEEDS_PANDOC }, () => {
+  const body = pandocBody('::: eyebrow\nKicker\n\n- item\n:::\n\n::: {.callout-metric label="A"}\nx\n:::\n\n::: {.callout-metric label="B"}\ny\n:::\n');
+  assert.match(body, /<p class="eyebrow">Kicker<\/p>\n<ul>\n<li>item<\/li>/);
+  assert.match(body, /data-label="A"/);
+  assert.match(body, /data-label="B"/);
 });
 
 test("words marked shows stay words: no math, no swallowed --- block", { skip: NEEDS_PANDOC }, () => {
