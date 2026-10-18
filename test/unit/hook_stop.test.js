@@ -338,3 +338,61 @@ test("the block reason is exactly the text the docs show", () => {
   );
   assert.equal(protocol.monitorCommand([OURS], null), "lahe monitor --session " + OURS);
 });
+
+// The block reason restates the wake steps the contract and the skill already
+// give. PR #69 changed those steps and the hook kept the old ones, so every claim
+// the reason makes is listed here with the words the other copies use for it. A
+// change to any one copy fails this test until the others say the same thing.
+test("every step the block reason states is stated the same way in the contract and the skill", () => {
+  const flat = (text) => text.replace(/\s+/g, " ");
+  const reason = flat(hook.blockReason([{ id: OURS, stateDir: null }], hook.DEFAULT_MAX_TIMEOUT_MS));
+  const contract = flat(reviewFormat.CONTRACT.join("\n"));
+  const skillDir = path.join(REPO, "skills", "lahe");
+  const skill = flat([path.join(skillDir, "SKILL.md")]
+    .concat(fs.readdirSync(path.join(skillDir, "references")).map((name) => path.join(skillDir, "references", name)))
+    .map((file) => fs.readFileSync(file, "utf8")).join("\n"));
+  const placeholder = "<agent-session-id>";
+  // null: that copy does not cover this step.
+  const steps = [
+    { step: "the monitor command",
+      reason: protocol.monitorCommand([OURS], null),
+      contract: protocol.monitorCommand(placeholder, null),
+      skill: null },
+    { step: "the Bash timeout",
+      reason: "timeout " + hook.DEFAULT_MAX_TIMEOUT_MS,
+      contract: "timeout " + hook.DEFAULT_MAX_TIMEOUT_MS,
+      skill: String(hook.DEFAULT_MAX_TIMEOUT_MS) },
+    { step: "run in the background",
+      reason: "run_in_background true",
+      contract: "run_in_background true",
+      skill: "in the background" },
+    { step: "run only that command",
+      reason: "Run only that one command",
+      contract: "run that command, and only that",
+      skill: "Run that command in the background, and nothing else" },
+    { step: "drain first when a wake went undrained",
+      reason: "said work is waiting and you have not drained since, drain first",
+      contract: "said work is waiting and you have not drained since, drain first",
+      skill: "said work is waiting and you have not drained since, drain first" },
+    { step: "no timer",
+      reason: "add no timer or loop",
+      contract: "add a timer",
+      skill: "timer" },
+    { step: "no message to the reviewer",
+      reason: "no need to message the reviewer",
+      contract: null,
+      skill: "Send no message to the reviewer" },
+    { step: "a session that is not yours",
+      reason: "If the session is not yours, say so in one line",
+      contract: null,
+      skill: "say so in one line" }
+  ];
+  for (const s of steps) {
+    assert.ok(reason.includes(s.reason), "the block reason no longer says: " + s.step);
+    if (s.contract) assert.ok(contract.includes(s.contract), "the contract no longer says: " + s.step);
+    if (s.skill) assert.ok(skill.includes(s.skill), "the skill no longer says: " + s.step);
+  }
+  // The slip PR #69's review caught: the reason told agents not to drain.
+  assert.doesNotMatch(reason, /no need to drain|do not drain|no drain/i);
+  assert.doesNotMatch(skill, /no drain, no message/);
+});

@@ -179,7 +179,9 @@ is that hook:
   monitor command (one command per state directory, every session in it),
   says to run it with Bash `run_in_background` and `timeout` 86400000 (or
   `BASH_MAX_TIMEOUT_MS` when that is larger), and says one launch waits until
-  there is work, so no timer or loop is added.
+  there is work, so no timer or loop is added. It also says to drain first
+  when the monitor's last line said work is waiting and no drain has run
+  since, because a relaunched monitor waits on work it already woke the agent for.
   Nothing when `stop_hook_active` is true, so it blocks at most once per turn.
   Nothing on any error. It always exits `0`.
 

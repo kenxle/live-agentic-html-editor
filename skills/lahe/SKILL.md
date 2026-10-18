@@ -506,8 +506,10 @@ After a takeover it starts fresh and wakes you for everything unanswered.
 installs `lahe hook stop` as a Claude Code Stop hook. When you try to end a turn
 while a session you started is open and no monitor is running for it, the hook
 blocks the stop once and names the exact monitor command. Run that command in
-the background, and nothing else: no drain, no message to the reviewer. It
-blocks at most once per turn, so if the session really is not yours, or you are
+the background, and nothing else, with one exception: if the monitor's last line
+said work is waiting and you have not drained since, drain first, because a
+relaunched monitor waits on work it already woke you for. Send no message to
+the reviewer. It blocks at most once per turn, so if the session really is not yours, or you are
 holding after three kills (below), say so in one line and end the turn.
 
 **A kill is not work.** The one thing that ends a quiet monitor in an
