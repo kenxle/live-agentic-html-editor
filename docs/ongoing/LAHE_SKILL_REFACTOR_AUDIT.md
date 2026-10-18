@@ -38,5 +38,5 @@ PDF, and catalog gaps provided direct checks of those routes.
 
 ## CI status
 
-The [main gate for `acc14d99`](https://github.com/kenxle/live-agentic-html-editor/actions/runs/39169942441) passed. The previous run failed on installed-skill routing; commit
-[`acc14d99`](https://github.com/kenxle/live-agentic-html-editor/commit/acc14d996fc14d25ec3fb4cb44de9ce1fd8e4417) fixed that by excluding clone-only component files from the installed runbook check. The focused local tests pass after this audit's edits. This audit changes only documentation, which the main gate's path filter does not run on.
+The [gate for release v0.4.0](https://github.com/kenxle/live-agentic-html-editor/actions/runs/39172004524) passed. An earlier installed-skill routing failure was fixed in
+[`acc14d99`](https://github.com/kenxle/live-agentic-html-editor/commit/acc14d996fc14d25ec3fb4cb44de9ce1fd8e4417) by excluding clone-only component files from the installed runbook check. The focused local tests pass after this audit's edits.
