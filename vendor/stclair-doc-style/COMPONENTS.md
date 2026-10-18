@@ -18,7 +18,8 @@ Sample text below is placeholder. Replace it.
 - Use a class-free `ul`, `ol`, `table`, `blockquote`, `img`, `code` and `pre` for
   the plain case. They are already styled.
 - Icons in the source style use `<i data-lucide="...">`, which needs the Lucide
-  script. A LAHE page does not load it. Leave icons out, or inline an SVG.
+  script. A LAHE page does not load it. For content icons, inline SVG from a
+  free icon library such as Lucide.
 - Keep the markup to the classes listed here. A class not in this file is not in
   the stylesheet.
 

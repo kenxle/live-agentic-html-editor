@@ -50,11 +50,11 @@ installer provides it as `references/components.md` beside this skill.
 
 Copy the catalog's Page skeleton. Include a document-specific `<title>`, an
 icon, and `<link rel="stylesheet" href="./.lahe-doc-style.css">`.
-The helper serves that stylesheet from every served directory. An emoji icon
-needs no asset:
+The helper serves that stylesheet from every served directory. Use an SVG from
+a free icon library such as Lucide for the page icon. Save it beside the page:
 
 ```html
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%8E%A8</text></svg>">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
 ```
 
 Use one `.hero` with the title and `.lede`, then a `section.sheet` with a
