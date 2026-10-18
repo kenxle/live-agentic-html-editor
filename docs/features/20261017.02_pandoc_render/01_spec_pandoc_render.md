@@ -1,10 +1,10 @@
 # Render Markdown with pandoc
 
-Status: reviewed (architecture and security, 2026-10-17; dispositions at the bottom). Building in this worktree.
+Status: built; code review and requirements check running. Reviewed before code (architecture and security, 2026-10-17; dispositions at the bottom).
 
 ## Needs Ken
 
-Updated 2026-10-18 18:44. Nothing needs Ken. The code is mostly written but not yet committed: the pandoc runner, the Lua filter, the fenced-div mapping, the card and image components, and the missing-pandoc rail line. The builder stopped on a network error on 2026-10-17 and was restarted on 2026-10-18; it is finishing the code, then a code review, then the PR.
+Updated 2026-10-18 18:51. Nothing needs Ken yet. The code is committed and pushed: the pandoc runner, the Lua filter with the fenced-div mapping, the card components, and the missing-pandoc rail line, with unit and browser tests and before/after screenshots in [shots](shots/). A code review and an independent requirements check are running; the PR follows them and a full local gate.
 
 ### Decided 2026-10-17
 

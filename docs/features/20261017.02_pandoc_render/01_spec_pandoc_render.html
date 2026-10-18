@@ -2157,8 +2157,9 @@ main .lahe-local-link {
 <main data-container="Feature document">
 <div class="hero">
 <h1>Render Markdown with pandoc</h1>
-<p class="lede">Status: reviewed (architecture and security, 2026-10-17; dispositions
-at the bottom). Building in this worktree.</p>
+<p class="lede">Status: built; code review and requirements check running. Reviewed
+before code (architecture and security, 2026-10-17; dispositions at the
+bottom).</p>
 </div>
 <nav class="toplinks" aria-label="Documents"><span class="toplinks-label">Docs</span><span aria-current="page">Spec</span></nav>
 <details class="fold contents" open><summary class="fold-head"><span class="fold-arrow" aria-hidden="true"></span><h2>Contents</h2></summary><div class="fold-body"><nav id="TOC" class="contents-list">
@@ -2188,12 +2189,12 @@ dispositions</a></li>
 </nav></div></details>
 <section class="sheet">
 <div class="sheet-head"><h2 id="needs-ken">Needs Ken</h2><span class="n">Section 1</span></div>
-<p>Updated 2026-10-18 18:44. Nothing needs Ken. The code is mostly
-written but not yet committed: the pandoc runner, the Lua filter, the
-fenced-div mapping, the card and image components, and the
-missing-pandoc rail line. The builder stopped on a network error on
-2026-10-17 and was restarted on 2026-10-18; it is finishing the code,
-then a code review, then the PR.</p>
+<p>Updated 2026-10-18 18:51. Nothing needs Ken yet. The code is
+committed and pushed: the pandoc runner, the Lua filter with the
+fenced-div mapping, the card components, and the missing-pandoc rail
+line, with unit and browser tests and before/after screenshots in <a
+href="shots/">shots</a>. A code review and an independent requirements
+check are running; the PR follows them and a full local gate.</p>
 <h3 id="decided-2026-10-17">Decided 2026-10-17</h3>
 <ul>
 <li><strong>Route:</strong> no full feature-forge doc set. This spec
