@@ -4,7 +4,16 @@ Status: PR open (#80). Built and reviewed (architecture and security before code
 
 ## Needs Ken
 
-Updated 2026-10-18 19:26. **Needs Ken: approve or comment on [PR #80](https://github.com/kenxle/live-agentic-html-editor/pull/80).** Everything else is done: code, tests, both review rounds fixed, and the full local gate run (5 browser failures in Firefox and WebKit, each reproduced on a clean origin/main, so not from this branch).
+Updated 2026-10-18 19:29. **Needs Ken: approve or comment on [PR #80](https://github.com/kenxle/live-agentic-html-editor/pull/80).** Everything else is done: code, tests, both review rounds fixed, and the full local gate run (5 browser failures in Firefox and WebKit, each reproduced on a clean origin/main, so not from this branch).
+
+What it looks like, before and after:
+
+- The choice-buttons brief: [non-goals before](shots/brief_section3_before.png), [after](shots/brief_section3_after.png); [requirements before](shots/brief_section5_before.png), [after](shots/brief_section5_after.png)
+- The patent research report: [cards before](shots/report_section1_before.png), [after](shots/report_section1_after.png); [stat tiles, takeaway, caveat before](shots/report_section4_before.png), [after](shots/report_section4_after.png); [pull quote before](shots/report_section7_before.png), [after](shots/report_section7_after.png)
+- A page with no `:::` blocks: [before](shots/nodiv_section1_before.png), [after](shots/nodiv_section1_after.png). Pixel-identical.
+- The rail line when pandoc is missing: [screenshot](shots/rail_pandoc_note.png)
+
+<div class="panel"><p><b>One change from your decision.</b> You listed rimage as needing a new component. The style already has a framed figure with a caption (the plate), so rimage maps onto that, following your rule that a kind with a house twin uses it. Card and card grid are new components.</p></div>
 
 ### Decided 2026-10-17
 
