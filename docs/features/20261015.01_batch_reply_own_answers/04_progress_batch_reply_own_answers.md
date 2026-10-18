@@ -60,8 +60,8 @@ None.
 
 | Path | Reason | Status |
 |---|---|---|
-| `.claude/worktrees/agent-a6d915fee54499941` | Builder worktree, branch merged | waiting for Ken |
-| local branch `feat/batch-reply-own-answers` | Merged | waiting for Ken |
+| `.claude/worktrees/agent-a6d915fee54499941` | Builder worktree, branch merged | removed 2026-10-18 |
+| local branch `feat/batch-reply-own-answers` | Merged | removed 2026-10-18 |
 
 ### Test results
 
