@@ -52,18 +52,13 @@ them reach nobody.
 
 ## Writing a page for someone to read
 
-Many reviews start with a page you write. Write it in the house style, then
-serve it. The style is what makes the reader's eye land on the decision you need
-from them.
+Many reviews start with a page you write. Ensure you're using the styles and
+components offered by Lahe.
 
 ### Pick the format
 
-- **Markdown is the default.** LAHE renders it in the house style for you. The
-  first `#` heading becomes the title block, the paragraph under it becomes the
-  lede, and each `##` becomes a numbered section. The components below work
-  inside it as HTML blocks.
-- **HTML** when the page is mostly layout: a mockup, a design comparison, a
-  page of images. Then you spell the layout out yourself (see "An HTML page").
+- HTML by default. This offers better interactivity, graphs, diagrams, etc.
+- Markdown for simpler things. LAHE renders it in the house style for you.
 
 Put the file where it belongs: the project's docs folder when it is about the
 project, otherwise beside the thing it discusses. Not `/tmp`: the OS clears it,
