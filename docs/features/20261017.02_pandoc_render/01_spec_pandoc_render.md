@@ -1,10 +1,10 @@
 # Render Markdown with pandoc
 
-Status: built and reviewed (architecture and security before code, 2026-10-17; code review and requirements check after, 2026-10-18; dispositions at the bottom).
+Status: PR open (#80). Built and reviewed (architecture and security before code, 2026-10-17; code review and requirements check after, 2026-10-18; dispositions at the bottom).
 
 ## Needs Ken
 
-Updated 2026-10-18 18:58. Nothing needs Ken yet. Code review and the independent requirements check are done and their findings are fixed (table at the bottom). Next: the full local gate, then the PR, which waits on Ken's approval.
+Updated 2026-10-18 19:26. **Needs Ken: approve or comment on [PR #80](https://github.com/kenxle/live-agentic-html-editor/pull/80).** Everything else is done: code, tests, both review rounds fixed, and the full local gate run (5 browser failures in Firefox and WebKit, each reproduced on a clean origin/main, so not from this branch).
 
 ### Decided 2026-10-17
 
