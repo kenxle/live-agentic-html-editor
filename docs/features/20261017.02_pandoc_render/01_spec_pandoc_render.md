@@ -4,7 +4,7 @@ Status: reviewed (architecture and security, 2026-10-17; dispositions at the bot
 
 ## Needs Ken
 
-Updated 2026-10-17 15:40. Nothing is open. All four questions are decided; the builder is building.
+Updated 2026-10-18 18:44. Nothing needs Ken. The code is mostly written but not yet committed: the pandoc runner, the Lua filter, the fenced-div mapping, the card and image components, and the missing-pandoc rail line. The builder stopped on a network error on 2026-10-17 and was restarted on 2026-10-18; it is finishing the code, then a code review, then the PR.
 
 ### Decided 2026-10-17
 
