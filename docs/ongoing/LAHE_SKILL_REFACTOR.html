@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Lahe skill now loads guidance by task</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%93%9A</text></svg>">
+  <link rel="stylesheet" href="./.lahe-doc-style.css">
+</head>
+<body>
+  <div class="hero">
+    <h1>The Lahe skill now loads guidance by task</h1>
+    <p class="lede">The main skill is a small router, with focused runbooks behind it. Review whether the routes are clear and the style and review safeguards remain strong enough.</p>
+  </div>
+
+  <section class="sheet" id="review">
+    <div class="sheet-head"><h2>Start with the router and document runbook</h2><span class="n">Review</span></div>
+    <p data-lahe-id="eb3zupc4x">Read <a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/SKILL.md">the new main skill</a>, then <a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/documents.md">the document runbook</a>. Those are the most important places to judge whether this is lighter without making house styles optional. Every changed document is linked in the index below.</p>
+    <ul>
+      <li><b>Routing:</b> Does the entry point tell an agent what to read next without encouraging it to load everything?</li>
+      <li><b>Style consistency:</b> Does the document runbook make the right component easy to find and require the catalog before writing markup?</li>
+      <li><b>Review reliability:</b> Are the monitor, source-editing, verification, reply and handoff rules still clear?</li>
+    </ul>
+    <div class="panel"><p><b>Still needs real usage.</b> The checks confirm installation, links, commands and retained instruction coverage. I have not compared fresh agents using the old and new skills, so consistent behavior under real tasks remains something to observe.</p></div>
+  </section>
+
+  <section class="sheet" id="weight">
+    <div class="sheet-head"><h2>The entry point carries less context</h2><span class="n">Scope</span></div>
+    <div class="stats">
+      <div class="stat"><p class="stat-label">Main skill before</p><p class="stat-value">1,187 lines</p><p class="stat-meta">10,540 words, measured before the refactor</p></div>
+      <div class="stat"><p class="stat-label">Main skill after</p><p class="stat-value">66 lines</p><p class="stat-meta">590 words, measured after the refactor</p></div>
+    </div>
+    <p>Most specialized guidance moved into references. The smaller entry point is what an agent reads when the skill activates; the task then determines which references it needs. These are file-size measurements, not measured token use or a claim that an entire review needs only the entry point.</p>
+    <p>The shared safeguards stayed in the router: use the house styles, serve a live review, read the contract, arm the right monitor, drain feedback, edit the source, verify before replying, and take over sessions only when asked.</p>
+  </section>
+
+  <section class="sheet" id="structure">
+    <div class="sheet-head"><h2>Each kind of work has a route</h2><span class="n">Design</span></div>
+    <table>
+      <thead><tr><th>When the agent is doing this</th><th>What it loads</th></tr></thead>
+      <tbody>
+        <tr><td>Writing a document</td><td>Document principles and component selection, relevant catalog markup, then the review loop and its host monitor guide.</td></tr>
+        <tr><td>Opening a notes page</td><td>Notes and the review loop; new-writing rules when the reviewer types.</td></tr>
+        <tr><td>Reviewing slides</td><td>Deck conventions and framing; build guidance when the deck is generated.</td></tr>
+        <tr><td>Reviewing a webapp</td><td>Development-only integration, the real source and build process, and the review loop.</td></tr>
+        <tr><td>Handling feedback</td><td>The shared feedback checklist, with new-writing or choice details only when those item types arrive.</td></tr>
+        <tr><td>Taking over or finishing</td><td>The session, Library or finish runbook for that operation.</td></tr>
+      </tbody>
+    </table>
+    <p>I kept document principles in the document runbook rather than adding a separate principles file that every writing task would immediately need. Host-specific monitoring is separate, so Codex does not need to load Claude Code's background-process details.</p>
+    <p>The component catalog remains the markup source of truth. The document runbook keeps a compact selector, while repeated component examples and the repeated gotchas checklist came out of the main skill. Choice markup points to the same catalog.</p>
+  </section>
+
+  <section class="sheet" id="documents">
+    <div class="sheet-head"><h2>Every changed document is here</h2><span class="n">Index</span></div>
+    <table>
+      <thead><tr><th>Document</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/SKILL.md">Main skill</a></td><td>Task routing and shared safeguards.</td></tr>
+        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/documents.md">Documents</a></td><td>Format, title and lede, current decisions, component selection, HTML structure and styles.</td></tr>
+        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/notes.md">Notes</a></td><td>Blank notes pages and preserving the reviewer's writing.</td></tr>
+        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/slides.md">Slides</a></td><td>Deck themes, source/build routing and iframe behavior.</td></tr>
+        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/webapps.md">Webapps and builds</a></td><td>Development integration and generated documents.</td></tr>
+        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/review.md">Review loop</a></td><td>Startup, target selection, serving, URLs, assets, contract and draining.</td></tr>
+        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/feedback.md">Feedback</a></td><td>Item interpretation, protected edits, stamps, verification, replies and style requests.</td></tr>
+        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/free-writing.md">New writing and proofreading</a></td><td>Block placement, revisions, take-backs and proposed corrections.</td></tr>
+        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/choices.md">Choice groups</a></td><td>Button answers, recording decisions and changed minds.</td></tr>
+        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/host-claude.md">Claude Code monitoring</a></td><td>Background execution, Stop hook and memory-kill recovery.</td></tr>
+        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/host-codex.md">Codex monitoring</a></td><td>Foreground pending execution and monitor exits.</td></tr>
+        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/host-other.md">Other host monitoring</a></td><td>Antigravity, Gemini CLI and generic hosts.</td></tr>
+        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/sessions.md">Sessions</a></td><td>Multiple documents, moves, identity and explicit handoffs.</td></tr>
+        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/library.md">Library</a></td><td>Existing Library workflow, with a duplicate introduction removed and links added.</td></tr>
+        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/finish.md">Finish</a></td><td>End-of-review draining, hand-edit records, optional voice proposals and cleanup.</td></tr>
+        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/troubleshooting.md">Troubleshooting</a></td><td>State paths, origins, helper restarts and exceptional serving.</td></tr>
+        <tr><td><a href="http://documents.workspace.live-agentic-html-editor.lahe.localhost/AGENTS.md">Repository agent instructions</a></td><td>Updated installation and new-writing pointers.</td></tr>
+      </tbody>
+    </table>
+    <p>The <a href="http://documents.workspace.live-agentic-html-editor.lahe.localhost/vendor/stclair-doc-style/COMPONENTS.md">component catalog</a> is included for reference. Its contents were not changed; installation still copies it from the vendored style.</p>
+  </section>
+
+  <section class="sheet" id="validation">
+    <div class="sheet-head"><h2>The installer and checks follow the split</h2><span class="n">Validation</span></div>
+    <p>The installer now discovers Markdown references in the skill's reference folder instead of maintaining a fixed list. It continues to copy the vendored component catalog. The installed copies for Codex/Gemini and Claude Code were refreshed.</p>
+    <p>Existing instruction checks now inspect the shipped instruction bundle. A new installation check follows the Markdown links from each installed entry point, confirms every shipped reference is reachable, and compares the installed text with its source. Command checks also cover the references.</p>
+    <ul>
+      <li>Focused skill, installation and retained-rule checks passed.</li>
+      <li>Affected CLI and Library checks passed using the repository's test wrapper.</li>
+      <li>Repository lint, skill validation and whitespace checks passed.</li>
+    </ul>
+    <p>Your morning edits were preserved in commit <code>d712080a</code>. The refactor is commit <code>5915f253</code>. The working tree was clean after that commit.</p>
+  </section>
+</body>
+</html>
