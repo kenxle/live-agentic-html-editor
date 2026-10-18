@@ -32,9 +32,7 @@ this skill's folder. Load as needed.
 | Reviewer ends a review, or export/publish is next | [Finish](references/finish.md) |
 | Connection, helper or serving trouble | [Troubleshooting](references/troubleshooting.md) |
 
-Conditional detail: [new writing and proofreading](references/free-writing.md)
-when an item has `new_blocks`, `remove_blocks` or `proofread`;
-[choice groups](references/choices.md) when asking with buttons or receiving
+Conditional detail: [choice groups](references/choices.md) when asking with buttons or receiving
 `kind: choice`. Read [components](references/components.md) for the markup you
 need before authoring it. In the clone, that catalog lives at
 `vendor/stclair-doc-style/COMPONENTS.md`; installation places it beside this skill.
