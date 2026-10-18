@@ -22,8 +22,6 @@
 
 "use strict";
 
-var fs = require("node:fs");
-
 var protocol = require("../../shared/protocol.js");
 var agentSessions = require("../../service/agent_sessions.js");
 var stateDir = require("../../service/state_dir.js");
@@ -151,25 +149,6 @@ function parseDrain(text) {
   return { keys: keys, other: other, ended: ended, requests: requests };
 }
 
-/**
- * Do stdout and stderr write to the same place?
- *
- * The same device and inode is one terminal, one pipe, or one output file,
- * which is how a host that merges the streams captures a background command.
- * Anything that cannot be read is treated as split, so the line goes to both:
- * a doubt costs one repeated line, never a missed one.
- */
-function streamsShareDestination(fstat) {
-  var stat = fstat || fs.fstatSync;
-  try {
-    var out = stat(1);
-    var err = stat(2);
-    return !!out && !!err && out.dev === err.dev && out.ino === err.ino;
-  } catch (statError) {
-    return false;
-  }
-}
-
 function plural(count, one, many) {
   return count + " " + (count === 1 ? one : many);
 }
@@ -240,9 +219,6 @@ async function run(argv, options) {
   var wait = opts.wait || waitMs;
   var pid = typeof opts.pid === "number" ? opts.pid : process.pid;
   var nowMs = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
-  // Whether one copy of the line reaches both streams' reader. A test passes
-  // it; a real run asks the file system when it prints.
-  var sameStream = typeof opts.sameStream === "boolean" ? opts.sameStream : null;
   // The session store this monitor reads and heartbeats through. `readSession`
   // is the narrower seam a test uses when it only wants to script the session
   // record; a store built from it has no heartbeat, which the guards below allow.
@@ -559,11 +535,8 @@ async function run(argv, options) {
         withWork.map(function (result) { return protocol.drainCommand(result.entry.id, flagDir); }),
         protocol.monitorCommand(watched.map(function (entry) { return entry.id; }), flagDir)
       );
-      // ON STDOUT, and on stderr too only when the two go to different places.
-      // A host that captured one stream once got the instruction without the
-      // work; a host that merges them showed the agent two copies.
+      // Successful wake output belongs on stdout; stderr carries diagnostics.
       out(line);
-      if (!(sameStream === null ? streamsShareDestination() : sameStream)) err(line);
     }
     var failed = null;
     results.forEach(function (result) {
@@ -592,7 +565,6 @@ module.exports = {
   ACTION_REQUIRED: ACTION_REQUIRED,
   USAGE: USAGE,
   actionLine: actionLine,
-  streamsShareDestination: streamsShareDestination,
   liveDuplicate: liveDuplicate,
   parseArgs: parseArgs,
   parseDrain: parseDrain,

@@ -48,7 +48,6 @@ test("idle polls stay local until work appears, then monitor prints once and exi
   ], {
     stdout: (text) => stdout.push(text),
     stderr: (text) => stderr.push(text),
-    sameStream: false,
     readSession: () => ({ id: "s_owner", handoff_rev: 0, closed_at: null }),
     statusRun: async (args, io) => {
       calls.push(args);
@@ -69,9 +68,7 @@ test("idle polls stay local until work appears, then monitor prints once and exi
   assert.ok(printed.startsWith(monitor.ACTION_REQUIRED), "the banner leads stdout");
   assert.equal(printed.split("\n").filter((line) => line).length, 1, "one line");
   assert.equal(printed.includes('"id":"c_one"'), false, "the item is the drain's to print");
-  // With the two streams split, the stderr copy is kept for hosts that surface
-  // only that stream.
-  assert.equal(stderr.join(""), printed);
+  assert.equal(stderr.join(""), "", "successful wake output stays on stdout");
 
   // The exact next commands, printed where the agent is already looking.
   assert.match(printed, /lahe status --session s_owner --json --quiet/);
