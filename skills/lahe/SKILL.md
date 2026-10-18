@@ -1,18 +1,16 @@
 ---
 name: lahe
-description: Write things for a person to read as styled pages and serve them for live review in the browser with the live agentic HTML editor (LAHE). Use it whenever your answer is something to read, decide on, or reply to, even a quick one and even if they never say LAHE or "page": what an investigation or a review found, a plan, brief, summary, write-up, report, what you finished and what is left, how something works, a brainstorm, options or questions, a draft email or post, a mockup or chart. Write it as a page with the house layout and components (stat tiles, callouts, option cards) and serve it with `lahe review`, rather than pasting a long answer into chat or opening a plain file. Load this skill before you write the page or run any `lahe` command, even if you know the commands. Also for: reviewing an existing HTML or Markdown file or a dev app, acting on LAHE comments and edits, when someone says "claim the lahe session", "take over the lahe session", or "lahe sessions", and "open the lahe library".
+description: Use cases: - Serve documents and websites for human review. - Write formatted, interactive responses as Markdown or HTML pages. - A non-trivial answer someone will read, decide on, or reply to. - Acting on existing Lahe comments/docs, handing a review between agents. Examples: findings, feature docs, progress, how it works, brainstorms, question lists, draft articles, mockups, charts, prompts, skills, dev apps, taking notes. Load it before you write the page or run any `lahe` command. Triggers: "lahe", "live review", "review this page", "put it on a page", "write it up", "brainstorm it with me", "what did we learn", "take notes", "claim the lahe session", "take over the lahe session", "lahe sessions", "let's make a doc", "explain this", "how is this happening", "let's review this site", "what's the progress on X", "let's write an article", "let's walk through X", "I need to take notes for X", "can we make a nice document", "let's make this look good".
 ---
 
 <!-- lahe canonical skill: managed by the live-agentic-html-editor repository -->
 
-# LAHE live review
+# Lahe live review
 
-A person asked you to use the live agentic HTML editor (`lahe`) with them, or
-you are about to give them something to read. This skill is the playbook for
-both. "When you use it" and "Writing a page for someone to read" come first,
-because most reviews start with a page you write. "How to use it" is the whole
-normal review loop, and "Scenarios" tells you which variation you are in. Read
-the rest when you hit it.
+This skill is the playbook for creating and reviewing MD and HTML documents.
+"When you use it" and "Writing a page for someone to read" come first, because
+most reviews start with a page you write. "How to use it" is the whole normal
+review loop, and "Scenarios" tells you which variation you are in.
 
 ## What LAHE is
 
