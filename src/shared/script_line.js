@@ -47,6 +47,12 @@ function indentAt(html, index) {
  *   3. Failing both, appended, with a trailing newline. A fragment included by
  *      something else is a real thing to review and the line still runs.
  *
+ * When markup comes before the closer on its line (a minified page written as
+ * one long line), the tag goes directly before the closer on that same line.
+ * The start of the line could be inside a `<style>` block, where the browser
+ * would read the tag as CSS and the rail would never load. Same-line also means
+ * removeScriptLine takes back exactly what was added.
+ *
  * `defer` is on the tag, so the position is about being unmissable to a human
  * reading the file, not about execution order.
  */
@@ -62,10 +68,14 @@ function placeScriptLine(html, tag) {
       var at = last.index;
       var indent = indentAt(html, at);
       var lineStart = html.lastIndexOf("\n", at - 1) + 1;
+      var where = i === 0 ? "just before </body>" : "just before </html>";
+      if (lineStart + indent.length < at) {
+        return { html: html.slice(0, at) + tag + html.slice(at), where: where, indent: "" };
+      }
       var block = indent + indentBlock(tag, indent) + "\n";
       return {
         html: html.slice(0, lineStart) + block + html.slice(lineStart),
-        where: i === 0 ? "just before </body>" : "just before </html>",
+        where: where,
         indent: indent
       };
     }

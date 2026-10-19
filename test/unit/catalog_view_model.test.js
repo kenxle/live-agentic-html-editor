@@ -568,7 +568,7 @@ test("a 7-day fixture of 120 reviews: every one is in an open card, with no sear
 test("a 401 says LAHE restarted and stops polling", () => {
   const state = vm.withFetch(okState(), { ok: false, status: 401 });
   const view = build(freshList(), state);
-  assert.equal(view.banner.text, "LAHE restarted, reload this page.");
+  assert.equal(view.banner.text, "Lahe restarted, reload this page.");
   assert.equal(view.banner.action, "reload");
   assert.equal(vm.shouldPoll(state), false);
   assert.equal(vm.shouldPoll(okState()), true);
@@ -577,7 +577,7 @@ test("a 401 says LAHE restarted and stops polling", () => {
 test("no answer from the helper gives the not-running banner, and polling goes on", () => {
   const state = vm.withFetch(okState(), { ok: false, unreachable: true });
   const view = build(freshList(), state);
-  assert.equal(view.banner.text, "LAHE is not running. Ask an agent to open the lahe library.");
+  assert.equal(view.banner.text, "Lahe is not running. Ask an agent to open the lahe library.");
   assert.equal(vm.shouldPoll(state), true);
 });
 
@@ -588,7 +588,7 @@ test("a recovered helper clears the not-running banner", () => {
 
 test("an empty list gives the empty state", () => {
   const view = build({ attached: null, notice: null, sessions: [] }, okState());
-  assert.equal(view.empty, "No reviews yet. Documents you review in LAHE show up here.");
+  assert.equal(view.empty, "No reviews yet. Documents you review in Lahe show up here.");
   assert.deepEqual(view.sections, []);
   assert.equal(build(freshList(), okState()).empty, null);
 });
@@ -605,7 +605,7 @@ test("an unreadable stars file shows a notice", () => {
   list.notice = "PROTO_CATALOG_UNREADABLE";
   assert.equal(
     build(list, okState()).notice,
-    "Stars can't change right now: the Library's saved stars file can't be read. LAHE leaves the file as it is."
+    "Stars can't change right now: the Library's saved stars file can't be read. Lahe leaves the file as it is."
   );
   assert.equal(build(freshList(), okState()).notice, null);
 });
@@ -799,7 +799,7 @@ test("an Open whose token is refused turns into the restarted banner", () => {
   const list = freshList();
   const state = vm.afterOpen(vm.beginOpen(okState(), list, "r_mounted", { handoff: true }), list, "r_mounted",
     { ok: false, status: 401, error: { code: "PROTO_UNAUTHORIZED", message: "m", remedy: null } }, NOW);
-  assert.equal(build(list, state).banner.text, "LAHE restarted, reload this page.");
+  assert.equal(build(list, state).banner.text, "Lahe restarted, reload this page.");
 });
 
 test("an Open that returns a URL the check refuses says so and opens nothing", () => {
@@ -808,13 +808,13 @@ test("an Open that returns a URL the check refuses says so and opens nothing", (
     { ok: false, urlRefused: true }, NOW);
   const view = build(list, state);
   assert.equal(view.banner, null);
-  assert.equal(row(view, "r_mounted").note.text, "LAHE answered with an address that is not on this computer, so the Library did not open it.");
+  assert.equal(row(view, "r_mounted").note.text, "Lahe answered with an address that is not on this computer, so the Library did not open it.");
 });
 
-test("no answer to an Open says LAHE is not running", () => {
+test("no answer to an Open says Lahe is not running", () => {
   const list = freshList();
   const state = vm.afterOpen(vm.beginOpen(okState(), list, "r_mounted", { handoff: true }), list, "r_mounted", { ok: false, unreachable: true }, NOW);
-  assert.equal(build(list, state).banner.text, "LAHE is not running. Ask an agent to open the lahe library.");
+  assert.equal(build(list, state).banner.text, "Lahe is not running. Ask an agent to open the lahe library.");
 });
 
 // ---------------------------------------------------------------------------
@@ -892,10 +892,10 @@ test("a failed star with no remedy uses the helper's message", () => {
   assert.equal(row(build(freshList(), state), "r_mounted").note.text, "Couldn't save the star: Something broke. The star goes back.");
 });
 
-test("a star with no answer at all says LAHE is not running", () => {
+test("a star with no answer at all says Lahe is not running", () => {
   const state = vm.afterStar(vm.beginStar(okState(), "r_mounted", true), "r_mounted", true, { ok: false, unreachable: true }, NOW);
   const view = build(freshList(), state);
-  assert.equal(row(view, "r_mounted").note.text, "Couldn't save the star: LAHE is not running. The star goes back.");
+  assert.equal(row(view, "r_mounted").note.text, "Couldn't save the star: Lahe is not running. The star goes back.");
 });
 
 test("a star starred by the page moves its card into the top section", () => {
