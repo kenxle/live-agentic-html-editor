@@ -1383,14 +1383,15 @@ var renderCache = new Map();
  * @param {string} file the Markdown source
  * @param {{assetPrefix: string, mounts: object, siteRoot?: string|null, noFollow: boolean, note: string|null}} options
  *   `note` null is the read-only note; "" is none (a page under review)
- * @returns {{html: string, added: object[], linked: string[]}}
+ * @returns {{html: string, note: string|null, added: object[], linked: string[]}}
+ *   `note` is the helper-log line when pandoc did not render a page that needed it
  */
 function renderMarkdown(file, options) {
   var stat = fs.statSync(file);
   var mounts = Object.assign({}, options.mounts || {});
   if (options.siteRoot) mounts["/"] = options.siteRoot;
   var key = [file, stat.mtimeMs, stat.size, options.assetPrefix, options.noFollow ? 1 : 0,
-    options.note === null ? "\u0001readonly" : options.note, JSON.stringify(mounts)].join("\u0000");
+    options.note === null ? "\u0001readonly" : options.note, JSON.stringify(mounts), markdown.engineKey()].join("\u0000");
   var hit = renderCache.get(key);
   if (hit) {
     renderCache.delete(key);
@@ -1404,7 +1405,8 @@ function renderMarkdown(file, options) {
   var renderOptions = { assetPrefix: options.assetPrefix, links: registry, noFollow: !!options.noFollow };
   if (options.note === null) renderOptions.readOnlyNote = true;
   else renderOptions.note = options.note;
-  var out = { html: markdown.render(file, renderOptions), added: registry.added.slice(), linked: registry.linked.slice() };
+  var page = markdown.renderPage(file, renderOptions);
+  var out = { html: page.html, note: page.note, added: registry.added.slice(), linked: registry.linked.slice() };
   renderCache.set(key, out);
   if (renderCache.size > RENDER_CACHE_MAX) renderCache.delete(renderCache.keys().next().value);
   return out;
@@ -1944,6 +1946,7 @@ function createPageRoutes(options) {
     } catch (err) {
       return sendText(req, res, 500, "could not render " + path.basename(candidate) + "\n");
     }
+    if (out.note) sayOnce("render-note\u0000" + out.note, "pages: " + out.note);
     if (out.added.length) {
       var added = {};
       out.added.forEach(function (entry) { added[entry.prefix] = entry.dir; });

@@ -292,6 +292,28 @@ never a coloured edge.
 </div>
 ```
 
+### Cards
+Two or three parallel points side by side, such as the three findings or the
+parts of a comparison. Each card is a name and a short body. Nothing here asks
+the reader to choose; for that, use option cards or a choice group.
+
+```html
+<div class="cards">
+  <div class="card">
+    <h4>Name</h4>
+    <p>A line or two.</p>
+  </div>
+  <div class="card">
+    <h4>Name</h4>
+    <ul><li>A short point.</li></ul>
+  </div>
+</div>
+```
+
+A single `.card` outside `.cards` is one framed block in the column. In Markdown
+rendered by LAHE, `::: card` inside `:::: cardgrid` becomes this, and a card's
+first line in bold becomes its `h4`.
+
 ### Choice group
 A question with a set of answers the reader clicks, when you can name every
 answer and will act on the one they pick. Lahe sends the click to you as the
@@ -489,13 +511,38 @@ Red and amber mean a problem and nothing else. The red panel is
 `<div class="panel panel--danger"><p><b>Not saved.</b> What went wrong.</p></div>`.
 A page with no problem shows neither colour.
 
+## Components in Markdown
+
+A Markdown page LAHE renders with pandoc installed turns these pandoc fenced
+divs into the components above. The same kinds render in the feature-forge and
+research-report builds. Without pandoc they show as plain text.
+
+| Fenced div | Becomes |
+| --- | --- |
+| `::: callout-req` | an eyebrow "Requirement" over the content; a run of them shares one label |
+| `::: callout-nongoal` | an eyebrow "Non-goals" over the content |
+| `::: callout-metric`, `callout-suggest` | insight panel, "Metrics" or "Suggestion" |
+| `::: callout-question`, `callout-flag` | caveat insight panel, "Open question" or "Red flag" |
+| `::: callout`, `callout-note` | insight panel ("Note" for the second) |
+| `::: callout-warn` | caveat insight panel |
+| `::: insight`, `::: {.insight .insight--caveat}`, `::: xref` | the component of that name |
+| `::: stat` inside `:::: stat-row` | stat tiles: the first paragraph is the value, the rest the meta line |
+| `::: pullquote` | pull quote: the first paragraph is the quote, the rest its footer |
+| `::: keytakeaway` | callout |
+| `::: eyebrow` | eyebrow |
+| `::: rimage` | figure plate: the image, then the caption |
+| `::: card` inside `:::: cardgrid` | cards |
+| any other name | a plain `div` with that class |
+
+`::: {.kind data-label="Your label"}` replaces a panel's label.
+
 ## Picking a component
 
 - Three short points: facts grid. Numbers that are the point: stat tiles.
 - A side note: panel. A labelled point with parts: insight panel. One loud line: callout.
 - Alternatives to explain: option cards, with a "Recommended" badge. A question
   with set answers you will act on: a choice group. Both, when the answer needs
-  the alternatives explained first.
+  the alternatives explained first. Parallel points with no choice: cards.
 - Stages with names: step sequence. Sentences in order: `ol`.
 - A screenshot with its explanation: image beside text. A framed figure with a
   number: plate. Several thumbnails: gallery or image cards.

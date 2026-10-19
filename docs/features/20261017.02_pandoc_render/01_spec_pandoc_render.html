@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>01_spec_pandoc_render</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <style>
+  body { max-width: 60rem; margin: 2rem auto; padding: 0 1.5rem; color: #202020;
+    background: white; font: 1rem/1.6 system-ui, sans-serif; }
+  nav { display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem 0;
+    border-bottom: 1px solid #bbb; }
+  a { color: #124f86; } pre { overflow: auto; padding: 1rem; background: #f3f3f3; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #bbb; padding: .5rem; text-align: left; }
+  .callout-req, .callout-question, .xref { border-left: .3rem solid #124f86; padding: 0 1rem; }
+  @media print { nav { display: none; } body { max-width: none; } }
+  </style>
+</head>
+<body>
+<nav aria-label="Dossier"><a href="01_spec_pandoc_render.html">01_spec_pandoc_render</a></nav>
+<header id="title-block-header">
+<h1 class="title">01_spec_pandoc_render</h1>
+</header>
+<h1 id="render-markdown-with-pandoc">Render Markdown with pandoc</h1>
+<p>Status: merged. Ken approved <a
+href="https://github.com/kenxle/live-agentic-html-editor/pull/80">PR
+#80</a> and it landed on main as <code>f3704ea4</code> on 2026-10-19.
+Built and reviewed (architecture and security before code, 2026-10-17;
+code review and requirements check after, 2026-10-18; dispositions at
+the bottom).</p>
+<h2 id="needs-ken">Needs Ken</h2>
+<p>Updated 2026-10-19 02:05. <strong>Nothing needs Ken.</strong> PR #80
+is merged. The full local gate ran before the merge, with 5 browser
+failures in Firefox and WebKit; each one also fails on a clean
+origin/main, so none come from this change.</p>
+<p>What it looks like, before and after:</p>
+<ul>
+<li>The choice-buttons brief: <a
+href="shots/brief_section3_before.png">non-goals before</a>, <a
+href="shots/brief_section3_after.png">after</a>; <a
+href="shots/brief_section5_before.png">requirements before</a>, <a
+href="shots/brief_section5_after.png">after</a></li>
+<li>The patent research report: <a
+href="shots/report_section1_before.png">cards before</a>, <a
+href="shots/report_section1_after.png">after</a>; <a
+href="shots/report_section4_before.png">stat tiles, takeaway, caveat
+before</a>, <a href="shots/report_section4_after.png">after</a>; <a
+href="shots/report_section7_before.png">pull quote before</a>, <a
+href="shots/report_section7_after.png">after</a></li>
+<li>A page with no <code>:::</code> blocks: <a
+href="shots/nodiv_section1_before.png">before</a>, <a
+href="shots/nodiv_section1_after.png">after</a>. Pixel-identical.</li>
+<li>The rail line when pandoc is missing: <a
+href="shots/rail_pandoc_note.png">screenshot</a></li>
+</ul>
+<div class="panel"><p><b>One change from your decision.</b> You listed rimage as needing a new component. The style already has a framed figure with a caption (the plate), so rimage maps onto that, following your rule that a kind with a house twin uses it. Card and card grid are new components.</p></div>
+
+<h3 id="decided-2026-10-17">Decided 2026-10-17</h3>
+<ul>
+<li><strong>Route:</strong> no full feature-forge doc set. This spec
+stays the only spec doc. The builder runs an architecture review, and
+any other review it judges worth it, before and after the code.</li>
+<li><strong>Open question 1 (bare <code>::: callout</code>):</strong>
+maps to <code>.insight</code>, as recommended.</li>
+<li><strong>Open question 2 (<code>callout-warn</code>,
+<code>callout-note</code>):</strong> as recommended.
+<code>callout-warn</code> maps to the caveat panel, and
+<code>callout-note</code> to <code>.insight</code> labelled "Note".</li>
+<li><strong>Open question 3 (report-only kinds):</strong> standardize
+them. Each one that has no house component yet (card, cardgrid, rimage)
+becomes a house component, added to
+<code>vendor/stclair-doc-style</code> (document.css and COMPONENTS.md).
+The report's CSS is not copied into <code>lahe-markdown.css</code>.
+Kinds that already have a house twin map onto it.</li>
+<li><strong>Open question 4 (telling the reader pandoc is
+missing):</strong> both. The helper log gets a line, and the rail shows
+"Ask your agent to install pandoc to get the correct styles".</li>
+</ul>
+<h2 id="problem-user-and-context">Problem, user, and context</h2>
+<p>When LAHE renders a Markdown file directly
+(<code>lahe review some.md</code>, or a link to a <code>.md</code>),
+pandoc fenced divs print as literal text. A doc that says
+<code>::: callout-nongoal</code> shows the colons and the word on the
+page instead of the house panel the feature-forge build draws. The
+choice-buttons brief
+(<code>docs/features/20261013.01_choice_buttons/01_brief_choice_buttons.md</code>,
+its Non-Goals section) is a live example.</p>
+<p>Ken reads most of his feature docs and research reports this way.
+Across his repos the fenced-div kinds in use are, most common first:
+callout-req, xref, stat, card, callout-question, stat-row,
+callout-metric, pullquote, callout-nongoal, cardgrid, callout-warn,
+keytakeaway, callout, rimage, callout-flag, plus rare callout-suggest,
+callout-note, eyebrow, insight, beattable and reviews-banner. Outer
+fences use four and five colons; the brace form
+<code>::: {.insight .insight--caveat}</code> appears; one report writes
+<code>::: xref [link] :::</code> on a single line.</p>
+<p>The fix: when pandoc is installed, LAHE renders Markdown with pandoc,
+the same tool the feature-forge and research-report builds use, so LAHE
+and the builds never disagree about syntax. LAHE then applies the same
+kind-to-component mapping the builds apply. When pandoc is missing, LAHE
+renders with marked as it does today and says once that pandoc is needed
+for fenced divs.</p>
+<p>Ken decided this on 2026-10-17 and overrides the repo's
+zero-dependency rule for it. Pandoc is a system dependency, not an npm
+one: <code>dependencies</code> in <code>package.json</code> stays
+<code>{}</code>, and a clone with no pandoc still renders every
+page.</p>
+<h3 id="why-not-a-marked-extension">Why not a marked extension</h3>
+<p>The first brief asked for a library on top of marked. Each candidate
+was run against the forms in use (scratch test, 2026-10-17):</p>
+<table>
+<thead>
+<tr>
+<th>Library</th>
+<th><code>::: name</code></th>
+<th><code>::: {.x}</code></th>
+<th><code>::::</code> outer, <code>:::</code> inner</th>
+<th>same-count nesting</th>
+<th><code>:::</code> in a code fence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>marked-directive 1.0.7</td>
+<td>tag named after the kind, not a class</td>
+<td>yes</td>
+<td>breaks</td>
+<td>breaks</td>
+<td>breaks</td>
+</tr>
+<tr>
+<td>markdown-it-container</td>
+<td>yes</td>
+<td>class is the literal <code>{.x}</code></td>
+<td>yes</td>
+<td>breaks</td>
+<td>breaks</td>
+</tr>
+<tr>
+<td>micromark-extension-directive</td>
+<td>prints as text</td>
+<td>prints as text</td>
+<td>prints as text</td>
+<td>prints as text</td>
+<td>prints as text</td>
+</tr>
+</tbody>
+</table>
+<p>None reads all five, and the last two are different parsers from
+marked. Pandoc reads all of them because it defines the syntax.</p>
+<h2 id="requirements">Requirements</h2>
+<ol type="1">
+<li><strong>Fenced divs render as house components.</strong> With pandoc
+installed, every fenced-div kind above renders as the component the
+builds draw. An unknown kind becomes
+<code>&lt;div class="kind"&gt;</code> with its inside rendered as
+Markdown. No page shows a literal <code>:::</code> fence line.</li>
+<li><strong>One mapping, copied from the builds.</strong> The
+kind-to-component mapping is ported from
+<code>build_feature_docs.py</code> (map_callouts, merge_callout_runs,
+unwrap_plain_callouts, callout_sections_to_divs) and the research
+report's header and authoring guide. Where the two sources disagree (the
+bare <code>callout</code> kind), the spec names the choice; see Open
+questions.</li>
+<li><strong>Everything LAHE does today still works on pandoc's
+output.</strong> That covers:
+<ul>
+<li>frontmatter and the <code>lahe-style:</code> line</li>
+<li>the hero plus one <code>.sheet</code> per top-level H2</li>
+<li>Mermaid blocks</li>
+<li>link classification (translate, inert, external, with the new-tab
+rules in <code>links.classify</code>)</li>
+<li>relative-URL rewriting</li>
+<li>the file-title attribute and the read-only note</li>
+<li>noFollow reads for a notes review</li>
+<li>the handled check, which reads the same rendered page</li>
+</ul></li>
+<li><strong>Fallback without pandoc.</strong> With no pandoc on PATH,
+LAHE renders with marked exactly as today. It writes one helper-log line
+per state directory saying pandoc is needed to render fenced divs. If
+the rail has a place for render notices, it says so there too (see Open
+questions).</li>
+<li><strong>Safe call.</strong> LAHE runs pandoc with an argument array
+(no shell), a timeout, and the Markdown on stdin. A pandoc failure or
+timeout falls back to marked for that render and logs it once.</li>
+<li><strong>The dependency rule names pandoc.</strong> CLAUDE.md,
+AGENTS.md, README.md and the vendor README that states the rule say
+pandoc is an allowed system dependency and why. The README's install
+section says how to install it.</li>
+<li><strong>A page with no fenced divs looks the same.</strong>
+Byte-identical output no longer applies once pandoc renders. A no-div
+page is screenshotted before and after and must look the same. Existing
+unit and browser specs pass; an expected string changes only where
+pandoc's markup legitimately differs, and each change is listed in the
+PR.</li>
+</ol>
+<p>That is seven requirements, past whetstone's guide of about five.</p>
+<h2 id="approach">Approach</h2>
+<p>This change carries real design calls, which is part of why it
+outgrew whetstone.</p>
+<p><strong>Where each job happens.</strong> The pandoc Lua filter does
+everything that reads the document's structure, including the fenced-div
+mapping. JavaScript on pandoc's HTML does only what needs LAHE's state:
+link classification, the file-name title, URL rewriting.</p>
+<table>
+<thead>
+<tr>
+<th>Job</th>
+<th>Where</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hero and <code>.sheet</code> split</td>
+<td>Lua filter over top-level blocks</td>
+<td>Pandoc's AST knows which H2 is top level. A <code>## </code> inside
+a code block or a fenced div cannot open a section, same as marked's
+token split today.</td>
+</tr>
+<tr>
+<td>Mermaid blocks</td>
+<td>Lua filter: a <code>mermaid</code> CodeBlock becomes
+<code>&lt;pre class="mermaid"&gt;</code></td>
+<td>Matches today's markup exactly; the page script is unchanged.</td>
+</tr>
+<tr>
+<td>Other code blocks</td>
+<td>Lua filter:
+<code>&lt;pre&gt;&lt;code class="language-x"&gt;</code></td>
+<td>Keeps marked's shape so the house CSS and the handled check see the
+same thing. Highlighting off, as the builds do.</td>
+</tr>
+<tr>
+<td>Tables in <code>.scrollx</code></td>
+<td>Lua filter</td>
+<td>Same as today's renderer hook.</td>
+</tr>
+<tr>
+<td>Task lists</td>
+<td>Lua filter</td>
+<td>The house rule is written for marked's shape: a bare checkbox in a
+class-free list.</td>
+</tr>
+<tr>
+<td>Fenced-div mapping</td>
+<td>Lua filter, on the syntax tree</td>
+<td>Ten of the kinds restructure their content (stat, pullquote, rimage,
+card and more), which regexes on HTML do badly. Pandoc also writes a div
+that opens with a heading as a <code>&lt;section&gt;</code>, and raw
+HTML in a document breaks regex depth counting; the filter sees neither
+problem. The mapping table below is the contract both builds follow. One
+cost: a raw-HTML <code>&lt;div class="callout-req"&gt;</code> written by
+hand is no longer mapped.</td>
+</tr>
+<tr>
+<td>Link classification</td>
+<td>Lua filter tags each Markdown link
+<code>data-lahe-link="&lt;nonce&gt;:&lt;n&gt;"</code> and writes a
+matching <code>&lt;!--/lahe-link &lt;nonce&gt;:&lt;n&gt;--&gt;</code>
+after its <code>&lt;/a&gt;</code>; JavaScript rewrites each tagged pair
+exactly</td>
+<td><code>links.classify</code> needs the per-render registry, which a
+filter cannot reach. The nonce is random per helper process and passed
+on the command line, so raw HTML in a document cannot fake a tag. The
+closing marker makes the inert-link swap exact even when the link text
+holds raw HTML.</td>
+</tr>
+<tr>
+<td>Relative-URL rewrite, frontmatter, style line, title, notes</td>
+<td>JavaScript, unchanged</td>
+<td>Already work on strings before or after rendering.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Input format.</strong>
+<code>gfm+fenced_divs-gfm_auto_identifiers-yaml_metadata_block-tex_math_dollars-tex_math_gfm</code>.
+The feature-forge build reads <code>gfm+fenced_divs</code>. Each
+extension turned off would change the words on the page from what marked
+shows today, which strands comment anchors and changes what the handled
+check reads:</p>
+<ul>
+<li>heading ids would move the layer's anchors</li>
+<li>a later <code>---</code> block would be swallowed as metadata (LAHE
+already strips the real frontmatter)</li>
+<li><code>$HOME/$PATH</code> would render as italic math</li>
+</ul>
+<p>Emoji, alerts and footnotes stay on, as in the builds. When pandoc is
+first found, LAHE checks <code>--list-extensions=gfm</code> names every
+extension above; a pandoc that does not is treated as missing.</p>
+<p><strong>Engine choice.</strong> <code>src/service/pandoc.js</code>
+finds pandoc by absolute path: <code>LAHE_PANDOC</code> if set, then
+PATH (absolute entries only), then <code>/opt/homebrew/bin</code> and
+<code>/usr/local/bin</code>, because the helper inherits PATH from
+whichever agent shell started it. It checks the version and extensions,
+and logs the path and version once. A missing pandoc is looked for again
+after a minute, so installing it needs no helper restart.
+<code>renderPage({engine})</code> picks an engine for one call;
+<code>LAHE_MARKDOWN_ENGINE=marked</code> forces the fallback for the
+process and is read on every call. The unit script sets it, so existing
+tests keep marked's expected strings; the pandoc tests ask for pandoc
+explicitly and skip with a message when it is missing. CI stays
+install-free on purpose: it proves a clean clone works, which is now the
+fallback path. The pandoc tests run in the local
+<code>npm run gate</code> that precedes every PR.</p>
+<p><strong>Speed.</strong> <code>renderPage</code> is synchronous and
+stays synchronous: <code>spawnSync</code> blocks the helper's one event
+loop, so the timeout is 5 seconds and the process is killed with
+SIGKILL. A rebuild renders on each save, and the handled check renders
+the file on every check. So <code>pandoc.js</code> keeps a bounded cache
+of pandoc's raw output keyed by a hash of the Markdown text, the pandoc
+version and the filter. Failures and timeouts are cached too, so a slow
+document stalls once, then renders with marked. Link classification and
+URL rewriting run on every render, cached or not, because they depend on
+the page's folder and registry. Measured during build and reported.</p>
+<p><strong>The pandoc call.</strong>
+<code>pandoc --from gfm+fenced_divs-gfm_auto_identifiers-yaml_metadata_block-tex_math_dollars-tex_math_gfm --to html5 --wrap=preserve --sandbox --data-dir &lt;absent&gt; --metadata lahe-nonce=&lt;nonce&gt; --lua-filter &lt;src/service/lahe_render.lua&gt;</code>,
+Markdown on stdin, HTML on stdout, <code>spawnSync</code> with an
+argument array, <code>shell: false</code>, a 5-second timeout and an
+output cap.</p>
+<ul>
+<li><code>--sandbox</code> stops pandoc's readers and writers opening
+files or URLs. It does not limit Lua, so the filter uses no
+<code>io</code>, <code>os</code>, <code>pandoc.pipe</code> or mediabag
+call (a unit test greps for them), and <code>--data-dir</code> points at
+a folder that does not exist, so a user's <code>init.lua</code> never
+runs inside LAHE.</li>
+<li>The child gets <code>cwd</code> set to the temp folder and a minimal
+environment (<code>HOME</code>, <code>LANG=C.UTF-8</code>), without
+<code>LUA_PATH</code>, <code>LUA_CPATH</code> or
+<code>XDG_DATA_HOME</code>. Output is capped at 32 MB and input at 8 MB.
+Pandoc is only ever handed text, never a path, so a notes review's
+no-follow read stays the only read. Nothing from the document reaches
+the argument list.</li>
+<li><code>--wrap=preserve</code> keeps the source's line breaks inside
+paragraphs, the way marked does, so text-matching code (the handled
+check, anchors) sees the same text.</li>
+<li>No highlighting flag is needed: the filter writes code blocks
+itself.</li>
+<li>Version floor 3.0. <code>pandoc --version</code> is read once; an
+older pandoc is treated as missing and logged once with its
+version.</li>
+<li>Raw HTML in the Markdown passes through, as it does under marked
+today. The trust posture does not change: the author's file is the
+page.</li>
+</ul>
+<p><strong>Fenced-div mapping.</strong> Kinds come from the builds; the
+decided open questions settle the rest. "Unwrapped" means the wrapper
+div goes and an eyebrow label sits above the content, as
+<code>unwrap_plain_callouts</code> does. A run of two or more same-kind
+callouts with only whitespace between them merges into one panel with
+one label, as <code>merge_callout_runs</code> does. An author's own
+<code>data-label</code> wins over the default label.</p>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Renders as</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>callout-req</code></td>
+<td>eyebrow "Requirement", content unwrapped</td>
+<td>build_feature_docs.py</td>
+</tr>
+<tr>
+<td><code>callout-nongoal</code></td>
+<td>eyebrow "Non-goals", content unwrapped</td>
+<td>build_feature_docs.py</td>
+</tr>
+<tr>
+<td><code>callout-metric</code></td>
+<td><code>.insight</code>, label "Metrics"</td>
+<td>build_feature_docs.py</td>
+</tr>
+<tr>
+<td><code>callout-suggest</code></td>
+<td><code>.insight</code>, label "Suggestion"</td>
+<td>build_feature_docs.py</td>
+</tr>
+<tr>
+<td><code>callout-question</code></td>
+<td><code>.insight .insight--caveat</code>, label "Open question"</td>
+<td>build_feature_docs.py</td>
+</tr>
+<tr>
+<td><code>callout-flag</code></td>
+<td><code>.insight .insight--caveat</code>, label "Red flag"</td>
+<td>build_feature_docs.py</td>
+</tr>
+<tr>
+<td><code>callout</code></td>
+<td><code>.insight</code> (label "Key insight" from the house CSS)</td>
+<td>report header; decided Q1</td>
+</tr>
+<tr>
+<td><code>callout-warn</code></td>
+<td><code>.insight .insight--caveat</code> (label "Caveat")</td>
+<td>report header; decided Q2</td>
+</tr>
+<tr>
+<td><code>callout-note</code></td>
+<td><code>.insight</code>, label "Note"</td>
+<td>decided Q2</td>
+</tr>
+<tr>
+<td><code>insight</code>, <code>insight--caveat</code></td>
+<td>unchanged; already house classes</td>
+<td>report authoring guide</td>
+</tr>
+<tr>
+<td><code>xref</code></td>
+<td>unchanged; <code>.xref</code> is a house class</td>
+<td>both</td>
+</tr>
+<tr>
+<td><code>stat</code></td>
+<td><code>.stat</code>: first paragraph becomes
+<code>p.stat-value</code>, the rest <code>p.stat-meta</code></td>
+<td>report guide; house twin</td>
+</tr>
+<tr>
+<td><code>stat-row</code></td>
+<td><code>.stats</code></td>
+<td>report guide; house twin</td>
+</tr>
+<tr>
+<td><code>pullquote</code></td>
+<td><code>blockquote.pullquote</code>: first paragraph is the quote, the
+rest go in its <code>footer</code></td>
+<td>report guide; house twin</td>
+</tr>
+<tr>
+<td><code>keytakeaway</code></td>
+<td><code>.callout</code> (the solid ink block, white text)</td>
+<td>report header; house twin</td>
+</tr>
+<tr>
+<td><code>eyebrow</code></td>
+<td><code>p.eyebrow</code> holding the div's text</td>
+<td>report guide; house twin</td>
+</tr>
+<tr>
+<td><code>rimage</code></td>
+<td><code>figure.plate</code>: the image, then the caption paragraph as
+<code>figcaption</code></td>
+<td>report guide; house twin (see note)</td>
+</tr>
+<tr>
+<td><code>card</code></td>
+<td><code>.card</code>, a new house component</td>
+<td>decided Q3</td>
+</tr>
+<tr>
+<td><code>cardgrid</code></td>
+<td><code>.cards</code>, a new house component</td>
+<td>decided Q3</td>
+</tr>
+<tr>
+<td>anything else (<code>beattable</code>, <code>reviews-banner</code>,
+unknown)</td>
+<td><code>&lt;div class="kind"&gt;</code>, inside rendered as
+Markdown</td>
+<td>R1 (unknown kinds)</td>
+</tr>
+</tbody>
+</table>
+<p>Note on <code>rimage</code>: the decision named it as one of the
+kinds with no house twin. The house already has
+<code>figure.plate</code>, "a picture on a framed plate with a caption",
+which is what <code>rimage</code> draws. Under the decision's own rule
+(a kind with a house twin maps onto it) it maps to the plate, and no new
+image component is added. card and cardgrid have no twin
+(<code>.options</code> is for a page that asks the reader to pick), so
+they become <code>.card</code> and <code>.cards</code>, written the way
+<code>.option</code> and <code>.options</code> are, from tokens
+only.</p>
+<p><strong>Not a fence.</strong> One report writes
+<code>::: xref [link] :::</code> on a single line. Pandoc reads that as
+a paragraph, so the builds show it as text too. LAHE matches the builds
+and leaves it alone.</p>
+<p><strong>The missing-pandoc notice.</strong> When pandoc did not
+render a page whose source has a <code>:::</code> line outside code, the
+page carries
+<code>&lt;meta name="lahe-render-note" content="pandoc"&gt;</code>. The
+rail reads that meta and shows one line, its own fixed text: "Ask your
+agent to install pandoc to get the correct styles". The page never
+supplies the words. <code>writeArtifact</code> and the page server's
+Markdown render, which know the state directory, write one helper-log
+line naming why (missing, too old, failed). A forced
+<code>LAHE_MARKDOWN_ENGINE=marked</code> writes neither.</p>
+<h2 id="tasks">Tasks</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Task</th>
+<th>Files</th>
+<th>Proof</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Pandoc runner: find, call with array args, stdin, timeout, cache,
+env override, fall back on error</td>
+<td><code>src/service/pandoc.js</code> (new),
+<code>src/shared/manifest.js</code></td>
+<td>unit: found, missing, timeout, nonzero exit, env override</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Lua filter: hero/sheet split, mermaid, code, tables, link tags, task
+lists, and the fenced-div mapping</td>
+<td><code>src/service/lahe_render.lua</code> (new)</td>
+<td>unit: H2 in a code fence or div does not split; mermaid markup;
+tagged links; each mapped kind; run merging; req/nongoal unwrap; unknown
+kind; nesting; <code>:::</code> in a fence stays literal; no io/os/pipe
+in the filter</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Wire into <code>renderPage</code>; link pass over tagged pairs;
+file-name title; meta notice; one-time log</td>
+<td><code>src/service/markdown.js</code>,
+<code>src/service/page_routes.js</code>,
+<code>src/shared/markers.js</code></td>
+<td>existing markdown unit tests green with marked pinned; new pandoc
+tests</td>
+</tr>
+<tr>
+<td>5</td>
+<td>House components <code>.card</code> and <code>.cards</code></td>
+<td><code>vendor/stclair-doc-style/document.css</code>,
+<code>COMPONENTS.md</code>, its README</td>
+<td>unit: stylesheet carries both; screenshot of a report card grid</td>
+</tr>
+<tr>
+<td>5b</td>
+<td>Rail line for the fallback, Ken's wording</td>
+<td><code>src/layer/overlay.js</code>, <code>dist/</code> rebuild</td>
+<td>browser spec: line shows with the meta, absent without</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Dependency rule and install docs</td>
+<td><code>CLAUDE.md</code>, <code>AGENTS.md</code>,
+<code>README.md</code>, <code>vendor/marked/README.md</code>,
+<code>docs/ongoing/TESTING.md</code></td>
+<td>read-through</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Evidence</td>
+<td>none</td>
+<td>screenshots: choice-buttons brief, one older research report with
+stat/card/pullquote, a no-div page before and after;
+<code>npm run gate</code> counts</td>
+</tr>
+</tbody>
+</table>
+<p>Every builder brief carries the no-delete rule: no <code>rm</code>,
+<code>rmdir</code>, <code>unlink</code> or <code>git clean</code>; list
+files for cleanup instead.</p>
+<h2 id="acceptance-criteria">Acceptance criteria</h2>
+<ul>
+<li>Each Proof cell in the Tasks table passes.</li>
+<li>The choice-buttons brief and one older research report render
+through <code>lahe review</code> with zero literal <code>:::</code>
+lines, checked by a Playwright text search, with screenshots.</li>
+<li>A no-div page looks the same before and after, by screenshot.</li>
+<li><code>npm run gate</code> reads 0 failed, counts in the PR body,
+with every changed expected string listed.</li>
+<li>With <code>LAHE_MARKDOWN_ENGINE=marked</code>, output is
+byte-identical to today's for a page with no <code>:::</code>
+lines.</li>
+<li>Analytics: none; LAHE has no analytics. Rollout: no flag beyond the
+env override, because a missing pandoc already falls back.</li>
+</ul>
+<h2 id="open-questions">Open questions</h2>
+<div class="insight" data-label="Decided">
+
+<p><strong>The bare <code>callout</code> kind.</strong> The
+research-report header treats <code>::: callout</code> as the old name
+for the Key-insight panel (cobalt tint). The feature-forge build leaves
+the class alone, and the house style draws a bare <code>.callout</code>
+as the solid ink block. Recommendation: follow the report header, since
+every known bare <code>::: callout</code> is in a research report, and
+map it to <code>.insight</code>.</p>
+<p><strong>Decided 2026-10-17: map it to
+<code>.insight</code>.</strong></p>
+</div>
+
+<div class="insight" data-label="Decided">
+
+<p><strong><code>callout-warn</code> and
+<code>callout-note</code>.</strong> The report header maps
+<code>callout-warn</code> to the caveat panel. <code>callout-note</code>
+has no mapping in either source. Recommendation:
+<code>callout-warn</code> to <code>.insight .insight--caveat</code>;
+<code>callout-note</code> to <code>.insight</code> with label
+"Note".</p>
+<p><strong>Decided 2026-10-17: as recommended.</strong></p>
+</div>
+
+<div class="insight" data-label="Decided">
+
+<p><strong>Report-only kinds</strong> (stat, stat-row, card, cardgrid,
+pullquote, keytakeaway, rimage, eyebrow). The report draws them with its
+own CSS, not house components. Two options: port that CSS into
+<code>lahe-markdown.css</code>, or restructure the markup onto house
+components (stat to <code>.stat</code> with <code>.stat-value</code> and
+<code>.stat-meta</code>, stat-row to <code>.stats</code>, pullquote to
+<code>blockquote.pullquote</code> with a footer, keytakeaway to
+<code>.callout</code>, eyebrow to <code>p.eyebrow</code>).
+Recommendation: house components where one exists, and port the report
+CSS only for card, cardgrid and rimage, which have no house twin.</p>
+<p><strong>Decided 2026-10-17: standardize. card, cardgrid and rimage
+become house components in vendor/stclair-doc-style; the rest map onto
+their house twins.</strong></p>
+</div>
+
+<div class="insight" data-label="Decided">
+
+<p><strong>Telling the reader when pandoc is missing.</strong> On a
+computer without pandoc, a Markdown page still opens, but its
+<code>:::</code> boxes print as raw text, the way they did for Ken
+today. Where should LAHE say why? (a) Only in LAHE's log file, which
+only agents and developers read. (b) Also as one line in the comment
+rail on the page, such as "Ask your agent to install pandoc to get the
+correct styles" Option (b) means changing the rail's code too, so it is
+a little more work. On Ken's machine neither ever shows, because pandoc
+is installed. Recommendation: (b). A reader who sees raw
+<code>:::</code> text has no other way to learn why.</p>
+<p><strong>Decided 2026-10-17: (b), with Ken's wording.</strong></p>
+</div>
+
+<h2 id="size">Size</h2>
+<p>This is past whetstone: seven requirements, about ten files (three
+new source files, <code>markdown.js</code>, the manifest, four docs,
+tests, optionally the layer), and an Approach section with real
+alternatives. Ken chose on 2026-10-17 to build it here with this one
+spec, plus an architecture review before code, and a code review and an
+independent requirements check before the PR.</p>
+<h2 id="review-dispositions">Review dispositions</h2>
+<p>Architecture review (review-architect, opus) and security review
+(review-security, opus), both 2026-10-17, on the Approach before
+code.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>What changed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A1</td>
+<td>Do the fenced-div mapping in the Lua filter, not a JS port of the
+Python</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Approach table; task 3 folded into task 2</td>
+</tr>
+<tr>
+<td>A2</td>
+<td>The missing-pandoc seam never reaches the browser</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>A page meta carries the signal; logging moves to the two callers
+that know the state folder; only pages with <code>:::</code> lines get
+it</td>
+</tr>
+<tr>
+<td>A3</td>
+<td>gfm turns on math, emoji, alerts, footnotes and YAML metadata; name
+extensions explicitly and check them</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Math and YAML metadata off; emoji, alerts and footnotes kept, as in
+the builds; extension check at detection</td>
+</tr>
+<tr>
+<td>A4</td>
+<td>Decode and re-escape attributes; make the inert-link swap exact</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Numbered tag plus closing marker</td>
+</tr>
+<tr>
+<td>A5</td>
+<td>sheet-head as raw HTML, file-title placeholder, empty documents,
+mermaid escaping</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>All in the filter</td>
+</tr>
+<tr>
+<td>A6</td>
+<td>Rendering blocks the helper; cache failures; key on version and
+filter</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>5-second timeout (security asked 5, architecture 3; 5 leaves room
+for a long report), failure caching, key widened</td>
+</tr>
+<tr>
+<td>A7</td>
+<td>Pin existing tests to marked by option; install pandoc in CI;
+<code>LAHE_REQUIRE_PANDOC</code></td>
+<td><span class="status-dot status-dot--faint">Deferred</span></td>
+<td>Option and env pinning accepted. CI install rejected for now: CI
+proves a clean clone with no installs, which is the fallback path, and
+the local gate runs the pandoc tests before every PR</td>
+</tr>
+<tr>
+<td>A8</td>
+<td>Find pandoc beyond PATH; log path and version</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Homebrew folders and <code>LAHE_PANDOC</code></td>
+</tr>
+<tr>
+<td>A9</td>
+<td>Footnotes land after the last sheet; restart needed after
+install</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Footnotes left where pandoc puts them; a missing pandoc is looked
+for again after a minute instead of needing a restart</td>
+</tr>
+<tr>
+<td>S1</td>
+<td>Raw HTML can fake the link tag</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Per-process nonce from the command line</td>
+</tr>
+<tr>
+<td>S2</td>
+<td><code>--sandbox</code> does not cover Lua or a user's
+<code>init.lua</code></td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Absent <code>--data-dir</code>, filter grep test, spec sentence
+corrected</td>
+</tr>
+<tr>
+<td>S3</td>
+<td>A slow document freezes the helper</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Same as A6</td>
+</tr>
+<tr>
+<td>S4</td>
+<td>Node's default 1 MB output cap</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>32 MB output, 8 MB input</td>
+</tr>
+<tr>
+<td>S5</td>
+<td>Find pandoc once by absolute path; fixed cwd</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Relative PATH entries skipped; cwd is the temp folder</td>
+</tr>
+<tr>
+<td>S6</td>
+<td>Minimal child environment</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td><code>HOME</code>, <code>LANG</code> and Windows' temp and system
+variables only</td>
+</tr>
+<tr>
+<td>S7</td>
+<td>Decode, re-escape, allow newlines in attribute patterns</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Same as A4</td>
+</tr>
+<tr>
+<td>S8</td>
+<td>Cache only raw output; classification runs every render</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Speed paragraph</td>
+</tr>
+<tr>
+<td>S9</td>
+<td>noFollow not weakened, given text-only input and no document values
+in argv</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Stated in the pandoc call section</td>
+</tr>
+</tbody>
+</table>
+<p>Accepted all but A7's CI install. <code>rimage</code> maps to the
+existing <code>figure.plate</code> rather than a new component, under
+Ken's own rule for kinds with a house twin.</p>
+<h3 id="after-the-build">After the build</h3>
+<p>Code review (feature-dev:code-reviewer, opus) and an independent
+requirements check (opus), 2026-10-18, on the integrated diff.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>What changed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C1</td>
+<td>The page server's render cache kept a marked page, notice and all,
+after pandoc was installed</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>The cache key carries which engine renders
+(<code>markdown.engineKey</code>)</td>
+</tr>
+<tr>
+<td>C2</td>
+<td>No tests for a nonzero exit, a timeout, the input cap or failure
+caching</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>A stand-in pandoc script drives six new unit tests</td>
+</tr>
+<tr>
+<td>C3</td>
+<td>A pandoc uninstalled after it was found failed every page as "could
+not render"</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>ENOENT forgets the binary and the cache, and the note says not
+installed</td>
+</tr>
+<tr>
+<td>C4</td>
+<td>Merged callouts compared only <code>data-label</code>, so
+<code>label=</code> runs merged and lost a label</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>The run key reads both</td>
+</tr>
+<tr>
+<td>C5</td>
+<td>The house-twin lookup walked a Lua map, whose order is not
+fixed</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>A fixed list</td>
+</tr>
+<tr>
+<td>C6</td>
+<td>An eyebrow dropped a list; <code>label=</code> and
+<code>data-label=</code> wrote the attribute twice</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Blocks after the line are kept; the first label wins</td>
+</tr>
+<tr>
+<td>C7</td>
+<td>A rail comment sat over the wrong element</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Moved</td>
+</tr>
+<tr>
+<td>Q1</td>
+<td>The rebuilt <code>dist/lahe-layer.js</code> was not committed</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Committed with the fixes</td>
+</tr>
+<tr>
+<td>Q2</td>
+<td>pandoc left <code>"</code> bare in text and inline code, so the
+relative-URL pass rewrote <code>href="./x"</code> written in prose or a
+code span</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>The filter escapes them as marked does. Across the repo's 362
+Markdown files with no fenced div, 360 now read the same under both
+engines; the other two are lazy lines starting "7817." and "5)" that
+marked wrongly turns into list numbers and pandoc keeps as text</td>
+</tr>
+<tr>
+<td>Q3</td>
+<td>Spec said 10 seconds and a shorter <code>--from</code> in one
+place</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Corrected</td>
+</tr>
+<tr>
+<td>Q4</td>
+<td>The Playwright text search runs on a made-up page, not the two real
+documents</td>
+<td><span class="status-dot status-dot--faint">Deferred</span></td>
+<td>Both real documents sit outside this repo, so a spec cannot read
+them on another machine. They were checked with a script (zero
+<code>:::</code> lines each) and screenshotted</td>
+</tr>
+<tr>
+<td>Q5</td>
+<td>The README badge still says "runtime dependencies: none"</td>
+<td><span class="status-dot status-dot--purple">Rejected</span></td>
+<td>Still true for npm, which is what the badge links to; the
+Requirements section names pandoc as optional</td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>
