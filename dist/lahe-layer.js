@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.4.0+9caa4b07ff04
+ * version 0.4.0+5a08787aefbe
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.4.0+9caa4b07ff04";
+  g.LAHE.version = "0.4.0+5a08787aefbe";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -2576,8 +2576,8 @@
       SEVERITY.BLOCKING,
       false,
       SURFACE.CLI,
-      "The Library's saved stars file cannot be read, so stars cannot change. LAHE leaves the file as it is.",
-      "Fix or move aside catalog.json in the LAHE state folder, then try again."
+      "The Library's saved stars file cannot be read, so stars cannot change. Lahe leaves the file as it is.",
+      "Fix or move aside catalog.json in the Lahe state folder, then try again."
     ),
 
     // --- the CLI -----------------------------------------------------------
@@ -9910,7 +9910,7 @@
     var hasId = typeof sessionId === "string" && isSafeId(sessionId);
     var elsewhere = !library && stateDirFlagNeeded === true
       ? [
-          "This review keeps its files outside LAHE's default folder, so add --state-dir with the folder the earlier agent's lahe commands used. If you cannot find it, ask me.",
+          "This review keeps its files outside Lahe's default folder, so add --state-dir with the folder the earlier agent's lahe commands used. If you cannot find it, ask me.",
           ""
         ]
       : [];
@@ -9924,9 +9924,9 @@
         ].concat(elsewhere);
     var named = typeof name === "string" && name ? ", the session named " + JSON.stringify(name) : "";
     var why = library
-      ? "I am handing it to you from the LAHE Library so you can continue it."
+      ? "I am handing it to you from the Lahe Library so you can continue it."
       : "The agent that was working on it stopped answering my comments, and I am asking you to continue it.";
-    return ["Please take over my live LAHE review" + named + ". " + why, ""]
+    return ["Please take over my live Lahe review" + named + ". " + why, ""]
       .concat(run)
       .concat([
         "It prints the commands to catch up. Then work every comment that is waiting and reply to each one, and keep watching for new ones."
@@ -21147,7 +21147,7 @@
       "You may need to check your agent isn't stuck. " + DOT_COPY_HINT,
     no_agent: "Nobody has picked this up, {age}. " + DOT_COPY_HINT,
     helper_down:
-      "Lahe server helper is down. Page may crash. Please ask an agent to restart the Lahe helper. " + DOT_COPY_HINT
+      "The Lahe program is down, so the page may stop working. Please ask an agent to restart Lahe. " + DOT_COPY_HINT
   };
   // What the dot copies when the helper is down: a request an agent can act on.
   var HELPER_RESTART_MESSAGE =
@@ -21240,7 +21240,7 @@
   // still unfinished, not to hurry the reviewer through it.
   var END_REVIEW = {
     // Both the tooltip and the accessible name, deliberately the same sentence.
-    LABEL: "End this review and perform cleanup",
+    LABEL: "End this review, close it and show your hand edits",
     TITLE: "End this review?",
     ENDED_TITLE: "Review ended",
     NOTHING_PENDING: "Nothing is waiting on an agent.",
@@ -53414,7 +53414,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.4.0+9caa4b07ff04";
+  var VERSION = "0.4.0+5a08787aefbe";
 
   var protocol = ns.protocol;
   var record = ns.record;

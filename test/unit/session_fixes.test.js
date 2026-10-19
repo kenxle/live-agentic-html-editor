@@ -305,7 +305,7 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   // "claim the lahe sessions" searched its HOST's sessions because nothing said
   // these are a different thing (2026-08-20). The skill has to say so, name the
   // id shape, and point at the discovery command.
-  assert.match(skill, /A LAHE agent session is this tool's own workstream record/);
+  assert.match(skill, /A Lahe agent session is this tool's own workstream record/);
   assert.match(skill, /s_0e28da9885a6d67a/);
   assert.match(skill, /not a Claude session, not a terminal session, and\s+not a browser session/);
   assert.match(skill, /claim the lahe session\(s\)/);

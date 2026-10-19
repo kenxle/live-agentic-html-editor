@@ -108,7 +108,7 @@ test("an answered item is not outstanding, and a handled one is not either", () 
 
 test("the door says the same sentence on hover and to a screen reader", () => {
   assert.equal(typeof overlay.END_REVIEW.LABEL, "string");
-  assert.equal(overlay.END_REVIEW.LABEL, "End this review and perform cleanup");
+  assert.equal(overlay.END_REVIEW.LABEL, "End this review, close it and show your hand edits");
 });
 
 // ---------------------------------------------------------------------------

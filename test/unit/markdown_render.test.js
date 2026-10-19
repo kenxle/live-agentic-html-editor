@@ -239,10 +239,22 @@ test("a Markdown file with a # heading does not carry the marker", () => {
   assert.ok(html.indexOf("<h1>A real title</h1>") !== -1);
 });
 
+// The fixture inlines the whole document style, so any change to
+// vendor/stclair-doc-style/*.css changes it. LAHE_REGEN_FIXTURES=1 rewrites it
+// from a fresh render instead of comparing; the browser specs that open it then
+// run against the new style.
 test("the rendered empty file matches the empty-notes fixture, ids aside", () => {
   const fixtures = path.join(__dirname, "..", "fixtures", "free_writing");
-  const expected = fs.readFileSync(path.join(fixtures, "empty_notes.html"), "utf8");
+  const fixture = path.join(fixtures, "empty_notes.html");
   const html = renderText("empty_notes.md", fs.readFileSync(path.join(fixtures, "empty_notes.md"), "utf8"));
+  if (process.env.LAHE_REGEN_FIXTURES === "1") {
+    fs.writeFileSync(fixture, html);
+    return;
+  }
+  const expected = fs.readFileSync(fixture, "utf8");
   const ids = (s) => s.replace(/\sid="[^"]*"/g, "").trim();
-  assert.equal(ids(html), ids(expected));
+  assert.equal(ids(html), ids(expected),
+    "test/fixtures/free_writing/empty_notes.html is out of date. If you changed the document style " +
+    "(vendor/stclair-doc-style) or the renderer on purpose, regenerate it with " +
+    "LAHE_REGEN_FIXTURES=1 node --test test/unit/markdown_render.test.js and commit the fixture.");
 });

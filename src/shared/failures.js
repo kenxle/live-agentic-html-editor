@@ -423,8 +423,8 @@
       SEVERITY.BLOCKING,
       false,
       SURFACE.CLI,
-      "The Library's saved stars file cannot be read, so stars cannot change. LAHE leaves the file as it is.",
-      "Fix or move aside catalog.json in the LAHE state folder, then try again."
+      "The Library's saved stars file cannot be read, so stars cannot change. Lahe leaves the file as it is.",
+      "Fix or move aside catalog.json in the Lahe state folder, then try again."
     ),
 
     // --- the CLI -----------------------------------------------------------

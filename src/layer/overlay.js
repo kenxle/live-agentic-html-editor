@@ -1672,7 +1672,7 @@
       "You may need to check your agent isn't stuck. " + DOT_COPY_HINT,
     no_agent: "Nobody has picked this up, {age}. " + DOT_COPY_HINT,
     helper_down:
-      "Lahe server helper is down. Page may crash. Please ask an agent to restart the Lahe helper. " + DOT_COPY_HINT
+      "The Lahe program is down, so the page may stop working. Please ask an agent to restart Lahe. " + DOT_COPY_HINT
   };
   // What the dot copies when the helper is down: a request an agent can act on.
   var HELPER_RESTART_MESSAGE =
@@ -1765,7 +1765,7 @@
   // still unfinished, not to hurry the reviewer through it.
   var END_REVIEW = {
     // Both the tooltip and the accessible name, deliberately the same sentence.
-    LABEL: "End this review and perform cleanup",
+    LABEL: "End this review, close it and show your hand edits",
     TITLE: "End this review?",
     ENDED_TITLE: "Review ended",
     NOTHING_PENDING: "Nothing is waiting on an agent.",

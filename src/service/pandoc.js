@@ -175,7 +175,7 @@ function locate() {
 function noteFor(reason, detail) {
   if (reason === "forced" || !reason) return null;
   if (reason === "missing") return "pandoc is not installed, so Markdown fenced divs (::: blocks) render as plain text. Install pandoc 3 or newer (pandoc.org) to draw them.";
-  if (reason === "too-old") return "pandoc " + (detail || "") + " is older than 3.0 or lacks a gfm extension LAHE names, so Markdown fenced divs render as plain text. Install pandoc 3 or newer.";
+  if (reason === "too-old") return "pandoc " + (detail || "") + " is older than 3.0 or lacks a gfm extension Lahe names, so Markdown fenced divs render as plain text. Install pandoc 3 or newer.";
   if (reason === "unreadable") return "pandoc at " + (detail || "?") + " did not answer --version, so Markdown fenced divs render as plain text.";
   return "pandoc could not render a page (" + (detail || reason) + "), so it was drawn with marked and its ::: blocks show as plain text.";
 }
