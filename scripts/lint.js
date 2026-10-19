@@ -1,9 +1,13 @@
 #!/usr/bin/env node
-// The lint gate. Zero dependencies, three checks, and it runs all three before
-// it exits so one failure does not hide the other two.
+// The lint gate. Zero dependencies, four checks, and it runs all four before
+// it exits so one failure does not hide the others.
 //
 //   1. SYNTAX. `node --check` over every tracked .js file. The cheapest possible
 //      gate against a broken commit.
+//   1b. DUPLICATE DECLARATIONS. A function declared twice at a file's top level.
+//      Node accepts it (the second silently wins), but Playwright's parser
+//      refuses it, so it only surfaced when the browser suite loaded the file:
+//      a merge of two branches that each added `validPort` to one file did that.
 //   2. NO JSDOM. Not in package.json, and not required or imported anywhere
 //      under test/. This is one of the four rules that bind every builder in the
 //      plan: jsdom has no layout, no caret rectangles, no policy enforcement and
@@ -86,6 +90,23 @@ for (const file of jsFiles) {
 }
 
 if (syntaxErrors.length > 0) fail("syntax", syntaxErrors);
+
+// ---------------------------------------------------------------------------
+// 1b. Duplicate top-level declarations
+// ---------------------------------------------------------------------------
+//
+// The check lives in its own file so a unit test can run it on a fixture
+// without running the whole gate.
+
+const { duplicateDeclaration } = require("./lint_duplicates.js");
+const duplicates = [];
+
+for (const file of jsFiles) {
+  const message = duplicateDeclaration(file);
+  if (message) duplicates.push(relative(file) + ": " + message);
+}
+
+if (duplicates.length > 0) fail("duplicate-declaration", duplicates);
 
 // ---------------------------------------------------------------------------
 // 2. No jsdom
@@ -300,7 +321,7 @@ if (problems.length > 0) {
 console.log(
   "lint passed (syntax: " +
     jsFiles.length +
-    " files, no " +
+    " files, no duplicate declarations, no " +
     JSDOM_NAME +
     ", manifest complete)"
 );

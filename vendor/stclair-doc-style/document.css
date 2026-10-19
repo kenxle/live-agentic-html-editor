@@ -665,6 +665,33 @@ figure.plate figcaption b{font-family:var(--font-display);font-weight:var(--w-di
 .option p:not(.eyebrow){color:var(--on-surface-soft)}
 .option :is(ul,ol) > li{margin-bottom:var(--s2)}
 
+/* ---------- cards ----------
+   Two or three parallel points side by side: the three findings, the parts
+   of a comparison. Each card is a name and a short body, bullets allowed. It
+   is the option card's quieter sibling: the same frame, no badge, and nothing
+   asks the reader to pick. A lone .card outside .cards is one framed block in
+   the column. The grid fits up to three across in the column (15rem is the
+   option grid's floor, so the two read as one family) and stacks on a phone. */
+.cards{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));
+  gap:var(--block-gap);
+  margin:0 0 var(--block-gap);
+}
+.card{
+  border:var(--line);
+  border-radius:var(--r-lg);
+  padding:var(--s5);
+  margin:0 0 var(--block-gap);
+  min-width:0;
+}
+.cards > .card{margin:0}
+.card > :first-child{margin-top:0}
+.card > :last-child{margin-bottom:0}
+.card h4{margin:0 0 var(--s2)}
+.card :is(p,li){color:var(--on-surface-soft)}
+.card :is(ul,ol) > li{margin-bottom:var(--s2)}
+
 /* ---------- choice group ----------
    A question with a set of answers the reader clicks. It grew out of option
    cards: the cards explain the alternatives, the group collects the answer.

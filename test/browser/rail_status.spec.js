@@ -102,7 +102,7 @@ test.describe("the status line tells the truth", () => {
       // The status dot while the helper is down: a red octagon whose tip says
       // so in Ken's words, and a click that copies a restart request.
       const dot = await page.evaluate(() => window.__laheRail.statusLine());
-      expect(dot.dotTip.split("\n")[0]).toMatch(/^Lahe server helper is down\. Page may crash\./);
+      expect(dot.dotTip.split("\n")[0]).toMatch(/^The Lahe program is down, so the page may stop working\./);
       expect(dot.dotCopies).toBe(true);
       await page.evaluate(() => {
         window.__copied = null;
