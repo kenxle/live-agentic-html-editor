@@ -4,8 +4,11 @@
 
 ## Needs your decision
 
-1. **Your main checkout holds two commits from a Codex session, and your pages don't have this fix yet.** The Codex session working in feature-forge committed Lahe fixes straight to the main checkout without pushing them. The first one (links reuse a folder the site already serves) shipped inside PR #88. The second, `f7255597` ("Give rendered Markdown headings stable fragment targets"), is a different version of the heading ids that `main` already got from PR #86, and the two conflict in `src/service/markdown.js`. Until the checkout matches `origin/main`, your always-on helper runs code without the 64-folder cap. **Recommendation:** I move `f7255597` onto its own branch, `codex/heading-fragment-targets`, so nothing is lost, and fast-forward the checkout to `origin/main`. The helper then picks up the fix by itself. I haven't done it because it is another session's work.
-2. **Should a linked folder serve only the files a page links to?** Today one link to a file directly in your home folder serves the whole home tree, including `~/.ssh` (proven below, under "Premise check"). The cap never limited that. **Recommendation:** serve only the linked files and their images, then drop the cap. Board row `LAHE-linked-folder-scope`.
+1. **Should a linked folder serve only the files a page links to?** Today one link to a file directly in your home folder serves the whole home tree, including `~/.ssh` (proven below, under "Premise check"). The cap never limited that. **Recommendation:** serve only the linked files and their images, then drop the cap. Board row `LAHE-linked-folder-scope`.
+
+## Done since
+
+- **Your helper has the fix now.** The Codex commit `f7255597` repeated heading-id work that PR #86 had already done on `main`, and done more fully: `main`'s ids match GitHub's and also cover pages pandoc renders. `main` passes every check in that commit's test, so the commit was dropped. It is kept on the local branch `codex/heading-fragment-targets` in case you want it. The main checkout now matches `origin/main`, and the always-on helper restarted onto that code.
 
 ## What shipped
 
