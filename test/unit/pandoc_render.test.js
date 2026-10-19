@@ -136,6 +136,17 @@ test("a pandoc that exits nonzero falls back, says why, and is not run again for
   });
 });
 
+test("a pandoc that exits before reading its input says its own reason, not EPIPE", { skip: POSIX }, () => {
+  const fake = fakePandoc("fail");
+  withEnv({ LAHE_MARKDOWN_ENGINE: undefined, LAHE_PANDOC: fake.script }, () => {
+    // Far past a pipe's buffer, so the write is still going when the child exits.
+    const big = "::: callout-req\n" + "x ".repeat(2 * 1024 * 1024) + "\n:::\n";
+    const result = pandoc.render(big);
+    assert.equal(result.reason, "failed");
+    assert.match(result.note, /boom/);
+  });
+});
+
 test("a pandoc that runs past the timeout is killed, falls back, and is not run again", { skip: POSIX }, () => {
   const fake = fakePandoc("slow");
   withEnv({ LAHE_MARKDOWN_ENGINE: undefined, LAHE_PANDOC: fake.script }, () => {
