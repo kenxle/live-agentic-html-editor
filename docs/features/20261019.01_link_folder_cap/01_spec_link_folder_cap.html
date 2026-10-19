@@ -188,8 +188,67 @@
 <h1 class="title">01_spec_link_folder_cap</h1>
 </header>
 <h1 id="linked-folder-cap">Linked folder cap</h1>
-<p><strong>Status:</strong> built and shipped by the agent without a
-review gate, at Ken's request. This page is the record.</p>
+<p><strong>Status:</strong> shipped. Merged to <code>main</code> as <a
+href="https://github.com/kenxle/live-agentic-html-editor/pull/88">PR
+#88</a>, built without a review gate at Ken's request. This page is the
+record.</p>
+<h2 id="needs-your-decision">Needs your decision</h2>
+<ol type="1">
+<li><strong>Your main checkout holds two commits from a Codex session,
+and your pages don't have this fix yet.</strong> The Codex session
+working in feature-forge committed Lahe fixes straight to the main
+checkout without pushing them. The first one (links reuse a folder the
+site already serves) shipped inside PR #88. The second,
+<code>f7255597</code> ("Give rendered Markdown headings stable fragment
+targets"), is a different version of the heading ids that
+<code>main</code> already got from PR #86, and the two conflict in
+<code>src/service/markdown.js</code>. Until the checkout matches
+<code>origin/main</code>, your always-on helper runs code without the
+64-folder cap. <strong>Recommendation:</strong> I move
+<code>f7255597</code> onto its own branch,
+<code>codex/heading-fragment-targets</code>, so nothing is lost, and
+fast-forward the checkout to <code>origin/main</code>. The helper then
+picks up the fix by itself. I haven't done it because it is another
+session's work.</li>
+<li><strong>Should a linked folder serve only the files a page links
+to?</strong> Today one link to a file directly in your home folder
+serves the whole home tree, including <code>~/.ssh</code> (proven below,
+under "Premise check"). The cap never limited that.
+<strong>Recommendation:</strong> serve only the linked files and their
+images, then drop the cap. Board row
+<code>LAHE-linked-folder-scope</code>.</li>
+</ol>
+<h2 id="what-shipped">What shipped</h2>
+<ul>
+<li><strong>This change (<a
+href="https://github.com/kenxle/live-agentic-html-editor/pull/88">PR
+#88</a>):</strong> the cap counts one page's links, not the whole
+site's, and is now 64. On your <code>feature-forge-runbooks</code> site,
+169 links on 9 pages stop being plain text. It also carries the Codex
+session's folder-reuse fix and a pandoc error-message fix that blocked
+its CI.</li>
+<li><strong>Fixed first, because your new rule says nothing ships while
+any test fails:</strong>
+<ul>
+<li><a
+href="https://github.com/kenxle/live-agentic-html-editor/pull/85">PR
+#85</a>: in Safari, the second press on the Active filter button did
+nothing. In Safari, tabbing to a picture below the fold offered no zoom
+button (PR #39's fix, now closed). In Firefox, the style button lost its
+focus ring after Esc.</li>
+<li><a
+href="https://github.com/kenxle/live-agentic-html-editor/pull/87">PR
+#87</a>: in Safari, a comment shortcut right after entering present mode
+was dropped.</li>
+</ul></li>
+<li><strong>Verification:</strong> the last
+<code>npm run gate:all</code> read 3095 unit and 2728 browser tests
+passed, 0 failed, none flaky.</li>
+<li><strong>New board rows:</strong>
+<code>LAHE-pandoc-link-safety-tests</code> (no unit test runs link
+safety through pandoc) and <code>LAHE-firefox-library-nav-hang</code>
+(an intermittent Firefox hang, seen once).</li>
+</ul>
 <h2 id="problem-user-and-context">Problem, user, and context</h2>
 <p>A Markdown page Lahe renders can link to files in other folders. Lahe
 serves each of those folders read-only at the page's address so the

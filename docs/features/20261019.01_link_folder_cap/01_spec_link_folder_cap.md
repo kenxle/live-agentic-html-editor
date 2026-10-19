@@ -1,6 +1,20 @@
 # Linked folder cap
 
-**Status:** built and shipped by the agent without a review gate, at Ken's request. This page is the record.
+**Status:** shipped. Merged to `main` as [PR #88](https://github.com/kenxle/live-agentic-html-editor/pull/88), built without a review gate at Ken's request. This page is the record.
+
+## Needs your decision
+
+1. **Your main checkout holds two commits from a Codex session, and your pages don't have this fix yet.** The Codex session working in feature-forge committed Lahe fixes straight to the main checkout without pushing them. The first one (links reuse a folder the site already serves) shipped inside PR #88. The second, `f7255597` ("Give rendered Markdown headings stable fragment targets"), is a different version of the heading ids that `main` already got from PR #86, and the two conflict in `src/service/markdown.js`. Until the checkout matches `origin/main`, your always-on helper runs code without the 64-folder cap. **Recommendation:** I move `f7255597` onto its own branch, `codex/heading-fragment-targets`, so nothing is lost, and fast-forward the checkout to `origin/main`. The helper then picks up the fix by itself. I haven't done it because it is another session's work.
+2. **Should a linked folder serve only the files a page links to?** Today one link to a file directly in your home folder serves the whole home tree, including `~/.ssh` (proven below, under "Premise check"). The cap never limited that. **Recommendation:** serve only the linked files and their images, then drop the cap. Board row `LAHE-linked-folder-scope`.
+
+## What shipped
+
+- **This change ([PR #88](https://github.com/kenxle/live-agentic-html-editor/pull/88)):** the cap counts one page's links, not the whole site's, and is now 64. On your `feature-forge-runbooks` site, 169 links on 9 pages stop being plain text. It also carries the Codex session's folder-reuse fix and a pandoc error-message fix that blocked its CI.
+- **Fixed first, because your new rule says nothing ships while any test fails:**
+  - [PR #85](https://github.com/kenxle/live-agentic-html-editor/pull/85): in Safari, the second press on the Active filter button did nothing. In Safari, tabbing to a picture below the fold offered no zoom button (PR #39's fix, now closed). In Firefox, the style button lost its focus ring after Esc.
+  - [PR #87](https://github.com/kenxle/live-agentic-html-editor/pull/87): in Safari, a comment shortcut right after entering present mode was dropped.
+- **Verification:** the last `npm run gate:all` read 3095 unit and 2728 browser tests passed, 0 failed, none flaky.
+- **New board rows:** `LAHE-pandoc-link-safety-tests` (no unit test runs link safety through pandoc) and `LAHE-firefox-library-nav-hang` (an intermittent Firefox hang, seen once).
 
 ## Problem, user, and context
 
