@@ -493,6 +493,27 @@ pandoc render merged). <code>st-ship</code>'s merge step caught it. The
 pandoc path sends links through the same <code>classify</code>, so the
 fix holds there too: the real-site check, rerun with pandoc installed,
 still showed no dead links.</li>
+<li><strong>The new rule held this change back, and that turned up two
+real bugs.</strong> Mid-run, Ken's global rules gained "shipping
+requires passing checks", which counts failures that also fail on
+<code>main</code>. Five browser tests had been failing on
+<code>main</code> in Firefox and WebKit. They were fixed first, in <a
+href="https://github.com/kenxle/live-agentic-html-editor/pull/85">PR
+#85</a>. Two were real bugs: in Safari, the second press on the Active
+filter button did nothing; in Firefox, the style button lost its focus
+ring after Esc. The third was open PR #39's WebKit zoom fix, which had
+waited eight days.</li>
+<li><strong><code>st-land</code> cannot run in Lahe.</strong> It needs
+eight fields from <code>.claude/guardrails.md</code> (merge method,
+deploy watch, health check, migration check, smoke command, walkthrough
+entry points, refuse list) and says to stop when any is missing. Lahe
+has no deploy, and its file says so. The landing followed CLAUDE.md
+instead: read <code>gh pr checks</code> as pass, then
+<code>gh pr merge --merge</code>, then delete the remote branch.</li>
+<li><strong>A Mac that sleeps breaks a long gate.</strong> One
+<code>gate:all</code> run took 7.6 hours and failed 122 tests because
+the machine slept mid-run. Wrapping it in <code>caffeinate -i</code>
+fixed that.</li>
 <li><strong>Not covered by the skill:</strong> another session changing
 the same code mid-run. The fix was to rebase on its commit and ship both
 together. A line about checking <code>git log origin/main..main</code>
