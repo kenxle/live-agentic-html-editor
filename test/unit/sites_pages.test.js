@@ -15,6 +15,7 @@ const path = require("node:path");
 
 const pageRoutes = require("../../src/service/page_routes.js");
 const sites = require("../../src/service/sites.js");
+const links = require("../../src/service/markdown_links.js");
 const { sitesWorld, raw, writeFile, getPage, siteHost } = require("../helpers/sites_world.js");
 
 const PAGE = "<!doctype html><html><head><title>t</title></head><body><p id=x>hello page</p></body></html>";
@@ -198,6 +199,23 @@ test("the folder cap counts one page's links, not every folder the site already 
   const link = /href="(\/\.lahe-source\/[a-f0-9]+\/far\.md)"/.exec(res.text);
   assert.ok(link, "the new folder was mounted, though the site already serves 16");
   assert.match((await getPage(w, bound.name, link[1])).text, /far away/);
+});
+
+test("a page past the folder cap stays past it on every reload", async (t) => {
+  const w = await sitesWorld(t);
+  const folder = path.join(w.home, "ws", "repo", "notes");
+  const lines = ["# Doc", ""];
+  for (let i = 0; i < links.MOUNT_CAP + 3; i += 1) {
+    writeFile(w.home, "ws/far-" + i + "/doc.md", "# Far " + i + "\n");
+    lines.push("[far " + i + "](../../far-" + i + "/doc.md)", "");
+  }
+  writeFile(folder, "doc.md", lines.join("\n"));
+  const bound = w.helper.sites.bind({ root: folder, mode: "folder", entry: "doc.md" });
+  for (let load = 0; load < 3; load += 1) {
+    const res = await getPage(w, bound.name, "/doc.md");
+    assert.equal((res.text.match(/class="lahe-local-link"/g) || []).length, 3, "load " + load);
+  }
+  assert.equal(Object.keys(w.helper.sites.get(bound.name).mounts).length, links.MOUNT_CAP);
 });
 
 // --- V17: CORP ----------------------------------------------------------------

@@ -64,6 +64,19 @@ folders, served under `/.lahe-source/<hash>/` mounts. Spec:
   path, or a symlink, that resolves outside the served folder or the mount is
   refused, a mount must be under the home folder, and nothing inside the state
   folder is served. Lahe's reserved names are never read from the folder.
+- A link into the site's own folder, or into a folder the site already serves,
+  reuses it. Any other folder becomes a new mount, and one render may add at
+  most 64 (`MOUNT_CAP` in `src/service/markdown_links.js`). The cap counts per
+  page: each folder the page links into counts once, served already or not,
+  except the one the page sits inside. Folders served for other pages do not
+  count. A link past the cap renders
+  as plain text naming the file. Spec:
+  `docs/features/20261019.01_link_folder_cap/01_spec_link_folder_cap.md`.
+- A mounted folder serves its whole tree, subfolders included, read-only, not
+  only the files a page links to. The home folder itself can be a mount, so one
+  link to `~/notes.md` serves everything under home. The cap does not limit
+  that. Only the linked pages get the rail. Board row
+  `LAHE-linked-folder-scope` holds the question of narrowing it.
 - If no review answers for a page, the helper serves it without the rail. Nothing
   is created.
 - The helper, not the page, names the file an item was made on: review.json's
