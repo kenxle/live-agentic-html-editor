@@ -127,6 +127,25 @@ function isExternal(href) {
   return !href || href.slice(0, 2) === "//" || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(href);
 }
 
+// The link types a rendered page may carry. An allow list, not a block list:
+// a script-running scheme has many spellings a browser forgives, and a new or
+// odd scheme should be refused by default rather than missed.
+var ALLOWED_SCHEMES = ["http", "https", "mailto", "tel"];
+
+// The scheme as a browser reads it: leading spaces and control characters are
+// dropped, and a tab or line break anywhere is removed, before the scheme is
+// matched, case-blind. Checking the raw text would let "java\tscript:" through.
+function browserScheme(href) {
+  var cleaned = String(href).replace(/[\t\n\r]/g, "").replace(/^[\u0000- ]+/, "");
+  var match = cleaned.match(/^([A-Za-z][A-Za-z0-9+.-]*):/);
+  return match ? match[1].toLowerCase() : null;
+}
+
+function blockedScheme(href) {
+  var scheme = browserScheme(href);
+  return scheme !== null && ALLOWED_SCHEMES.indexOf(scheme) === -1 ? scheme : null;
+}
+
 // A relative link stays under the document's own mount, but it is still a link
 // to a real file, so it is noted the same way a translated one is. Only a file
 // that exists and stays inside the document's folder by real path: the same
@@ -152,6 +171,8 @@ function noteRelative(candidate, root, registry) {
 //   inert     render as a non-clickable span naming `target`, with `reason`
 function classify(href, sourceDir, registry) {
   var raw = String(href == null ? "" : href);
+  var refused = blockedScheme(raw);
+  if (refused) return { kind: "blocked", scheme: refused };
   if (isExternal(raw)) return { kind: "external" };
   if (raw.charAt(0) === "#") return { kind: "anchor" };
   var split = splitSuffix(raw);
@@ -202,5 +223,6 @@ module.exports = {
   mountPrefix: mountPrefix,
   mountableDir: mountableDir,
   createRegistry: createRegistry,
+  ALLOWED_SCHEMES: ALLOWED_SCHEMES,
   classify: classify
 };
