@@ -128,7 +128,7 @@ test("a document becomes a hero and one numbered section per H2", () => {
 
   const hero = html.match(/<div class="hero">([\s\S]*?)<\/div>/);
   assert.notEqual(hero, null, "the hero wrapper is emitted");
-  assert.match(hero[1], /<h1>Replay branches<\/h1>/, "the first H1 is the hero title");
+  assert.match(hero[1], /<h1 id="replay-branches">Replay branches<\/h1>/, "the first H1 is the hero title");
   assert.match(hero[1], /<p>What happens when an edit cannot be replayed\.<\/p>/,
     "everything up to the first H2 is the lede, and it sits in the hero");
 
@@ -139,7 +139,7 @@ test("a document becomes a hero and one numbered section per H2", () => {
     assert.match(html, new RegExp('<span class="n">Section ' + n + "</span>"),
       "sections are numbered from 1 in document order");
   }
-  assert.match(html, /<div class="sheet-head"><h2>The clean path<\/h2>/, "the H2 is the section's head");
+  assert.match(html, /<div class="sheet-head"><h2 id="the-clean-path">The clean path<\/h2>/, "the H2 is the section's head");
   assert.match(html, /<pre><code class="language-sh">## this is a shell comment/,
     "the fenced line stays code");
 
@@ -164,7 +164,7 @@ test("a heading keeps its inline markup, and a document with no H1 still gets a 
     "## The `render` function and [the doc](https://example.com)"
   ]);
   assert.match(withMarkup,
-    /<h2>The <code>render<\/code> function and <a href="https:\/\/example\.com" target="_blank" rel="noopener noreferrer">the doc<\/a><\/h2>/,
+    /<h2 id="the-render-function-and-the-doc">The <code>render<\/code> function and <a href="https:\/\/example\.com" target="_blank" rel="noopener noreferrer">the doc<\/a><\/h2>/,
     "a code span or a link in an H2 survives into the sheet head, and still opens in a new tab");
 
   const noTitle = renderSource("lahe-markdown-notitle-", ["Just a paragraph.", "", "## A section", "", "Text."]);
@@ -236,7 +236,7 @@ test("a Markdown file with no # heading marks its file-name title", () => {
 test("a Markdown file with a # heading does not carry the marker", () => {
   const html = renderText("titled.md", "# A real title\n\nWords.\n");
   assert.equal(html.indexOf(markers.FILE_TITLE_ATTR), -1);
-  assert.ok(html.indexOf("<h1>A real title</h1>") !== -1);
+  assert.ok(html.indexOf("<h1 id=\"a-real-title\">A real title</h1>") !== -1);
 });
 
 // The fixture inlines the whole document style, so any change to
@@ -257,4 +257,70 @@ test("the rendered empty file matches the empty-notes fixture, ids aside", () =>
     "test/fixtures/free_writing/empty_notes.html is out of date. If you changed the document style " +
     "(vendor/stclair-doc-style) or the renderer on purpose, regenerate it with " +
     "LAHE_REGEN_FIXTURES=1 node --test test/unit/markdown_render.test.js and commit the fixture.");
+});
+
+// LAHE-markdown-heading-ids: an in-page link like "[text](#some-heading)" goes
+// nowhere unless the heading has the id GitHub would give it, so the same link
+// works here and on github.com. The expected ids are github-slugger's.
+test("every Markdown heading gets the GitHub-style id an in-page link names", () => {
+  const html = renderText("headings.md", [
+    "# The Title",
+    "",
+    "Lede with [jump](#6-sub-agents-reviews-and-personas).",
+    "",
+    "## 6. Sub-agents, reviews, and personas",
+    "",
+    "### `code` & **bold** [link](https://example.com)",
+    "",
+    "### Repeat",
+    "### Repeat",
+    "### Repeat-1",
+    "",
+    "> ## In a quote",
+    "",
+    "- item",
+    "",
+    "  #### In a list",
+    "",
+    "## Ünïcode café!",
+    "",
+    "```md",
+    "## Not a heading",
+    "```"
+  ].join("\n"));
+  assert.deepEqual(html.match(/<h[1-6][^>]*>/g), [
+    "<h1 id=\"the-title\">",
+    "<h2 id=\"6-sub-agents-reviews-and-personas\">",
+    "<h3 id=\"code--bold-link\">",
+    "<h3 id=\"repeat\">",
+    "<h3 id=\"repeat-1\">",
+    "<h3 id=\"repeat-1-1\">",
+    "<h2 id=\"in-a-quote\">",
+    "<h4 id=\"in-a-list\">",
+    "<h2 id=\"ünïcode-café\">"
+  ]);
+  assert.match(html, /<a href="#6-sub-agents-reviews-and-personas">jump<\/a>/, "the anchor link stays in the page");
+  assert.match(html, /<div class="sheet-head"><h2 id="6-sub-agents-reviews-and-personas">6\. Sub-agents, reviews, and personas<\/h2>/,
+    "a section heading keeps its sheet-head wrapper");
+});
+
+// From the code review: where a slug departs from a naive reading of the
+// heading text, it follows GitHub, except for the review layer's own ids.
+test("a heading id keeps GitHub's edge cases and stays out of the layer's ids", () => {
+  const html = renderText("edges.md", [
+    "## <a name=\"install\"></a> Install",
+    "## Logo ![x](a.png)",
+    "## Use `&amp;` literally",
+    "## Caf&#233; A&nbsp;B",
+    "## Lahe surface root",
+    "## `lahe-highlight-styles`"
+  ].join("\n"));
+  assert.deepEqual(html.match(/<h2[^>]*>/g), [
+    "<h2 id=\"-install\">",
+    "<h2 id=\"logo-\">",
+    "<h2 id=\"use-amp-literally\">",
+    "<h2 id=\"café-ab\">",
+    "<h2 id=\"section-lahe-surface-root\">",
+    "<h2 id=\"section-lahe-highlight-styles\">"
+  ]);
 });

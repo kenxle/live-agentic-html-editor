@@ -7251,6 +7251,15 @@
         closeStylePanel(false);
         closeShortcuts(false);
         closePdfTray(false);
+        // Let go of the keyboard. A reviewer who chose Present mode from the
+        // menu has the focus on a control in the rail, and hiding the rail does
+        // not move it: the browser takes the focus off a hidden control at its
+        // next rendering update, which under load can come after the reviewer
+        // has already pressed the chord to bring the library back. Until then
+        // the page reports the library's own host as holding the keyboard, so
+        // the comment chord pressed in that gap is taken for a key inside the
+        // library and ignored (present_mode.spec.js, WebKit, 2026-10).
+        releaseFocus();
       }
       if (persist !== false) persistCollapsedPreference();
       renderPresent();
