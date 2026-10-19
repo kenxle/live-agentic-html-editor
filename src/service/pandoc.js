@@ -29,7 +29,8 @@ var path = require("node:path");
 var FILTER = path.join(__dirname, "lahe_render.lua");
 // gfm plus fenced divs, as the feature-forge build reads it, minus the
 // extensions that would change the words on the page from what marked shows:
-// heading ids (they move the layer's anchors), YAML metadata (a later --- block
+// heading ids (pandoc's would not match marked's; markdown.js writes the same
+// GitHub-style ids on both engines' headings instead), YAML metadata (a later --- block
 // would vanish; the real frontmatter is already stripped), and dollar math
 // ($HOME/$PATH would turn italic). Emoji, alerts and footnotes stay, as in the
 // builds. Naming an extension a pandoc does not know is a hard error, so the

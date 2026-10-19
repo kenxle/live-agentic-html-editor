@@ -235,6 +235,125 @@ function splitSections(tokens) {
   return { heading: heading, lede: lede, sections: sections };
 }
 
+// GitHub's heading anchors, the way github-slugger builds them: the heading's
+// visible text, lowercased, with punctuation dropped and each space turned into
+// a hyphen, and a repeat taking -1, -2 and so on. Matching GitHub means a
+// "[text](#some-heading)" link works the same here and on github.com. The ids
+// are handed out in document order before anything renders, because the hero
+// and the sections are rendered out of order (the lede runs before the H1).
+function headingText(tokens) {
+  return (tokens || []).map(function (token) {
+    if (token.type === "image" || token.type === "html") return "";
+    if (token.tokens) return headingText(token.tokens);
+    // A code span's text is the code as written; everything else is source
+    // text, where "&#233;" or "&amp;" means its character. A named entity the
+    // decoder does not know ("&eacute;") is dropped rather than spelled into
+    // the slug as a word.
+    if (token.type === "codespan" || token.type === "escape") return token.text;
+    // A no-break space is not a space to GitHub's slugger, so it is dropped
+    // there; the shared decoder folds it to a plain space for the handled check.
+    var text = String(token.text || "").replace(/&nbsp;/gi, "\u00a0");
+    return decodeEntities(text).replace(/&[a-zA-Z][a-zA-Z0-9]*;/g, "");
+  }).join("");
+}
+
+// The renderer escapes the reviewer's punctuation (an apostrophe is written
+// `&#39;`), and Markdown source may spell a character as an entity. The
+// handled check reads rendered text, and attrOf reads the pandoc filter's link
+// attributes, through this same function.
+var NAMED_ENTITIES = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " "
+};
+
+function decodeEntities(text) {
+  return String(text)
+    .replace(/&#[xX]([0-9a-fA-F]+);/g, function (whole, hex) {
+      var code = parseInt(hex, 16);
+      return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+    })
+    .replace(/&#(\d+);/g, function (whole, dec) {
+      var code = parseInt(dec, 10);
+      return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+    })
+    .replace(/&([a-zA-Z]+);/g, function (whole, name) {
+      var lower = name.toLowerCase();
+      return Object.prototype.hasOwnProperty.call(NAMED_ENTITIES, lower) ? NAMED_ENTITIES[lower] : whole;
+    });
+}
+
+// No trim: github-slugger keeps the hyphen a leading image or tag leaves
+// behind ("## <a name=x></a> Install" is "#-install" on GitHub too). The one
+// departure from GitHub is the review layer's own namespace: the layer finds
+// its mount point and stylesheet by "lahe-" ids, and a heading named "Lahe
+// surface root" taking one would stop the rail mounting. Those slugs gain a
+// "section-" prefix.
+function slugify(text) {
+  var slug = text.toLowerCase()
+    .replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, "")
+    .replace(/ /g, "-");
+  return /^lahe-/.test(slug) ? "section-" + slug : slug;
+}
+
+// github-slugger's repeat rule: the second "Repeat" is repeat-1, and a later
+// heading whose own slug is taken moves on to the next free number.
+function createSlugger() {
+  var seen = Object.create(null);
+  return function (text) {
+    var base = slugify(text);
+    var slug = base;
+    if (seen[base] !== undefined) {
+      do {
+        seen[base] += 1;
+        slug = base + "-" + seen[base];
+      } while (seen[slug] !== undefined);
+    } else {
+      seen[base] = 0;
+    }
+    if (seen[slug] === undefined) seen[slug] = 0;
+    return slug;
+  };
+}
+
+function headingIds(tokens) {
+  var ids = new Map();
+  var slug = createSlugger();
+  (function walk(list) {
+    (list || []).forEach(function (token) {
+      if (token.type === "heading") {
+        ids.set(token, slug(headingText(token.tokens)));
+        return;
+      }
+      if (token.tokens) walk(token.tokens);
+      if (token.items) walk(token.items);
+    });
+  })(tokens);
+  return ids;
+}
+
+// The pandoc engine writes its headings with no id (gfm_auto_identifiers is
+// off, so its ids cannot drift from these), and they get the same ids here,
+// read off the written HTML: tags dropped, entities decoded once, the way a
+// browser's text reads. A code span's "&amp;" is written "&amp;amp;", so it
+// still reads as typed. Numbered in the order written, which is document order
+// except for a heading placed before the H1, which the filter writes after it.
+function addHeadingIds(html) {
+  var slug = createSlugger();
+  return html.replace(/<h([1-6])>([\s\S]*?)<\/h\1>/g, function (whole, depth, inner) {
+    var id = slug(decodeEntities(inner.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, "\u00a0")));
+    return id ? "<h" + depth + " id=\"" + escapeHtml(id) + "\">" + inner + "</h" + depth + ">" : whole;
+  });
+}
+
+function idAttr(ids, token) {
+  var slug = ids.get(token);
+  return slug ? " id=\"" + escapeHtml(slug) + "\"" : "";
+}
+
 // marked resolves reference-style links while lexing, but the parser still
 // reads tokens.links, and a fresh array built by the split carries none.
 // Handing the lexer's table back keeps a [text][ref] link working in a section.
@@ -287,18 +406,6 @@ function hasFencedDiv(body) {
     if (/^ {0,3}:{3,}/.test(line)) return true;
   }
   return false;
-}
-
-function decodeEntities(value) {
-  return String(value).replace(/&(#x[0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos|#39);/g, function (whole, name) {
-    if (name === "amp") return "&";
-    if (name === "lt") return "<";
-    if (name === "gt") return ">";
-    if (name === "quot") return "\"";
-    if (name === "apos" || name === "#39") return "'";
-    var code = name.charAt(1) === "x" || name.charAt(1) === "X" ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
-    return Number.isFinite(code) ? String.fromCodePoint(code) : whole;
-  });
 }
 
 function attrOf(attrs, name) {
@@ -443,12 +550,17 @@ function renderPage(source, options) {
       return writeLink(attrOf(attrs, "href") || "", attrOf(attrs, "title"), text);
     });
     if (out.indexOf("<pre class=\"mermaid\">") !== -1) containsMermaid = true;
-    return out;
+    return addHeadingIds(out);
   }
 
   function markedBody() {
     var lexed = marked.lexer(parts.body, { gfm: true, breaks: false });
     var page = splitSections(lexed);
+    var ids = headingIds(lexed);
+    renderer.heading = function (token) {
+      return "<h" + token.depth + idAttr(ids, token) + ">" + this.parser.parseInline(token.tokens) +
+        "</h" + token.depth + ">\n";
+    };
     // One parser for the whole document. Constructing it is what sets
     // renderer.parser, which renderer.link and the headings below both read.
     var parser = new markedPackage.Parser({ gfm: true, breaks: false, renderer: renderer });
@@ -456,7 +568,7 @@ function renderPage(source, options) {
     var blocks = [
       "<div class=\"hero\">",
       page.heading
-        ? "<h1>" + parser.parseInline(page.heading.tokens) + "</h1>"
+        ? "<h1" + idAttr(ids, page.heading) + ">" + parser.parseInline(page.heading.tokens) + "</h1>"
         : "<h1" + fileTitleAttr(resolved, parts.body, title) + ">" + escapeHtml(title) + "</h1>",
       lede,
       "</div>"
@@ -467,7 +579,7 @@ function renderPage(source, options) {
       // one underneath.
       blocks.push(
         "<section class=\"sheet\">",
-        "<div class=\"sheet-head\"><h2>" + parser.parseInline(section.heading.tokens) +
+        "<div class=\"sheet-head\"><h2" + idAttr(ids, section.heading) + ">" + parser.parseInline(section.heading.tokens) +
           "</h2><span class=\"n\">Section " + (index + 1) + "</span></div>",
         parseChunk(parser, section.body, lexed.links),
         "</section>"
@@ -585,6 +697,7 @@ function writeArtifact(dir, sessionId, source, options) {
 }
 
 module.exports = {
+  decodeEntities: decodeEntities,
   MARKDOWN_EXTENSIONS: MARKDOWN_EXTENSIONS,
   MERMAID_ASSET: MERMAID_ASSET,
   MERMAID_SOURCE: MERMAID_SOURCE,
