@@ -31,6 +31,18 @@ no network access or a locked-down npm registry.
 `devDependencies` are fine and expected: they are the test harness
 (Playwright), not something the shipped tool needs at runtime.
 
+**One system dependency: pandoc, optional.** Ken allowed it on 2026-10-17
+(docs/features/20261017.02_pandoc_render). The feature-forge and
+research-report builds turn Markdown into HTML with pandoc, and their docs use
+pandoc syntax (`::: callout-req` fenced divs) that marked cannot read. So when
+pandoc 3 is on the machine, `src/service/pandoc.js` renders Markdown with it,
+through the filter `src/service/lahe_render.lua`, and LAHE and the builds never
+disagree about syntax. It is never installed for the user and never fetched:
+a machine without it renders every page with the vendored marked, writes one
+helper-log line, and the rail says "Ask your agent to install pandoc to get
+the correct styles" on a page whose fenced divs show as text. No other system
+dependency is allowed without the same kind of decision from Ken.
+
 Third-party files are vendored under `vendor/` rather than installed:
 
 - `vendor/marked/marked.cjs`: marked 15.0.12, MIT.

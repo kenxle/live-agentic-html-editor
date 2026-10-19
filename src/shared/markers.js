@@ -75,6 +75,14 @@
   var FILE_TITLE_ATTR = "data-lahe-file-title";
   var FILE_TITLE_VALUE = "file-name";
 
+  // PANDOC RENDER (docs/features/20261017.02_pandoc_render).
+  //
+  // The <meta name> a rendered Markdown page carries when pandoc did not
+  // render it and its source has a fenced div, so its ::: blocks show as text.
+  // The rail shows its own fixed line when it finds it. Only
+  // src/service/markdown.js writes it.
+  var RENDER_NOTE_NAME = "lahe-render-note";
+
   // Set by the layer on the editing host (the nearest ancestor holding the
   // anchor and its run) while a writing session is open, and removed at
   // commit. highlight.js hides that element's focus ring with one rule that
@@ -138,6 +146,7 @@
     TURBO_PERMANENT_ATTR: TURBO_PERMANENT_ATTR,
     AUTHOR_REGION_ATTR: AUTHOR_REGION_ATTR,
     FILE_TITLE_ATTR: FILE_TITLE_ATTR,
+    RENDER_NOTE_NAME: RENDER_NOTE_NAME,
     FILE_TITLE_VALUE: FILE_TITLE_VALUE,
     EDIT_HOST_ATTR: EDIT_HOST_ATTR,
     isFileTitle: isFileTitle,

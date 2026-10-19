@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.4.0+16ebe5a67320
+ * version 0.4.0+9caa4b07ff04
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.4.0+16ebe5a67320";
+  g.LAHE.version = "0.4.0+9caa4b07ff04";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -92,6 +92,14 @@
   var FILE_TITLE_ATTR = "data-lahe-file-title";
   var FILE_TITLE_VALUE = "file-name";
 
+  // PANDOC RENDER (docs/features/20261017.02_pandoc_render).
+  //
+  // The <meta name> a rendered Markdown page carries when pandoc did not
+  // render it and its source has a fenced div, so its ::: blocks show as text.
+  // The rail shows its own fixed line when it finds it. Only
+  // src/service/markdown.js writes it.
+  var RENDER_NOTE_NAME = "lahe-render-note";
+
   // Set by the layer on the editing host (the nearest ancestor holding the
   // anchor and its run) while a writing session is open, and removed at
   // commit. highlight.js hides that element's focus ring with one rule that
@@ -155,6 +163,7 @@
     TURBO_PERMANENT_ATTR: TURBO_PERMANENT_ATTR,
     AUTHOR_REGION_ATTR: AUTHOR_REGION_ATTR,
     FILE_TITLE_ATTR: FILE_TITLE_ATTR,
+    RENDER_NOTE_NAME: RENDER_NOTE_NAME,
     FILE_TITLE_VALUE: FILE_TITLE_VALUE,
     EDIT_HOST_ATTR: EDIT_HOST_ATTR,
     isFileTitle: isFileTitle,
@@ -19741,6 +19750,8 @@
   // all read agentOverdue, so the three cannot disagree about when to speak up.
   var agentOverdue = protocol.AGENT_LIVENESS.overdue;
   var AGENT_PROMINENT = protocol.AGENT_LIVENESS.PROMINENT;
+  // Ken's words for a page pandoc could not draw (2026-10-17). Exactly this.
+  var RENDER_NOTE_TEXT = "Ask your agent to install pandoc to get the correct styles";
 
   var STATE_LABEL = {
     draft: "Draft",
@@ -20603,6 +20614,17 @@
     ".agent:empty{display:none}",
     ".agent.is-loud .bubble{background:var(--accent-wash);border:2px solid var(--accent)}",
     ".agent.is-loud .turn__who{color:var(--accent-ink)}",
+
+    // --- the missing-pandoc line ---------------------------------------------
+    //
+    // A rendered Markdown page whose fenced divs (::: blocks) show as plain
+    // text because the machine has no pandoc carries a meta tag
+    // (markers.RENDER_NOTE_NAME). The rail says why, once, in quiet words under
+    // the head. The text is the rail's own (RENDER_NOTE_TEXT); the page only
+    // says that it happened. Ken's wording, docs/features/20261017.02_pandoc_render.
+    ".render-note{margin:10px 10px 0;padding:9px 12px;border-radius:var(--radius-sm);",
+    "background:var(--sunken);border:1px solid var(--line);font-size:12px;line-height:1.4;color:var(--ink-soft)}",
+    ".render-note[hidden]{display:none}",
 
     // --- the overdue banner ---------------------------------------------------
     //
@@ -22124,6 +22146,13 @@
       head.appendChild(collapseBtn);
       rail.appendChild(head);
 
+      // THE MISSING-PANDOC LINE, under the head. Shown when the page says its
+      // fenced divs are plain text because pandoc is missing.
+      var renderNote = el("div", "render-note", RENDER_NOTE_TEXT);
+      renderNote.setAttribute("data-lahe-render-note", "true");
+      renderNote.hidden = !pageNeedsPandoc();
+      rail.appendChild(renderNote);
+
       // THE OVERDUE BANNER, at the top where it is read first. Built once and
       // shown or hidden by renderWaitBanner, like every other piece of chrome.
       var late = el("div", "late");
@@ -22565,6 +22594,7 @@
         foot: foot,
         statusRow: statusRow,
         statusText: statusText,
+        renderNote: renderNote,
         late: late,
         lateTitle: lateTitle,
         lateCheck: lateCheck,
@@ -22676,6 +22706,13 @@
       });
       if (any) pageHadContent = true;
       return !any;
+    }
+
+    // Did the page say pandoc was missing for it? Read once at build: a page
+    // that changes engine is a new render, which reloads the page.
+    function pageNeedsPandoc() {
+      if (!doc || typeof doc.querySelector !== "function") return false;
+      return !!doc.querySelector("meta[name='" + markers.RENDER_NOTE_NAME + "']");
     }
 
     // The text of the marked file-name title, when the page has one.
@@ -25361,6 +25398,18 @@
       return !!(dom && dom.refusal.getAttribute("data-shown") === "true");
     }
 
+    // Self-report for the closed root: the missing-pandoc line, its words and
+    // whether it is really on screen.
+    function renderNoteInfo() {
+      if (!dom || !dom.renderNote) return { present: false };
+      var rect = dom.renderNote.getBoundingClientRect();
+      return {
+        present: true,
+        text: dom.renderNote.textContent,
+        visible: !dom.renderNote.hidden && rect.width > 0 && rect.height > 0
+      };
+    }
+
     // Self-report for the closed root: is the Review-here button really on
     // screen, pressable, and labeled? The panel showing while its button is
     // missing was a real failure mode (a chip told the reviewer to press a
@@ -28019,6 +28068,7 @@
       markRefusalPending: markRefusalPending,
       refusalShown: refusalShown,
       refusalButtonInfo: refusalButtonInfo,
+      renderNoteInfo: renderNoteInfo,
       setStatusLine: setStatusLine,
       getStatusLine: getStatusLine,
       statusText: statusText,
@@ -53364,7 +53414,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.4.0+16ebe5a67320";
+  var VERSION = "0.4.0+9caa4b07ff04";
 
   var protocol = ns.protocol;
   var record = ns.record;
