@@ -232,6 +232,64 @@ function splitSections(tokens) {
   return { heading: heading, lede: lede, sections: sections };
 }
 
+// GitHub's heading anchors, the way github-slugger builds them: the heading's
+// visible text, lowercased, with punctuation dropped and each space turned into
+// a hyphen, and a repeat taking -1, -2 and so on. Matching GitHub means a
+// "[text](#some-heading)" link works the same here and on github.com. The ids
+// are handed out in document order before anything renders, because the hero
+// and the sections are rendered out of order (the lede runs before the H1).
+function headingText(tokens) {
+  return (tokens || []).map(function (token) {
+    if (token.type === "image" || token.type === "html") return "";
+    if (token.tokens) return headingText(token.tokens);
+    return token.type === "escape" ? token.text : decodeEntities(String(token.text || ""));
+  }).join("");
+}
+
+function decodeEntities(text) {
+  return text.replace(/&(amp|lt|gt|quot|#39);/g, function (whole, name) {
+    return { amp: "&", lt: "<", gt: ">", quot: "\"", "#39": "'" }[name];
+  });
+}
+
+function slugify(text) {
+  return text.toLowerCase().trim()
+    .replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, "")
+    .replace(/ /g, "-");
+}
+
+function headingIds(tokens) {
+  var ids = new Map();
+  var seen = Object.create(null);
+  (function walk(list) {
+    (list || []).forEach(function (token) {
+      if (token.type === "heading") {
+        var base = slugify(headingText(token.tokens));
+        var slug = base;
+        if (seen[base] !== undefined) {
+          do {
+            seen[base] += 1;
+            slug = base + "-" + seen[base];
+          } while (seen[slug] !== undefined);
+        } else {
+          seen[base] = 0;
+        }
+        seen[slug] = seen[slug] === undefined ? 0 : seen[slug];
+        ids.set(token, slug);
+        return;
+      }
+      if (token.tokens) walk(token.tokens);
+      if (token.items) walk(token.items);
+    });
+  })(tokens);
+  return ids;
+}
+
+function idAttr(ids, token) {
+  var slug = ids.get(token);
+  return slug ? " id=\"" + escapeHtml(slug) + "\"" : "";
+}
+
 // marked resolves reference-style links while lexing, but the parser still
 // reads tokens.links, and a fresh array built by the split carries none.
 // Handing the lexer's table back keeps a [text][ref] link working in a section.
@@ -347,6 +405,11 @@ function renderPage(source, options) {
 
   var lexed = marked.lexer(parts.body, { gfm: true, breaks: false });
   var page = splitSections(lexed);
+  var ids = headingIds(lexed);
+  renderer.heading = function (token) {
+    return "<h" + token.depth + idAttr(ids, token) + ">" + this.parser.parseInline(token.tokens) +
+      "</h" + token.depth + ">\n";
+  };
   // One parser for the whole document. Constructing it is what sets
   // renderer.parser, which renderer.link and the headings below both read.
   var parser = new markedPackage.Parser({ gfm: true, breaks: false, renderer: renderer });
@@ -355,7 +418,7 @@ function renderPage(source, options) {
   var blocks = [
     "<div class=\"hero\">",
     page.heading
-      ? "<h1>" + parser.parseInline(page.heading.tokens) + "</h1>"
+      ? "<h1" + idAttr(ids, page.heading) + ">" + parser.parseInline(page.heading.tokens) + "</h1>"
       : "<h1" + fileTitleAttr(resolved, parts.body, title) + ">" + escapeHtml(title) + "</h1>",
     lede,
     "</div>"
@@ -366,7 +429,7 @@ function renderPage(source, options) {
     // one underneath.
     blocks.push(
       "<section class=\"sheet\">",
-      "<div class=\"sheet-head\"><h2>" + parser.parseInline(section.heading.tokens) +
+      "<div class=\"sheet-head\"><h2" + idAttr(ids, section.heading) + ">" + parser.parseInline(section.heading.tokens) +
         "</h2><span class=\"n\">Section " + (index + 1) + "</span></div>",
       parseChunk(parser, section.body, lexed.links),
       "</section>"
