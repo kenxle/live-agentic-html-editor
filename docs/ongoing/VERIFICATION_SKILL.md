@@ -1,10 +1,37 @@
 # Verification for future cloud agents
 
 The verification skill and starting feature map are written and the live seed
-journey passed. This page tracks proof and the work remaining before a cloud
-agent can safely pick up bulletin-board tasks. No decision is needed now.
+journey passed. Nothing is needed from you right now. You have already given
+the direction: make verification reliable, then let cloud agents take work
+from the bulletin board.
 
-Updated: 2026-10-18T21:16:26-04:00
+Updated: 2026-10-18T22:35:17-04:00
+
+## What happens next
+
+**The next engineering task is to prove the rest of the starting feature map.**
+The skill is written, but only the Markdown writing journey has been exercised
+for this handoff. We should establish which other journeys work before giving
+a cloud agent responsibility for fixes.
+
+- **Finish local verification and land the skill.** Exercise the mapped comment,
+  choice, Library and document workflows. Record failures honestly, complete
+  the required checks, and prepare the branch for the normal PR process.
+- **Prove a fresh cloud run.** Use Claude Code cloud as the initial target,
+  following your suggestion. Start with the existing writing journey and retain
+  its evidence. Check setup, browser execution and cleanup in that environment.
+- **Pilot a board task.** Choose a small, clearly specified bug with a testable
+  outcome. Have the agent reproduce it, fix it, run verification and submit a PR
+  for review. A successful pilot should include evidence of the failure and fix.
+- **Then automate pickup and maintenance.** Define which board items agents may
+  take and how they claim work without colliding. Add the feature-map maintenance
+  run so the verification instructions keep pace with the product.
+
+The local verification work needs no further decision from you. If the cloud
+trial reaches account access or repository connection that only you can provide,
+I will bring you the exact setup action. Before unattended pickup is enabled,
+we will need your choice of allowed work and whether agents stop at a PR or
+may merge. My recommendation for the pilot is to stop at a PR.
 
 ## What this adds
 
@@ -64,14 +91,7 @@ GitHub CI currently runs lint, the bundle check and unit tests. Its browser
 suite remains local by project policy. The Mac menu bar needs a Mac; actual
 agent wakes need the intended host. Both remain separate from browser proof.
 
-## Next work
-
-- Validate the seed on the chosen cloud runner and retain its artifacts.
-- Broaden live coverage beyond the seed and map the remaining user surfaces.
-- Define board eligibility, claiming and collision handling before unattended
-  task pickup. Preserve the current human decision and PR boundaries.
-
-These follow-ups belong on [the bulletin board](../BULLETIN.md).
+The follow-ups above are recorded on [the bulletin board](../BULLETIN.md).
 
 ## Source
 
