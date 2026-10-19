@@ -1,10 +1,10 @@
 # Render Markdown with pandoc
 
-Status: PR open (#80). Built and reviewed (architecture and security before code, 2026-10-17; code review and requirements check after, 2026-10-18; dispositions at the bottom).
+Status: merged. Ken approved [PR #80](https://github.com/kenxle/live-agentic-html-editor/pull/80) and it landed on main as `f3704ea4` on 2026-10-19. Built and reviewed (architecture and security before code, 2026-10-17; code review and requirements check after, 2026-10-18; dispositions at the bottom).
 
 ## Needs Ken
 
-Updated 2026-10-18 19:29. **Needs Ken: approve or comment on [PR #80](https://github.com/kenxle/live-agentic-html-editor/pull/80).** Everything else is done: code, tests, both review rounds fixed, and the full local gate run (5 browser failures in Firefox and WebKit, each reproduced on a clean origin/main, so not from this branch).
+Updated 2026-10-19 02:05. **Nothing needs Ken.** PR #80 is merged. The full local gate ran before the merge, with 5 browser failures in Firefox and WebKit; each one also fails on a clean origin/main, so none come from this change.
 
 What it looks like, before and after:
 
