@@ -95,14 +95,16 @@ the rail, so there is nothing to enroll page by page.
 
 Pass the source file. Direct `.md` and `.markdown` targets are rendered by
 `lahe review` itself, including fenced `mermaid` blocks, and it never writes the
-Markdown source.
+Markdown source. With pandoc installed it renders through pandoc, so pandoc
+fenced divs (`::: callout-req`, `::: stat`) draw as house components; the kinds
+are in the components reference, "Components in Markdown".
 
 Use this row only when that one file is the document. A document assembled from
 several inputs is the multi-source row. When a project already builds with
 Pandoc, keep its command, template, styles, and filters in the project so another
 agent can rebuild the same output.
 
-After a change there is nothing to rerun. LAHE notices the `.md` is newer than
+After a change there is nothing to rerun. Lahe notices the `.md` is newer than
 the page it rendered, renders it again, and the reviewer's page reloads onto the
 new render on its own. Do not rerun `lahe review` for that file, and never tell
 the reviewer to refresh or clear a cache.

@@ -2123,7 +2123,7 @@
     var hasId = typeof sessionId === "string" && isSafeId(sessionId);
     var elsewhere = !library && stateDirFlagNeeded === true
       ? [
-          "This review keeps its files outside LAHE's default folder, so add --state-dir with the folder the earlier agent's lahe commands used. If you cannot find it, ask me.",
+          "This review keeps its files outside Lahe's default folder, so add --state-dir with the folder the earlier agent's lahe commands used. If you cannot find it, ask me.",
           ""
         ]
       : [];
@@ -2137,9 +2137,9 @@
         ].concat(elsewhere);
     var named = typeof name === "string" && name ? ", the session named " + JSON.stringify(name) : "";
     var why = library
-      ? "I am handing it to you from the LAHE Library so you can continue it."
+      ? "I am handing it to you from the Lahe Library so you can continue it."
       : "The agent that was working on it stopped answering my comments, and I am asking you to continue it.";
-    return ["Please take over my live LAHE review" + named + ". " + why, ""]
+    return ["Please take over my live Lahe review" + named + ". " + why, ""]
       .concat(run)
       .concat([
         "It prints the commands to catch up. Then work every comment that is waiting and reply to each one, and keep watching for new ones."

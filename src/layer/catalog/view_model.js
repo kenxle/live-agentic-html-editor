@@ -145,15 +145,15 @@
     BADGE_RETIRED: "review retired",
     NEEDS_AGENT: "Needs an agent to reopen. No agent is attached.",
     NO_MATCHES: "Nothing matches that search.",
-    RESTARTED: "LAHE restarted, reload this page.",
+    RESTARTED: "Lahe restarted, reload this page.",
     RELOAD: "Reload",
-    NOT_RUNNING: "LAHE is not running. Ask an agent to open the lahe library.",
-    EMPTY: "No reviews yet. Documents you review in LAHE show up here.",
+    NOT_RUNNING: "Lahe is not running. Ask an agent to open the lahe library.",
+    EMPTY: "No reviews yet. Documents you review in Lahe show up here.",
     LOADING: "Loading the Library.",
     STAR: "Star",
     UNSTAR: "Remove the star",
     STAR_FAILED: "Couldn't save the star: {why}. The star goes back.",
-    STAR_NOT_RUNNING: "LAHE is not running",
+    STAR_NOT_RUNNING: "Lahe is not running",
     RENAME: "Rename",
     RENAME_FAILED: "Couldn't save the rename: {why}. The old name goes back.",
     OPENING_HANDOFF: 'Opening "{name}" in a new tab and handing it to {agent}.',
@@ -166,7 +166,7 @@
     OPENED_QUEUE_FULL: "Opened. No agent was asked: too many hand-overs are waiting.",
     OPENED_NO_AGENT: "Opened. No agent is attached to watch it.",
     QUEUE_FULL: "No agent was asked: too many hand-overs are waiting.",
-    URL_REFUSED: "LAHE answered with an address that is not on this computer, so the Library did not open it.",
+    URL_REFUSED: "Lahe answered with an address that is not on this computer, so the Library did not open it.",
     UNKNOWN_ERROR: "Something went wrong.",
     CONFIRM_TITLE: "Another agent is on this session.",
     CONFIRM_BODY: '"{name}" belongs to session "{session}". Handing it to {agent} moves the whole session and stops the other agent.',
@@ -178,7 +178,7 @@
     // failures.js holds PROTO_CATALOG_UNREADABLE's own wording, but the page
     // cannot load failures.js (the asset allowlist is fixed), so the notice is
     // spelled here from the same sentence.
-    STARS_UNREADABLE: "Stars can't change right now: the Library's saved stars file can't be read. LAHE leaves the file as it is."
+    STARS_UNREADABLE: "Stars can't change right now: the Library's saved stars file can't be read. Lahe leaves the file as it is."
   };
 
   function fill(template, values) {

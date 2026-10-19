@@ -37,7 +37,12 @@ its own sections.
    code review.
 7. Entities count as their character (`&amp;` is `&`, `&#233;` is `é`); a code
    span counts as written; a no-break space is dropped, as GitHub drops it.
-8. Nothing else in the rendered HTML changes. Anchor links already stay in the
+8. Both engines. Main gained a pandoc renderer (PR #80) while this was in
+   review. Pandoc's own `gfm_auto_identifiers` stays off; `markdown.js` reads
+   the headings off pandoc's HTML and gives them the same ids, so a link lands
+   whichever engine drew the page. A card's name (the bold first line the
+   filter turns into an `<h4>`) gets an id too, which GitHub would not give.
+9. Nothing else in the rendered HTML changes. Anchor links already stay in the
    same tab (`links.classify` returns `anchor`).
 
 ## Out of scope
@@ -54,4 +59,5 @@ item, accented letters and a fenced code block, with the expected ids taken
 from github-slugger's rules. A second test, "a heading id keeps GitHub's edge
 cases and stays out of the layer's ids", covers the review's findings: a
 leading empty anchor tag, a trailing image, an entity in a code span, numeric
-and no-break-space entities, and the `lahe-` prefix.
+and no-break-space entities, and the `lahe-` prefix. `test/unit/pandoc_render.test.js`, "pandoc's
+headings get the same ids as marked's", checks the two engines agree.

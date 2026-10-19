@@ -85,6 +85,7 @@ Notes on the browser run:
 - Each test has a 90 second limit. That is headroom for specs that start a real helper, a fixture server and a browser. Waits inside a test are condition polls, not sleeps.
 - `LAHE_DIRECT_LAUNCH=off` keeps a helper under test from opening a real Terminal window. The npm scripts and the config set it for you.
 - `LAHE_PAGES_PORT` defaults to `0` in the config, so each helper under test serves pages on a free port.
+- `npm run test:unit` sets `LAHE_MARKDOWN_ENGINE=marked`, so Markdown expected strings do not depend on whether the machine has pandoc. `test/unit/pandoc_render.test.js` and `test/browser/markdown_pandoc.spec.js` ask for pandoc by name and skip, saying why, without it. `LAHE_PANDOC=none` makes a machine with pandoc act as one without it, which is how the missing-pandoc notice is tested. CI has no pandoc on purpose: it proves a clean clone works, which is the fallback path; the pandoc tests run in the local `npm run gate`.
 - A failure seen while another build or browser run was going is rerun alone before anyone calls it real or a flake.
 
 ## What CI runs

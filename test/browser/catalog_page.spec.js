@@ -229,7 +229,7 @@ test.describe("the Library page", () => {
     const tab = await tabPromise;
     if (!tab.isClosed()) await tab.waitForEvent("close");
     await expect(rowLocator(page, "r_stale").locator(".lib-note-text")).toHaveText(
-      "LAHE answered with an address that is not on this computer, so the Library did not open it."
+      "Lahe answered with an address that is not on this computer, so the Library did not open it."
     );
   });
 
@@ -354,7 +354,7 @@ test.describe("the Library page", () => {
     // The answer is refused (not loopback), which closes the one tab and ends
     // the busy state. Its note is the sign the answer arrived.
     await expect(rowLocator(page, "r_stale").locator(".lib-note-text")).toHaveText(
-      "LAHE answered with an address that is not on this computer, so the Library did not open it."
+      "Lahe answered with an address that is not on this computer, so the Library did not open it."
     );
     await expect(rowLocator(page, "r_stale").locator('[data-act="open"]')).not.toHaveAttribute("aria-busy", "true");
     await page.evaluate(() => window.__laheCatalogPollNow());
@@ -420,7 +420,7 @@ test.describe("the Library page", () => {
 
     await page.evaluate(() => window.__laheCatalogPollNow());
     const banner = page.locator("#lahe-catalog-banner");
-    await expect(banner.locator("p")).toHaveText("LAHE restarted, reload this page.");
+    await expect(banner.locator("p")).toHaveText("Lahe restarted, reload this page.");
     await expect(banner.locator('[data-act="reload"]')).toHaveText("Reload");
 
     await banner.locator('[data-act="reload"]').click();

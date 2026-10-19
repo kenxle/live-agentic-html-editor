@@ -14,6 +14,9 @@ var path = require("node:path");
 // vendor/mermaid/README.md for the versions and how to update them.
 var markedPackage = require("../../vendor/marked/marked.cjs");
 var marked = markedPackage.marked;
+// pandoc is the one system dependency: when the machine has it, it renders
+// the page (fenced divs and all) and marked is the fallback. See pandoc.js.
+var pandoc = require("./pandoc.js");
 var links = require("./markdown_links.js");
 var tabIcon = require("./tab_icon.js");
 var stateDir = require("./state_dir.js");
@@ -295,24 +298,33 @@ function slugify(text) {
   return /^lahe-/.test(slug) ? "section-" + slug : slug;
 }
 
+// github-slugger's repeat rule: the second "Repeat" is repeat-1, and a later
+// heading whose own slug is taken moves on to the next free number.
+function createSlugger() {
+  var seen = Object.create(null);
+  return function (text) {
+    var base = slugify(text);
+    var slug = base;
+    if (seen[base] !== undefined) {
+      do {
+        seen[base] += 1;
+        slug = base + "-" + seen[base];
+      } while (seen[slug] !== undefined);
+    } else {
+      seen[base] = 0;
+    }
+    if (seen[slug] === undefined) seen[slug] = 0;
+    return slug;
+  };
+}
+
 function headingIds(tokens) {
   var ids = new Map();
-  var seen = Object.create(null);
+  var slug = createSlugger();
   (function walk(list) {
     (list || []).forEach(function (token) {
       if (token.type === "heading") {
-        var base = slugify(headingText(token.tokens));
-        var slug = base;
-        if (seen[base] !== undefined) {
-          do {
-            seen[base] += 1;
-            slug = base + "-" + seen[base];
-          } while (seen[slug] !== undefined);
-        } else {
-          seen[base] = 0;
-        }
-        seen[slug] = seen[slug] === undefined ? 0 : seen[slug];
-        ids.set(token, slug);
+        ids.set(token, slug(headingText(token.tokens)));
         return;
       }
       if (token.tokens) walk(token.tokens);
@@ -320,6 +332,20 @@ function headingIds(tokens) {
     });
   })(tokens);
   return ids;
+}
+
+// The pandoc engine writes its headings with no id (gfm_auto_identifiers is
+// off, so its ids cannot drift from these), and they get the same ids here,
+// read off the written HTML: tags dropped, entities decoded once, the way a
+// browser's text reads. A code span's "&amp;" is written "&amp;amp;", so it
+// still reads as typed. Numbered in the order written, which is document order
+// except for a heading placed before the H1, which the filter writes after it.
+function addHeadingIds(html) {
+  var slug = createSlugger();
+  return html.replace(/<h([1-6])>([\s\S]*?)<\/h\1>/g, function (whole, depth, inner) {
+    var id = slug(decodeEntities(inner.replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, "\u00a0")));
+    return id ? "<h" + depth + " id=\"" + escapeHtml(id) + "\">" + inner + "</h" + depth + ">" : whole;
+  });
 }
 
 function idAttr(ids, token) {
@@ -350,6 +376,61 @@ function newTabTarget(href) {
   var scheme = linkScheme(href);
   if (scheme === "mailto" || scheme === "tel") return "";
   return " target=\"_blank\" rel=\"noopener noreferrer\"";
+}
+
+// ---------------------------------------------------------------------------
+// The pandoc page
+// ---------------------------------------------------------------------------
+
+// A page pandoc did not render, whose source has a fenced div, carries this
+// meta. The rail sees it and shows its own fixed line (src/layer/overlay.js);
+// the page never supplies the words. Spelled in src/shared/markers.js.
+var RENDER_NOTE_META = "<meta name=\"" + markers.RENDER_NOTE_NAME + "\" content=\"pandoc\">";
+
+/**
+ * True when the Markdown has a fenced-div line (three or more colons at the
+ * start) outside a code fence: the pages a missing pandoc actually changes.
+ */
+function hasFencedDiv(body) {
+  var fence = null;
+  var lines = String(body).split(/\r?\n/);
+  for (var i = 0; i < lines.length; i += 1) {
+    var line = lines[i];
+    var open = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+    if (fence) {
+      if (open && open[1].charAt(0) === fence.charAt(0) && open[1].length >= fence.length && /^ {0,3}[`~]+\s*$/.test(line)) fence = null;
+      continue;
+    }
+    if (open) { fence = open[1]; continue; }
+    if (/^ {0,3}:{3,}/.test(line)) return true;
+  }
+  return false;
+}
+
+function decodeEntities(value) {
+  return String(value).replace(/&(#x[0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos|#39);/g, function (whole, name) {
+    if (name === "amp") return "&";
+    if (name === "lt") return "<";
+    if (name === "gt") return ">";
+    if (name === "quot") return "\"";
+    if (name === "apos" || name === "#39") return "'";
+    var code = name.charAt(1) === "x" || name.charAt(1) === "X" ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
+    return Number.isFinite(code) ? String.fromCodePoint(code) : whole;
+  });
+}
+
+function attrOf(attrs, name) {
+  var match = new RegExp("(?:^|\\s)" + name + "=\"([^\"]*)\"").exec(attrs);
+  return match ? decodeEntities(match[1]) : null;
+}
+
+// Every link the filter wrote is <a ... data-lahe-link="NONCE:n" ...>text</a>
+// followed by <!--/lahe-link NONCE:n-->. The marker pins the end, so the swap
+// is exact even when the link text holds raw HTML; the nonce means an anchor
+// in the author's raw HTML is never touched, the same as under marked.
+function linkPattern() {
+  return new RegExp("<a\\s([^>]*?)\\s?data-lahe-link=\"" + pandoc.NONCE + ":(\\d+)\"([^>]*)>([\\s\\S]*?)</a><!--/lahe-link " +
+    pandoc.NONCE + ":\\2-->", "g");
 }
 
 function sourceNote(sourcePath) {
@@ -402,10 +483,11 @@ function renderPage(source, options) {
   var sourceDir = path.dirname(realOr(resolved));
   var containsMermaid = false;
   var renderer = new markedPackage.Renderer();
-  renderer.link = function (token) {
-    var text = this.parser.parseInline(token.tokens);
-    var title = token.title ? " title=\"" + escapeHtml(token.title) + "\"" : "";
-    var decision = links.classify(token.href, sourceDir, registry);
+  // One link, written the same way by both engines: marked hands over its
+  // token, the pandoc pass hands over what it read off the tag.
+  function writeLink(href, titleText, text) {
+    var title = titleText ? " title=\"" + escapeHtml(titleText) + "\"" : "";
+    var decision = links.classify(href, sourceDir, registry);
     if (decision.kind === "translate") {
       return "<a href=\"" + escapeHtml(decision.url) + "\"" + title + ">" + text + "</a>";
     }
@@ -415,12 +497,21 @@ function renderPage(source, options) {
       return "<span class=\"lahe-local-link\" title=\"local file, open it on disk: " +
         escapeHtml(decision.target) + "\">" + text + "</span>";
     }
+    if (decision.kind === "blocked") {
+      // A link type outside the allow list (a script-running one among them)
+      // keeps its words and loses its address, with a title saying why.
+      return "<span class=\"lahe-blocked-link\" title=\"" + escapeHtml(decision.scheme) +
+        ": links are not opened from a rendered page\">" + text + "</span>";
+    }
     // relative and anchor links stay in the same tab, same as translate above;
     // external links (including protocol-relative //host ones) leave the
     // documentation, so they open in a new tab unless they hand off to another
     // app (mailto:, tel:) rather than opening a page.
-    var target = decision.kind === "external" ? newTabTarget(token.href) : "";
-    return "<a href=\"" + escapeHtml(token.href) + "\"" + title + target + ">" + text + "</a>";
+    var target = decision.kind === "external" ? newTabTarget(href) : "";
+    return "<a href=\"" + escapeHtml(href) + "\"" + title + target + ">" + text + "</a>";
+  }
+  renderer.link = function (token) {
+    return writeLink(token.href, token.title, this.parser.parseInline(token.tokens));
   };
   renderer.code = function (token) {
       var language = String(token.lang || "").trim().split(/\s+/)[0].toLowerCase();
@@ -440,39 +531,74 @@ function renderPage(source, options) {
     return "<div class=\"scrollx\">" + defaultTable.call(this, token) + "</div>\n";
   };
 
-  var lexed = marked.lexer(parts.body, { gfm: true, breaks: false });
-  var page = splitSections(lexed);
-  var ids = headingIds(lexed);
-  renderer.heading = function (token) {
-    return "<h" + token.depth + idAttr(ids, token) + ">" + this.parser.parseInline(token.tokens) +
-      "</h" + token.depth + ">\n";
-  };
-  // One parser for the whole document. Constructing it is what sets
-  // renderer.parser, which renderer.link and the headings below both read.
-  var parser = new markedPackage.Parser({ gfm: true, breaks: false, renderer: renderer });
   var title = titleFrom(resolved, parts.body);
-  var lede = parseChunk(parser, page.lede, lexed.links);
-  var blocks = [
-    "<div class=\"hero\">",
-    page.heading
-      ? "<h1" + idAttr(ids, page.heading) + ">" + parser.parseInline(page.heading.tokens) + "</h1>"
-      : "<h1" + fileTitleAttr(resolved, parts.body, title) + ">" + escapeHtml(title) + "</h1>",
-    lede,
-    "</div>"
-  ];
-  page.sections.forEach(function (section, index) {
-    // Every section carries its own top space now, whether or not a lede
-    // sits between it and the hero, so the renderer never tucks the first
-    // one underneath.
-    blocks.push(
-      "<section class=\"sheet\">",
-      "<div class=\"sheet-head\"><h2" + idAttr(ids, section.heading) + ">" + parser.parseInline(section.heading.tokens) +
-        "</h2><span class=\"n\">Section " + (index + 1) + "</span></div>",
-      parseChunk(parser, section.body, lexed.links),
-      "</section>"
-    );
-  });
-  var body = rewriteRelativeUrls(blocks.join("\n"), prefix);
+  var engine = opts.engine === "marked" || opts.engine === "pandoc" ? opts.engine : null;
+  var outcome = engine === "marked"
+    ? { html: null, reason: "forced", note: null }
+    : pandoc.render(parts.body, { ignoreEnv: engine === "pandoc" });
+  var body;
+  if (outcome.html !== null) {
+    body = finishPandoc(outcome.html);
+  } else {
+    body = markedBody();
+  }
+  // The rail's notice, and the helper log's line, only for a page the
+  // missing pandoc changed. A forced marked says nothing.
+  var noted = outcome.html === null && outcome.reason !== "forced" && hasFencedDiv(parts.body);
+
+  // The filter wrote the hero, the sheets, the code blocks and the fenced
+  // divs. What is left needs this render's folder and registry: the file-name
+  // title and each link.
+  function finishPandoc(html) {
+    var out = String(html);
+    var placeholder = "<div class=\"hero\">\n<!--lahe:file-title-->";
+    if (out.indexOf(placeholder) === 0) {
+      out = "<div class=\"hero\">\n<h1" + fileTitleAttr(resolved, parts.body, title) + ">" + escapeHtml(title) + "</h1>" +
+        out.slice(placeholder.length);
+    }
+    out = out.replace(linkPattern(), function (whole, before, n, after, text) {
+      var attrs = before + " " + after;
+      return writeLink(attrOf(attrs, "href") || "", attrOf(attrs, "title"), text);
+    });
+    if (out.indexOf("<pre class=\"mermaid\">") !== -1) containsMermaid = true;
+    return addHeadingIds(out);
+  }
+
+  function markedBody() {
+    var lexed = marked.lexer(parts.body, { gfm: true, breaks: false });
+    var page = splitSections(lexed);
+    var ids = headingIds(lexed);
+    renderer.heading = function (token) {
+      return "<h" + token.depth + idAttr(ids, token) + ">" + this.parser.parseInline(token.tokens) +
+        "</h" + token.depth + ">\n";
+    };
+    // One parser for the whole document. Constructing it is what sets
+    // renderer.parser, which renderer.link and the headings below both read.
+    var parser = new markedPackage.Parser({ gfm: true, breaks: false, renderer: renderer });
+    var lede = parseChunk(parser, page.lede, lexed.links);
+    var blocks = [
+      "<div class=\"hero\">",
+      page.heading
+        ? "<h1" + idAttr(ids, page.heading) + ">" + parser.parseInline(page.heading.tokens) + "</h1>"
+        : "<h1" + fileTitleAttr(resolved, parts.body, title) + ">" + escapeHtml(title) + "</h1>",
+      lede,
+      "</div>"
+    ];
+    page.sections.forEach(function (section, index) {
+      // Every section carries its own top space now, whether or not a lede
+      // sits between it and the hero, so the renderer never tucks the first
+      // one underneath.
+      blocks.push(
+        "<section class=\"sheet\">",
+        "<div class=\"sheet-head\"><h2" + idAttr(ids, section.heading) + ">" + parser.parseInline(section.heading.tokens) +
+          "</h2><span class=\"n\">Section " + (index + 1) + "</span></div>",
+        parseChunk(parser, section.body, lexed.links),
+        "</section>"
+      );
+    });
+    return blocks.join("\n");
+  }
+  body = rewriteRelativeUrls(body, prefix);
   var style = styleFromFrontmatter(parts.frontmatter);
   var styleId = style && style.id !== styles.RESERVED_ID ? style.id : null;
   // A paid style is written to load after the house style, so its link goes
@@ -492,7 +618,7 @@ function renderPage(source, options) {
     tabIcon.LINK,
     "<style " + DOC_STYLE_ATTR + ">",
     styleSheet(),
-    "</style>" + styleLink + "</head><body><main data-container=\"Markdown document\">",
+    "</style>" + styleLink + (noted ? RENDER_NOTE_META : "") + "</head><body><main data-container=\"Markdown document\">",
     typeof opts.note === "string" ? opts.note : (opts.readOnlyNote ? sourceNote(resolved) : ""),
     metadata,
     body,
@@ -500,7 +626,13 @@ function renderPage(source, options) {
     containsMermaid ? "<script src=\"./" + MERMAID_ASSET + "\"></script><script>" + MERMAID_INIT + "</script>" : "",
     "</body></html>"
   ].join("\n");
-  return { html: html, styleId: styleId };
+  return {
+    html: html,
+    styleId: styleId,
+    engine: outcome.html !== null ? "pandoc" : "marked",
+    // The helper-log sentence, for callers that know the state folder.
+    note: noted || outcome.reason === "failed" ? outcome.note : null
+  };
 }
 
 function render(source, options) {
@@ -542,6 +674,7 @@ function writeArtifact(dir, sessionId, source, options) {
   var registry = links.createRegistry({ mounts: keyedMount(prefix, path.resolve(source)) });
   var page = renderPage(source, { assetPrefix: prefix, links: registry, noFollow: noFollow });
   var html = page.html;
+  if (page.note) sayOnce(dir, "markdown: " + page.note);
   if (html.indexOf("./" + MERMAID_ASSET) !== -1) {
     fs.copyFileSync(MERMAID_SOURCE, path.join(path.dirname(target), MERMAID_ASSET));
   }
@@ -596,6 +729,9 @@ module.exports = {
   rewriteRelativeUrls: rewriteRelativeUrls,
   artifactPath: artifactPath,
   sourceNote: sourceNote,
+  hasFencedDiv: hasFencedDiv,
+  // Which engine renders right now, for a render cache's key.
+  engineKey: pandoc.engineKey,
   render: render,
   renderPage: renderPage,
   writeArtifact: writeArtifact

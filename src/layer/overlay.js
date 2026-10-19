@@ -275,6 +275,8 @@
   // all read agentOverdue, so the three cannot disagree about when to speak up.
   var agentOverdue = protocol.AGENT_LIVENESS.overdue;
   var AGENT_PROMINENT = protocol.AGENT_LIVENESS.PROMINENT;
+  // Ken's words for a page pandoc could not draw (2026-10-17). Exactly this.
+  var RENDER_NOTE_TEXT = "Ask your agent to install pandoc to get the correct styles";
 
   var STATE_LABEL = {
     draft: "Draft",
@@ -1138,6 +1140,17 @@
     ".agent.is-loud .bubble{background:var(--accent-wash);border:2px solid var(--accent)}",
     ".agent.is-loud .turn__who{color:var(--accent-ink)}",
 
+    // --- the missing-pandoc line ---------------------------------------------
+    //
+    // A rendered Markdown page whose fenced divs (::: blocks) show as plain
+    // text because the machine has no pandoc carries a meta tag
+    // (markers.RENDER_NOTE_NAME). The rail says why, once, in quiet words under
+    // the head. The text is the rail's own (RENDER_NOTE_TEXT); the page only
+    // says that it happened. Ken's wording, docs/features/20261017.02_pandoc_render.
+    ".render-note{margin:10px 10px 0;padding:9px 12px;border-radius:var(--radius-sm);",
+    "background:var(--sunken);border:1px solid var(--line);font-size:12px;line-height:1.4;color:var(--ink-soft)}",
+    ".render-note[hidden]{display:none}",
+
     // --- the overdue banner ---------------------------------------------------
     //
     // At the top of the rail, under the head, where it is read before any card.
@@ -1659,7 +1672,7 @@
       "You may need to check your agent isn't stuck. " + DOT_COPY_HINT,
     no_agent: "Nobody has picked this up, {age}. " + DOT_COPY_HINT,
     helper_down:
-      "Lahe server helper is down. Page may crash. Please ask an agent to restart the Lahe helper. " + DOT_COPY_HINT
+      "The Lahe program is down, so the page may stop working. Please ask an agent to restart Lahe. " + DOT_COPY_HINT
   };
   // What the dot copies when the helper is down: a request an agent can act on.
   var HELPER_RESTART_MESSAGE =
@@ -1752,7 +1765,7 @@
   // still unfinished, not to hurry the reviewer through it.
   var END_REVIEW = {
     // Both the tooltip and the accessible name, deliberately the same sentence.
-    LABEL: "End this review and perform cleanup",
+    LABEL: "End this review, close it and show your hand edits",
     TITLE: "End this review?",
     ENDED_TITLE: "Review ended",
     NOTHING_PENDING: "Nothing is waiting on an agent.",
@@ -2658,6 +2671,13 @@
       head.appendChild(collapseBtn);
       rail.appendChild(head);
 
+      // THE MISSING-PANDOC LINE, under the head. Shown when the page says its
+      // fenced divs are plain text because pandoc is missing.
+      var renderNote = el("div", "render-note", RENDER_NOTE_TEXT);
+      renderNote.setAttribute("data-lahe-render-note", "true");
+      renderNote.hidden = !pageNeedsPandoc();
+      rail.appendChild(renderNote);
+
       // THE OVERDUE BANNER, at the top where it is read first. Built once and
       // shown or hidden by renderWaitBanner, like every other piece of chrome.
       var late = el("div", "late");
@@ -3099,6 +3119,7 @@
         foot: foot,
         statusRow: statusRow,
         statusText: statusText,
+        renderNote: renderNote,
         late: late,
         lateTitle: lateTitle,
         lateCheck: lateCheck,
@@ -3212,6 +3233,13 @@
       return !any;
     }
 
+    // Did the page say pandoc was missing for it? Read once at build: a page
+    // that changes engine is a new render, which reloads the page.
+    function pageNeedsPandoc() {
+      if (!doc || typeof doc.querySelector !== "function") return false;
+      return !!doc.querySelector("meta[name='" + markers.RENDER_NOTE_NAME + "']");
+    }
+
     // The text of the marked file-name title, when the page has one.
     function fileTitleText() {
       if (!doc || typeof doc.querySelector !== "function") return null;
@@ -3257,6 +3285,16 @@
     // "Edits" is picked is filtered on the frame it appears, with no list kept
     // here to fall out of step with the cards.
 
+    // Write text into a node only when it differs. renderTabs and paintFilter
+    // run on every focusout, and a focusout fires BETWEEN a press and its
+    // release (WebKit blurs a script-focused button at mousedown). Rewriting
+    // textContent with the same words still swaps the text node under the
+    // pointer, and WebKit then drops the click: the second press on the filter
+    // button did nothing after a pick had returned focus to it.
+    function setTextIfChanged(node, text) {
+      if (node.textContent !== text) node.textContent = text;
+    }
+
     function paintFilter() {
       if (!dom || !dom.filterButtons) return;
       TABS.forEach(function (tab) {
@@ -3267,8 +3305,8 @@
         var toggle = dom.filterToggles[tab];
         var filtering = activeFilter !== FILTER.ALL;
         toggle.setAttribute("data-lahe-filtering", filtering ? "true" : "false");
-        toggle.querySelector(".filterbtn__label").textContent = filtering ? FILTER_LABEL[activeFilter] : "";
-        dom.filterEmpties[tab].textContent = FILTER_EMPTY[activeFilter] || "";
+        setTextIfChanged(toggle.querySelector(".filterbtn__label"), filtering ? FILTER_LABEL[activeFilter] : "");
+        setTextIfChanged(dom.filterEmpties[tab], FILTER_EMPTY[activeFilter] || "");
         // The kind filter decides what counts as shown, so a search's "nothing
         // matches" line is checked again with it.
         applySearch(tab);
@@ -5895,6 +5933,18 @@
       return !!(dom && dom.refusal.getAttribute("data-shown") === "true");
     }
 
+    // Self-report for the closed root: the missing-pandoc line, its words and
+    // whether it is really on screen.
+    function renderNoteInfo() {
+      if (!dom || !dom.renderNote) return { present: false };
+      var rect = dom.renderNote.getBoundingClientRect();
+      return {
+        present: true,
+        text: dom.renderNote.textContent,
+        visible: !dom.renderNote.hidden && rect.width > 0 && rect.height > 0
+      };
+    }
+
     // Self-report for the closed root: is the Review-here button really on
     // screen, pressable, and labeled? The panel showing while its button is
     // missing was a real failure mode (a chip told the reviewer to press a
@@ -6121,12 +6171,12 @@
       TABS.forEach(function (name) {
         dom.tabButtons[name].setAttribute("aria-selected", name === activeTab ? "true" : "false");
         dom.panes[name].setAttribute("data-current", name === activeTab ? "true" : "false");
-        dom.counts[name].textContent = String(countFor(name));
+        setTextIfChanged(dom.counts[name], String(countFor(name)));
         // ZERO UNSEEN IS NO BADGE, not a badge reading 0. A permanent little
         // dot saying "nothing new" is noise the reviewer learns to ignore, and
         // then the one that means something does not register either.
         var fresh = tabNewCounts[name] || 0;
-        dom.newmarks[name].textContent = fresh ? String(fresh) : "";
+        setTextIfChanged(dom.newmarks[name], fresh ? String(fresh) : "");
         dom.newmarks[name].hidden = fresh === 0;
       });
       // THE COLLAPSED PILL'S COUNT: still to handle, then the all-time total in
@@ -6146,14 +6196,14 @@
       // the agent reports it handled, whichever filter is picked.
       var open = countIncomplete();
       var total = Object.keys(cards).length;
-      dom.pillCount.textContent = total ? String(open) + " (" + String(total) + ")" : "";
+      setTextIfChanged(dom.pillCount, total ? String(open) + " (" + String(total) + ")" : "");
       dom.pillCount.hidden = total === 0;
       // The jewel is a VIEW of the tab badges, never a second tally. It reads
       // whatever setTabNewCount was last told, so opening Done and clearing the
       // badge clears the jewel in the same call: there is one number and two
       // places it shows.
       var fresh = pillNewCount();
-      dom.pillJewel.textContent = fresh ? String(fresh) : "";
+      setTextIfChanged(dom.pillJewel, fresh ? String(fresh) : "");
       dom.pillJewel.hidden = fresh === 0;
     }
 
@@ -6642,7 +6692,7 @@
           if (event.key !== "Escape") return;
           event.preventDefault();
           event.stopPropagation();
-          closeStylePanel(true);
+          closeStylePanel(true, true);
           return;
         }
         if (fromOurTree(event)) return;
@@ -6660,7 +6710,7 @@
       return true;
     }
 
-    function closeStylePanel(returnFocus) {
+    function closeStylePanel(returnFocus, byKeyboard) {
       if (styleOutsideListener) {
         doc.removeEventListener("pointerdown", styleOutsideListener, true);
         doc.removeEventListener("keydown", styleOutsideListener, true);
@@ -6678,7 +6728,10 @@
       renderStylePanel();
       if (shownRemoved && typeof styleHandlers.dismiss === "function") styleHandlers.dismiss();
       if (typeof styleHandlers.close === "function") styleHandlers.close();
-      if (returnFocus && dom) dom.styleBtn.focus();
+      // After Esc the ring has to show. Firefox does not count a focus move made
+      // by script as keyboard focus (:focus-visible stays false), so ask for it.
+      // A click on the button must not draw one, so only Esc asks.
+      if (returnFocus && dom) dom.styleBtn.focus(byKeyboard ? { focusVisible: true } : undefined);
       return true;
     }
 
@@ -8553,6 +8606,7 @@
       markRefusalPending: markRefusalPending,
       refusalShown: refusalShown,
       refusalButtonInfo: refusalButtonInfo,
+      renderNoteInfo: renderNoteInfo,
       setStatusLine: setStatusLine,
       getStatusLine: getStatusLine,
       statusText: statusText,

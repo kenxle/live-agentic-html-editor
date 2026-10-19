@@ -101,8 +101,8 @@ rg -n "the new wording" path/to/built/page.html
 
 Their page reloads onto your change by itself and re-applies the edits still
 waiting for your first answer. Once you answer, the page shows your file. It waits while they are mid-edit, and an edit to one page
-never reloads another. When the page is one LAHE rendered from Markdown, the
-re-render is LAHE's job too: edit the `.md` and the page follows.
+never reloads another. When the page is one Lahe rendered from Markdown, the
+re-render is Lahe's job too: edit the `.md` and the page follows.
 
 ## A handled reply is checked
 

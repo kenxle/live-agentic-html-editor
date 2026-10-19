@@ -183,3 +183,54 @@ test("rendering translates local links, marks the read-only view, and stays dete
     );
   });
 });
+
+// LAHE-markdown-link-schemes: a rendered page carries only web, email and phone
+// links, plus the relative and in-page ones. Anything else keeps its words and
+// loses its address, however a browser would have spelled the scheme.
+test("only http, https, mailto and tel links render as links; every other scheme renders as text", () => {
+  withHome((home) => {
+    const source = path.join(home, "notes");
+    const registry = links.createRegistry({});
+    const allowed = ["https://example.com", "http://example.com", "mailto:a@example.com", "tel:+15555550100",
+      "//example.com/x", "#a-heading"];
+    for (const href of allowed) {
+      assert.notEqual(links.classify(href, source, registry).kind, "blocked", href + " is allowed");
+    }
+    const refused = {
+      "javascript:alert(1)": "javascript",
+      "JaVaScRiPt:alert(1)": "javascript",
+      " javascript:alert(1)": "javascript",
+      "\u0001javascript:alert(1)": "javascript",
+      "java\tscript:alert(1)": "javascript",
+      "java\nscript:alert(1)": "javascript",
+      "data:text/html,<b>hi</b>": "data",
+      "vbscript:msgbox(1)": "vbscript",
+      "vscode://file/x": "vscode",
+      "file:///etc/passwd": "file"
+    };
+    for (const href of Object.keys(refused)) {
+      const decision = links.classify(href, source, registry);
+      assert.equal(decision.kind, "blocked", JSON.stringify(href) + " is refused");
+      assert.equal(decision.scheme, refused[href]);
+    }
+  });
+});
+
+test("a refused link renders as plain text in every Markdown link form", () => {
+  withHome((home) => {
+    const doc = write(path.join(home, "notes", "page.md"), [
+      "# Page",
+      "",
+      "[inline](javascript:alert(1)) [ref][bad] <javascript:alert(2)> [angle](<java\tscript:alert(3)>) [ok](https://example.com)",
+      "",
+      "[bad]: JAVASCRIPT:alert(4)"
+    ].join("\n"));
+    const html = markdown.render(doc, { links: links.createRegistry({}) });
+    assert.doesNotMatch(html, /href="[^"]*script:/i, "no script link reaches an href");
+    assert.match(html, /<span class="lahe-blocked-link" title="javascript: links are not opened from a rendered page">inline<\/span>/);
+    assert.match(html, /<span class="lahe-blocked-link"[^>]*>ref<\/span>/, "a reference-style link is checked too");
+    assert.match(html, /<span class="lahe-blocked-link"[^>]*>javascript:alert\(2\)<\/span>/, "an autolink is checked too");
+    assert.match(html, /<span class="lahe-blocked-link"[^>]*>angle<\/span>/, "a tab inside the scheme does not slip through");
+    assert.match(html, /<a href="https:\/\/example\.com" target="_blank" rel="noopener noreferrer">ok<\/a>/);
+  });
+});
