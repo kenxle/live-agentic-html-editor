@@ -274,7 +274,11 @@ function run(file, text, timeoutMs) {
     maxBuffer: MAX_OUTPUT,
     windowsHide: true
   });
-  if (result.error) {
+  // EPIPE only says pandoc stopped reading. When it also exited with a failure,
+  // its status and stderr are the reason, and they are below. A clean exit that
+  // left input unread rendered part of the page, so it stays a failure.
+  var stoppedReading = result.error && result.error.code === "EPIPE" && typeof result.status === "number" && result.status !== 0;
+  if (result.error && !stoppedReading) {
     if (result.error.code === "ENOENT") return { html: null, reason: "gone", note: null };
     var code = result.error.code === "ETIMEDOUT" ? "timed out after " + (timeoutMs / 1000) + "s" : String(result.error.code || result.error.message);
     return failed(code);

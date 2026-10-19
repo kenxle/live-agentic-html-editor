@@ -36,8 +36,11 @@ function isPage(file) {
 
 // The bound on distinct directories one render may mount. A document that links
 // out to more than this many folders is linking to a tree, not to siblings, and
-// mounting the tree is not something a review should do silently.
-var MOUNT_CAP = 16;
+// mounting the tree is not something a review should do silently. The bound is
+// one page's, not the site's, since a site never forgets a folder and any
+// site-wide number runs out. It does not limit what a mount exposes: a mount
+// serves its whole tree (board row LAHE-linked-folder-scope).
+var MOUNT_CAP = 64;
 
 // The home root is the outer boundary for every auto-registered mount.
 // LAHE_HOME_DIR moves that boundary, the same seam LAHE_STATE_DIR gives the
@@ -78,13 +81,13 @@ function mountPrefix(dir) {
 }
 
 // One render's view of which directories are mounted and how many more it may
-// mount. `mounts` are prefixes already served (free to reuse); `consumed` are
-// the prefixes that already counted against the cap.
+// mount. `mounts` are prefixes already served; `counted` are the folders this
+// render has linked into, which is what the cap bounds.
 function createRegistry(options) {
   var opts = options || {};
   var cap = typeof opts.cap === "number" ? opts.cap : MOUNT_CAP;
   var mounts = Object.assign({}, opts.mounts || {});
-  var consumed = (opts.consumed || []).slice();
+  var counted = [];
   var added = [];
   // The real path of every file a link in this render now points at, whether
   // the link was translated into another folder's mount or rewritten under the
@@ -102,14 +105,36 @@ function createRegistry(options) {
       if (typeof target !== "string" || !target || !isPage(target)) return;
       if (linked.indexOf(target) === -1) linked.push(target);
     },
-    add: function (dir) {
+    // `from` is the linking page's folder. A served folder the page sits inside
+    // is its own (the site root, or the mount it is read through) and is free.
+    // Any other folder counts once, served already or not, so a page past the
+    // cap stays past it however often it renders.
+    add: function (dir, from) {
       var prefix = mountPrefix(dir);
-      if (mounts[prefix]) return prefix;
-      if (consumed.length >= cap) { skipped += 1; return null; }
-      mounts[prefix] = dir;
-      consumed.push(prefix);
-      added.push({ prefix: prefix, dir: dir });
-      return prefix;
+      var key = mounts[prefix] ? prefix : null;
+      var url = prefix;
+      if (!key) {
+        var existing = Object.keys(mounts).sort(function (a, b) {
+          return mounts[b].length - mounts[a].length;
+        });
+        for (var i = 0; i < existing.length && !key; i += 1) {
+          var base = path.resolve(mounts[existing[i]]);
+          if (!within(path.resolve(dir), base)) continue;
+          var relative = path.relative(base, path.resolve(dir));
+          key = existing[i];
+          url = key + (relative ? relative.split(path.sep).map(encodeURIComponent).join("/") + "/" : "");
+        }
+      }
+      var own = key && typeof from === "string" && within(path.resolve(from), path.resolve(mounts[key]));
+      if (!own && counted.indexOf(key || prefix) === -1) {
+        if (counted.length >= cap) { skipped += 1; return null; }
+        counted.push(key || prefix);
+      }
+      if (!key) {
+        mounts[prefix] = dir;
+        added.push({ prefix: prefix, dir: dir });
+      }
+      return url;
     }
   };
 }
@@ -204,7 +229,7 @@ function classify(href, sourceDir, registry) {
   if (!within(real, home)) return { kind: "inert", target: candidate, reason: "outside-home" };
   var dir = path.dirname(real);
   if (!mountableDir(dir)) return { kind: "inert", target: candidate, reason: "outside-home" };
-  var prefix = registry ? registry.add(dir) : mountPrefix(dir);
+  var prefix = registry ? registry.add(dir, root) : mountPrefix(dir);
   if (!prefix) return { kind: "inert", target: candidate, reason: "cap" };
   if (registry && typeof registry.note === "function") registry.note(real);
   return {

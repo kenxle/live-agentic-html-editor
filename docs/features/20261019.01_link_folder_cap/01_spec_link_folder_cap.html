@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>01_spec_link_folder_cap</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <style>
+  body { max-width: 60rem; margin: 2rem auto; padding: 0 1.5rem; color: #202020;
+    background: white; font: 1rem/1.6 system-ui, sans-serif; }
+  nav { display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem 0;
+    border-bottom: 1px solid #bbb; }
+  a { color: #124f86; } pre { overflow: auto; padding: 1rem; background: #f3f3f3; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #bbb; padding: .5rem; text-align: left; }
+  .callout-req, .callout-question, .xref { border-left: .3rem solid #124f86; padding: 0 1rem; }
+  @media print { nav { display: none; } body { max-width: none; } }
+  </style>
+</head>
+<body>
+<nav aria-label="Dossier"><a href="01_spec_link_folder_cap.html">01_spec_link_folder_cap</a></nav>
+<header id="title-block-header">
+<h1 class="title">01_spec_link_folder_cap</h1>
+</header>
+<h1 id="linked-folder-cap">Linked folder cap</h1>
+<p><strong>Status:</strong> built and shipped by the agent without a
+review gate, at Ken's request. This page is the record.</p>
+<h2 id="problem-user-and-context">Problem, user, and context</h2>
+<p>A Markdown page Lahe renders can link to files in other folders. Lahe
+serves each of those folders read-only at the page's address so the
+links work. A cap limits how many folders it will serve. Past the cap, a
+link turns into plain text that names the file on disk.</p>
+<p>Ken's skill docs (pstack and feature-forge) are now spread across
+many folders, and he is hitting the cap on real documents. Two things
+cause it:</p>
+<ul>
+<li><strong>The server counts the wrong thing.</strong> The cap is meant
+to count the folders one page links to. The comment on
+<code>MOUNT_CAP</code> says "one render", and the unit test is named
+"the per-render mount cap". But when the helper renders a page on
+request, it counts every folder the whole site has ever served. Once a
+site has collected 16 folders across all its pages, no page on it can
+link a new folder. <code>lahe review</code> renders with a fresh count,
+so the two paths disagree.</li>
+<li><strong>16 is too low for one page.</strong> Ken's real documents
+link into up to 34 folders on one page.</li>
+</ul>
+<p>Measured on Ken's machine (scripts in the scratchpad, numbers from
+the scripts):</p>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Count</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sites in the real helper</td>
+<td>81</td>
+</tr>
+<tr>
+<td>Sites serving 16 or more folders</td>
+<td>4 (largest: 27)</td>
+</tr>
+<tr>
+<td><code>feature-forge-runbooks</code> site</td>
+<td>exactly 16, the one Ken is hitting</td>
+</tr>
+<tr>
+<td>Markdown files scanned in his skill repos</td>
+<td>554</td>
+</tr>
+<tr>
+<td>Files linking into more than 16 folders</td>
+<td>5</td>
+</tr>
+<tr>
+<td>Files linking into more than 32</td>
+<td>2</td>
+</tr>
+<tr>
+<td>Files linking into more than 64</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Most folders linked from one file</td>
+<td>34 (pstack <code>poteto-help/SKILL.md</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>The cap exists so that a page linking a whole tree of folders does
+not quietly serve that tree. That reason still holds. The fix keeps the
+cap and makes it count what it says it counts.</p>
+<h2 id="requirements">Requirements</h2>
+<ol type="1">
+<li><strong>The cap counts per page.</strong> A render counts each
+folder the page links into once, whether the site serves it already or
+not. The folder the page sits inside (the site's root, or the mount it
+is read through) is free. What the site served for other pages does not
+count.</li>
+<li><strong>The cap is 64 folders per page.</strong> That is almost
+twice the largest real document.</li>
+<li><strong>Past the cap, nothing else changes.</strong> A link past the
+cap still renders as plain text naming the file,
+<code>lahe review</code> still says how many links went past it, and a
+<code>--only</code> page still follows no links.</li>
+<li><strong>Docs say the new number.</strong>
+<code>docs/INSTALL.md</code> names the cap.</li>
+</ol>
+<h2 id="a-second-fix-landed-at-the-same-time">A second fix landed at the
+same time</h2>
+<p>While this was being built, a Codex session in the feature-forge repo
+hit the same limit on Ken's pages. It committed its own fix to Lahe's
+local <code>main</code>, 6731010f, and did not push it. That fix makes a
+link reuse the site's own folder, or a folder the site already serves,
+when the target sits inside one. A link like that no longer uses up the
+cap.</p>
+<p>The two fixes cover different links, so this branch sits on top of
+6731010f and one pull request ships both:</p>
+<ul>
+<li><strong>6731010f:</strong> links that stay inside one tree.</li>
+<li><strong>This change:</strong> links out to separate places, such as
+<code>~/.claude/skills</code> or the pstack plugin cache, once a site
+has collected 16 folders.</li>
+</ul>
+<p>One edit to 6731010f's work: its registry test set up "cap already
+reached" as one counted folder with a cap of 1. This change removes the
+counted list, so the test now says cap 0. What it checks is the
+same.</p>
+<p>Measured on Ken's real sites by rendering every Markdown file the way
+the helper does, with the folders each site serves today:</p>
+<table>
+<thead>
+<tr>
+<th>Site</th>
+<th>Code</th>
+<th>Pages with dead links</th>
+<th>Links turned to plain text</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>feature-forge-runbooks</code> (repo root, 288 pages)</td>
+<td>main with 6731010f</td>
+<td>9</td>
+<td>169</td>
+</tr>
+<tr>
+<td><code>feature-forge-runbooks</code> (repo root, 288 pages)</td>
+<td>this branch</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>docs/features/runbooks</code> (215 pages)</td>
+<td>main with 6731010f</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>docs/features/runbooks</code> (215 pages)</td>
+<td>this branch</td>
+<td>0</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<h2 id="approach">Approach</h2>
+<p>One design call: count per page, not per site. The other choice was
+to keep the site-wide count and raise the number. A site-wide count runs
+out over time, because a site never forgets a folder, so any number
+would be hit again.</p>
+<p>A first version counted only the folders a render newly served. The
+code review found the hole in that: each reload treats the last render's
+folders as already served, so a page linking 200 folders gets 64 more
+working links on every reload, and the "past the cap" line from
+<code>lahe review</code> turns false. The fix counts every folder the
+page links into, served or not, except the one the page sits inside. A
+brand-new mount always counts, even one that contains the page's folder,
+so a link to a file directly in home is not free.</p>
+<p>The change: <code>createRegistry</code> in
+<code>src/service/markdown_links.js</code> keeps a <code>counted</code>
+list of folders this render linked into, <code>classify</code> passes
+the page's folder to <code>add</code>, and the <code>consumed</code>
+option is gone. <code>page_routes.renderMarkdown</code> stops passing
+the site's folders as already counted. <code>MOUNT_CAP</code> goes from
+16 to 64.</p>
+<h2 id="tasks">Tasks</h2>
+<ol type="1">
+<li>Write the failing test: a site that already serves 16 folders
+renders a page that links one new folder, and that link is served.</li>
+<li>Make the change in <code>src/service/markdown_links.js</code> and
+<code>src/service/page_routes.js</code>.</li>
+<li>Update <code>docs/INSTALL.md</code>.</li>
+<li>Run <code>npm run gate</code>. The change touches serving, so code
+review covers path safety.</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Behavior</th>
+<th>Proof</th>
+<th>Failure it catches</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A site with 16 served folders still links a page's new folder</td>
+<td>new test in <code>test/unit/sites_pages.test.js</code></td>
+<td>the site-wide count blocking Ken today</td>
+</tr>
+<tr>
+<td>A page past the cap stays past it on every reload</td>
+<td>new test in <code>test/unit/sites_pages.test.js</code>, three
+loads</td>
+<td>the per-render count leaking across reloads (code review)</td>
+</tr>
+<tr>
+<td>One page can link up to 64 folders, the 65th is plain text</td>
+<td><code>test/unit/markdown_links.test.js</code>, existing cap test
+(uses <code>MOUNT_CAP</code>)</td>
+<td>the cap gone, or off by one</td>
+</tr>
+<tr>
+<td>A <code>--only</code> page follows no links</td>
+<td>existing tests</td>
+<td>per-page counting letting <code>--only</code> follow links</td>
+</tr>
+<tr>
+<td>Nothing else moves</td>
+<td><code>npm run gate</code>, 0 failed</td>
+<td>anything else</td>
+</tr>
+</tbody>
+</table>
+<h2 id="acceptance-criteria">Acceptance criteria</h2>
+<p>The verification table passes, and <code>npm run gate</code> reads 0
+failed. No analytics: Lahe has none. No flag: the change is small and
+the old number is one constant away.</p>
+<h2 id="review">Review</h2>
+<p><strong>Spec review (security): ship as is.</strong> Accepted as is.
+Its findings:</p>
+<ul>
+<li><strong>A site's served folders can now grow with no limit.</strong>
+A page inside a linked folder can link folders of its own, and a site
+never forgets a folder. This is not a new hole. One link to a file in
+<code>~/.ssh</code> or <code>~/.aws</code> already served that whole
+folder at 16. The real limits are unchanged: a folder must be under the
+home folder, checked on every request; the page server answers only this
+machine; and each site has its own address, so other sites can't read
+its files.</li>
+<li><strong>A decision for Ken, separate from this change.</strong> A
+linked folder serves every file in it, not only the file the page
+linked. Tighter options: serve only the linked files, or refuse folders
+like <code>~/.ssh</code>, <code>~/.aws</code> and <code>~/.gnupg</code>.
+It is on the board as <code>LAHE-linked-folder-scope</code>.</li>
+</ul>
+<h2 id="premise-check-the-cap-does-not-limit-exposure">Premise check:
+the cap does not limit exposure</h2>
+<p>Both fixes on this page share one belief: that limiting the number of
+linked folders limits what a page can expose. Before shipping, that
+belief was tested.</p>
+<ul>
+<li><strong>The check:</strong> in a temp home folder, a page linked one
+file, <code>~/todo.md</code>. That made one mount, well inside any cap.
+Then the probe asked the page server for files the page never
+linked.</li>
+<li><strong>The result:</strong> <code>~/.ssh/id_ed25519</code> and
+<code>~/Documents/taxes/2025.txt</code> both came back with status 200.
+A mount serves its whole folder tree, and the home folder itself can be
+a mount. Neither commit here touches that code, so
+<code>origin/main</code> does the same.</li>
+<li><strong>What follows:</strong> the count never limited exposure, at
+16 or at 64. Raising it here costs no safety, so this change still ships
+to unblock Ken's pages. The condition to remove is "a mount serves a
+whole tree": serve only the files a site's pages link to, plus their
+images, and the cap can go. That is a design change to serving, so it
+waits for Ken on board row <code>LAHE-linked-folder-scope</code>.</li>
+<li><strong>Who can reach it today:</strong> not other websites. The
+cross-origin header and the missing CORS headers stop them. Local
+programs could read the files directly anyway. The gap is scripts
+running on a reviewed page's own address.</li>
+<li><strong>Minor.</strong> The render cache key includes every folder
+the site serves, so a new folder clears the cache for every page on that
+site. That costs speed, not safety. Accepted.</li>
+</ul>
+<p><strong>Code review:</strong> one important finding, fixed. Counting
+only the folders a render newly served let the cap leak across reloads,
+as described under Approach. The fix is in, with a test that loads the
+page three times. Everything else it was asked to check held:
+already-served folders are found before the cap is checked;
+<code>--only</code> pages follow no links; the reuse URLs are encoded
+right; a symlinked folder that points outside the site gets its own
+mount, never a site address the server would refuse; and nothing still
+reads <code>consumed</code>.</p>
+<h2 id="how-the-whetstone-run-went">How the whetstone run went</h2>
+<p>Ken asked for this run partly to see whether the whetstone skill
+still works. He waived the two human gates (the spec review in the
+browser and approval on the pull request), so this page went up at the
+end as a record. Notes on the skill:</p>
+<ul>
+<li><strong>Worked as written:</strong> sizing it, the spec, choosing a
+reviewer by what the change touches (security, because it is about what
+the server serves), test first, code review on the diff, and the full
+local gate.</li>
+<li><strong>Step 1 does not fit this repo.</strong>
+<code>st-worktree</code> asks for a dev worktree with a server. Lahe has
+neither <code>scripts/worktree.sh</code> nor a dev server, so the
+worktree was a plain <code>git worktree add</code>.</li>
+<li><strong>Step 6, item 4 does not fit this repo.</strong> It describes
+<code>code/.env.development.local</code> and a layout partial, which is
+how Steady Thread works. Lahe pages get the rail from
+<code>lahe review</code>.</li>
+<li><strong><code>st-commit</code> disagrees with the global
+rules.</strong> It says to write <code>.claude-commit</code>; the global
+CLAUDE.md says to add a timestamp to the name. The run followed the
+global rule.</li>
+<li><strong>Two gates disagree.</strong> CLAUDE.md says to run
+<code>npm run gate</code> (Chromium) before a pull request.
+<code>st-ship</code> reads <code>.claude/guardrails.md</code>, which
+names <code>npm run gate:all</code> (three browsers). The run did both.
+<code>gate:all</code> found five failures that also fail on
+<code>origin/main</code>: two were already on the board, and three new
+WebKit ones went on as <code>LAHE-active-filter-webkit</code>.</li>
+<li><strong><code>origin/main</code> moved during the run</strong> (the
+pandoc render merged). <code>st-ship</code>'s merge step caught it. The
+pandoc path sends links through the same <code>classify</code>, so the
+fix holds there too: the real-site check, rerun with pandoc installed,
+still showed no dead links.</li>
+<li><strong>The new rule held this change back, and that turned up two
+real bugs.</strong> Mid-run, Ken's global rules gained "shipping
+requires passing checks", which counts failures that also fail on
+<code>main</code>. Five browser tests had been failing on
+<code>main</code> in Firefox and WebKit. They were fixed first, in <a
+href="https://github.com/kenxle/live-agentic-html-editor/pull/85">PR
+#85</a>. Two were real bugs: in Safari, the second press on the Active
+filter button did nothing; in Firefox, the style button lost its focus
+ring after Esc. The third was open PR #39's WebKit zoom fix, which had
+waited eight days.</li>
+<li><strong><code>st-land</code> cannot run in Lahe.</strong> It needs
+eight fields from <code>.claude/guardrails.md</code> (merge method,
+deploy watch, health check, migration check, smoke command, walkthrough
+entry points, refuse list) and says to stop when any is missing. Lahe
+has no deploy, and its file says so. The landing followed CLAUDE.md
+instead: read <code>gh pr checks</code> as pass, then
+<code>gh pr merge --merge</code>, then delete the remote branch.</li>
+<li><strong>A Mac that sleeps breaks a long gate.</strong> One
+<code>gate:all</code> run took 7.6 hours and failed 122 tests because
+the machine slept mid-run. Wrapping it in <code>caffeinate -i</code>
+fixed that.</li>
+<li><strong>Not covered by the skill:</strong> another session changing
+the same code mid-run. The fix was to rebase on its commit and ship both
+together. A line about checking <code>git log origin/main..main</code>
+in the main checkout before shipping would have caught it sooner.</li>
+</ul>
+</body>
+</html>

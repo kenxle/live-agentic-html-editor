@@ -1238,10 +1238,13 @@ function linkAddressFor(dir, reviewId, file) {
   entry.sites.list().some(function (each) {
     var ids = each.site.linked_files && each.site.linked_files[target];
     if (!Array.isArray(ids) || ids.indexOf(reviewId) === -1) return false;
-    var mounts = each.site.mounts || {};
+    var mounts = Object.assign({}, each.site.mounts || {});
+    if (each.site.mode === "folder") mounts["/"] = each.site.root;
     return Object.keys(mounts).some(function (prefix) {
-      if ((realOrNull(mounts[prefix]) || mounts[prefix]) !== path.dirname(target)) return false;
-      found = { name: each.name, path: prefix + encodeURIComponent(path.basename(target)) };
+      var base = realOrNull(mounts[prefix]) || path.resolve(mounts[prefix]);
+      if (!within(target, base)) return false;
+      var relative = path.relative(base, target).split(path.sep).map(encodeURIComponent).join("/");
+      found = { name: each.name, path: prefix + relative };
       return true;
     });
   });
@@ -1383,14 +1386,15 @@ var renderCache = new Map();
 
 /**
  * @param {string} file the Markdown source
- * @param {{assetPrefix: string, mounts: object, noFollow: boolean, note: string|null}} options
+ * @param {{assetPrefix: string, mounts: object, siteRoot?: string|null, noFollow: boolean, note: string|null}} options
  *   `note` null is the read-only note; "" is none (a page under review)
  * @returns {{html: string, note: string|null, added: object[], linked: string[]}}
  *   `note` is the helper-log line when pandoc did not render a page that needed it
  */
 function renderMarkdown(file, options) {
   var stat = fs.statSync(file);
-  var mounts = options.mounts || {};
+  var mounts = Object.assign({}, options.mounts || {});
+  if (options.siteRoot) mounts["/"] = options.siteRoot;
   var key = [file, stat.mtimeMs, stat.size, options.assetPrefix, options.noFollow ? 1 : 0,
     options.note === null ? "\u0001readonly" : options.note, JSON.stringify(mounts), markdown.engineKey()].join("\u0000");
   var hit = renderCache.get(key);
@@ -1401,7 +1405,6 @@ function renderMarkdown(file, options) {
   }
   var registry = markdownLinks.createRegistry({
     mounts: mounts,
-    consumed: Object.keys(mounts),
     cap: options.noFollow ? 0 : undefined
   });
   var renderOptions = { assetPrefix: options.assetPrefix, links: registry, noFollow: !!options.noFollow };
@@ -1429,6 +1432,7 @@ function renderSitePage(sites, name, site, file, base, prefix) {
   var out = renderMarkdown(file, {
     assetPrefix: urlDirOf(prefix, base, file),
     mounts: site.mounts || {},
+    siteRoot: site.mode === "folder" ? site.root : null,
     noFollow: site.mode === "page-only",
     note: ""
   });
@@ -1940,6 +1944,7 @@ function createPageRoutes(options) {
       out = renderMarkdown(candidate, {
         assetPrefix: urlDir,
         mounts: site.mounts || {},
+        siteRoot: site.mode === "folder" ? site.root : null,
         noFollow: site.mode === "page-only",
         note: extra && typeof extra.note === "string" ? extra.note : (match ? "" : null)
       });
