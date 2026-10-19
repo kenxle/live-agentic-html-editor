@@ -11,13 +11,13 @@ release to keep in sync either. (The Playwright browser suite in `test/browser/`
 needs Node 20 and a `npm install` for its devDependencies; running the tool does
 not.)
 
-**Optional: pandoc 3 or later.** When pandoc is on the machine, LAHE renders
+**Optional: pandoc 3 or later.** When pandoc is on the machine, Lahe renders
 Markdown with it, so pandoc fenced divs (`::: callout-req`, `::: stat`,
 `:::: cardgrid`) draw as the house components the feature-forge and
 research-report builds draw. Without it, Markdown renders with the vendored
 Marked and those blocks show as plain text, and the rail says so. Install it
 with `brew install pandoc` on macOS, your package manager on Linux, or from
-[pandoc.org](https://pandoc.org/installing.html). LAHE finds it on `PATH` or in
+[pandoc.org](https://pandoc.org/installing.html). Lahe finds it on `PATH` or in
 `/opt/homebrew/bin` and `/usr/local/bin`; `LAHE_PANDOC=/path/to/pandoc` names
 it outright. A running helper looks again within a minute of the install, and the next page
 load renders with it.
