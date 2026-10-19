@@ -32,7 +32,7 @@ card.
 
 ### Sessions
 
-A LAHE agent session is this tool's own workstream record, with an id like
+A Lahe agent session is this tool's own workstream record, with an id like
 `s_0e28da9885a6d67a`. It is not a Claude session, not a terminal session, and
 not a browser session. Pass it with `--session` whenever you open another
 document or monitor. Watch the session, never one review and never the machine:

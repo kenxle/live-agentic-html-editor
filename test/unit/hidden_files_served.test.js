@@ -149,3 +149,22 @@ test("served pages carry frame-ancestors 'self'", async (t) => {
     assert.match(String(res.headers["content-security-policy"] || ""), /frame-ancestors 'self'/, p);
   }
 });
+
+// LAHE-csv-served-as-download: a link to a CSV on a served page showed nothing
+// and dropped a file into Downloads, because .csv had no type and fell back to
+// application/octet-stream.
+test("a CSV or TSV is served as plain text, so the browser shows it", async (t) => {
+  const w = await sitesWorld(t);
+  const folder = path.join(w.home, "ws", "repo", "runs");
+  writeFile(folder, "page.html", "<p>page</p>");
+  writeFile(folder, "run.csv", "a,b\n1,2\n");
+  writeFile(folder, "run.tsv", "a\tb\n1\t2\n");
+  const bound = bindReview(w, folder, "page.html");
+  for (const [file, body] of [["/run.csv", "a,b\n1,2\n"], ["/run.tsv", "a\tb\n1\t2\n"]]) {
+    const res = await getPage(w, bound.name, file);
+    assert.equal(res.status, 200, file);
+    assert.equal(res.headers["content-type"], "text/plain; charset=utf-8", file);
+    assert.equal(res.headers["content-disposition"], undefined, file + " carries no attachment header");
+    assert.equal(res.text, body);
+  }
+});

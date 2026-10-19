@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.4.0+9caa4b07ff04
+ * version 0.4.0+519b48bf044d
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.4.0+9caa4b07ff04";
+  g.LAHE.version = "0.4.0+519b48bf044d";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -2576,8 +2576,8 @@
       SEVERITY.BLOCKING,
       false,
       SURFACE.CLI,
-      "The Library's saved stars file cannot be read, so stars cannot change. LAHE leaves the file as it is.",
-      "Fix or move aside catalog.json in the LAHE state folder, then try again."
+      "The Library's saved stars file cannot be read, so stars cannot change. Lahe leaves the file as it is.",
+      "Fix or move aside catalog.json in the Lahe state folder, then try again."
     ),
 
     // --- the CLI -----------------------------------------------------------
@@ -9910,7 +9910,7 @@
     var hasId = typeof sessionId === "string" && isSafeId(sessionId);
     var elsewhere = !library && stateDirFlagNeeded === true
       ? [
-          "This review keeps its files outside LAHE's default folder, so add --state-dir with the folder the earlier agent's lahe commands used. If you cannot find it, ask me.",
+          "This review keeps its files outside Lahe's default folder, so add --state-dir with the folder the earlier agent's lahe commands used. If you cannot find it, ask me.",
           ""
         ]
       : [];
@@ -9924,9 +9924,9 @@
         ].concat(elsewhere);
     var named = typeof name === "string" && name ? ", the session named " + JSON.stringify(name) : "";
     var why = library
-      ? "I am handing it to you from the LAHE Library so you can continue it."
+      ? "I am handing it to you from the Lahe Library so you can continue it."
       : "The agent that was working on it stopped answering my comments, and I am asking you to continue it.";
-    return ["Please take over my live LAHE review" + named + ". " + why, ""]
+    return ["Please take over my live Lahe review" + named + ". " + why, ""]
       .concat(run)
       .concat([
         "It prints the commands to catch up. Then work every comment that is waiting and reply to each one, and keep watching for new ones."
@@ -21147,7 +21147,7 @@
       "You may need to check your agent isn't stuck. " + DOT_COPY_HINT,
     no_agent: "Nobody has picked this up, {age}. " + DOT_COPY_HINT,
     helper_down:
-      "Lahe server helper is down. Page may crash. Please ask an agent to restart the Lahe helper. " + DOT_COPY_HINT
+      "The Lahe program is down, so the page may stop working. Please ask an agent to restart Lahe. " + DOT_COPY_HINT
   };
   // What the dot copies when the helper is down: a request an agent can act on.
   var HELPER_RESTART_MESSAGE =
@@ -21240,7 +21240,7 @@
   // still unfinished, not to hurry the reviewer through it.
   var END_REVIEW = {
     // Both the tooltip and the accessible name, deliberately the same sentence.
-    LABEL: "End this review and perform cleanup",
+    LABEL: "End this review, close it and show your hand edits",
     TITLE: "End this review?",
     ENDED_TITLE: "Review ended",
     NOTHING_PENDING: "Nothing is waiting on an agent.",
@@ -22760,6 +22760,16 @@
     // "Edits" is picked is filtered on the frame it appears, with no list kept
     // here to fall out of step with the cards.
 
+    // Write text into a node only when it differs. renderTabs and paintFilter
+    // run on every focusout, and a focusout fires BETWEEN a press and its
+    // release (WebKit blurs a script-focused button at mousedown). Rewriting
+    // textContent with the same words still swaps the text node under the
+    // pointer, and WebKit then drops the click: the second press on the filter
+    // button did nothing after a pick had returned focus to it.
+    function setTextIfChanged(node, text) {
+      if (node.textContent !== text) node.textContent = text;
+    }
+
     function paintFilter() {
       if (!dom || !dom.filterButtons) return;
       TABS.forEach(function (tab) {
@@ -22770,8 +22780,8 @@
         var toggle = dom.filterToggles[tab];
         var filtering = activeFilter !== FILTER.ALL;
         toggle.setAttribute("data-lahe-filtering", filtering ? "true" : "false");
-        toggle.querySelector(".filterbtn__label").textContent = filtering ? FILTER_LABEL[activeFilter] : "";
-        dom.filterEmpties[tab].textContent = FILTER_EMPTY[activeFilter] || "";
+        setTextIfChanged(toggle.querySelector(".filterbtn__label"), filtering ? FILTER_LABEL[activeFilter] : "");
+        setTextIfChanged(dom.filterEmpties[tab], FILTER_EMPTY[activeFilter] || "");
         // The kind filter decides what counts as shown, so a search's "nothing
         // matches" line is checked again with it.
         applySearch(tab);
@@ -25636,12 +25646,12 @@
       TABS.forEach(function (name) {
         dom.tabButtons[name].setAttribute("aria-selected", name === activeTab ? "true" : "false");
         dom.panes[name].setAttribute("data-current", name === activeTab ? "true" : "false");
-        dom.counts[name].textContent = String(countFor(name));
+        setTextIfChanged(dom.counts[name], String(countFor(name)));
         // ZERO UNSEEN IS NO BADGE, not a badge reading 0. A permanent little
         // dot saying "nothing new" is noise the reviewer learns to ignore, and
         // then the one that means something does not register either.
         var fresh = tabNewCounts[name] || 0;
-        dom.newmarks[name].textContent = fresh ? String(fresh) : "";
+        setTextIfChanged(dom.newmarks[name], fresh ? String(fresh) : "");
         dom.newmarks[name].hidden = fresh === 0;
       });
       // THE COLLAPSED PILL'S COUNT: still to handle, then the all-time total in
@@ -25661,14 +25671,14 @@
       // the agent reports it handled, whichever filter is picked.
       var open = countIncomplete();
       var total = Object.keys(cards).length;
-      dom.pillCount.textContent = total ? String(open) + " (" + String(total) + ")" : "";
+      setTextIfChanged(dom.pillCount, total ? String(open) + " (" + String(total) + ")" : "");
       dom.pillCount.hidden = total === 0;
       // The jewel is a VIEW of the tab badges, never a second tally. It reads
       // whatever setTabNewCount was last told, so opening Done and clearing the
       // badge clears the jewel in the same call: there is one number and two
       // places it shows.
       var fresh = pillNewCount();
-      dom.pillJewel.textContent = fresh ? String(fresh) : "";
+      setTextIfChanged(dom.pillJewel, fresh ? String(fresh) : "");
       dom.pillJewel.hidden = fresh === 0;
     }
 
@@ -26157,7 +26167,7 @@
           if (event.key !== "Escape") return;
           event.preventDefault();
           event.stopPropagation();
-          closeStylePanel(true);
+          closeStylePanel(true, true);
           return;
         }
         if (fromOurTree(event)) return;
@@ -26175,7 +26185,7 @@
       return true;
     }
 
-    function closeStylePanel(returnFocus) {
+    function closeStylePanel(returnFocus, byKeyboard) {
       if (styleOutsideListener) {
         doc.removeEventListener("pointerdown", styleOutsideListener, true);
         doc.removeEventListener("keydown", styleOutsideListener, true);
@@ -26193,7 +26203,10 @@
       renderStylePanel();
       if (shownRemoved && typeof styleHandlers.dismiss === "function") styleHandlers.dismiss();
       if (typeof styleHandlers.close === "function") styleHandlers.close();
-      if (returnFocus && dom) dom.styleBtn.focus();
+      // After Esc the ring has to show. Firefox does not count a focus move made
+      // by script as keyboard focus (:focus-visible stays false), so ask for it.
+      // A click on the button must not draw one, so only Esc asks.
+      if (returnFocus && dom) dom.styleBtn.focus(byKeyboard ? { focusVisible: true } : undefined);
       return true;
     }
 
@@ -48372,8 +48385,15 @@
       var node = event.target;
       if (markers.isInsideOverlay(node)) return;
       var next = targetFor(node) || targetInside(node);
-      if (next) showFor(next, node);
-      else if (shown && !overButton) scheduleHide();
+      pendingFocus = null;
+      if (next) {
+        showFor(next, node);
+        // WebKit sends focusin BEFORE it scrolls the focused element into view
+        // (Chromium and Firefox scroll first), so a picture below the fold has
+        // no visible part yet and the button finds nowhere to sit. The scroll
+        // comes later and not on a fixed frame, so the scroll itself retries.
+        if (!shown) pendingFocus = { node: node, target: next };
+      } else if (shown && !overButton) scheduleHide();
     }
 
     function onKeyDown(event) {
@@ -48387,13 +48407,26 @@
     // Scroll and resize move the visible part, so the button follows, once a
     // frame at most: a scroll fires far more often than the screen repaints.
     var placeFrame = null;
+    // A focused element whose picture was off screen when focus arrived, so a
+    // scroll can still offer the button while that element keeps focus.
+    var pendingFocus = null;
 
     function onScrollOrResize() {
       lastNode = null;
-      if (!shown || openOn || placeFrame !== null) return;
+      if ((!shown && !pendingFocus) || openOn || placeFrame !== null) return;
       placeFrame = win.requestAnimationFrame(function () {
         placeFrame = null;
-        if (shown && !openOn && !placeButton()) hideNow();
+        if (openOn) return;
+        if (!shown && pendingFocus) {
+          var p = pendingFocus;
+          if (doc.activeElement !== p.node || !p.node.isConnected) pendingFocus = null;
+          else {
+            showFor(p.target, p.node);
+            if (shown) pendingFocus = null;
+          }
+          return;
+        }
+        if (shown && !placeButton()) hideNow();
       });
     }
 
@@ -53414,7 +53447,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.4.0+9caa4b07ff04";
+  var VERSION = "0.4.0+519b48bf044d";
 
   var protocol = ns.protocol;
   var record = ns.record;

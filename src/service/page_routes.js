@@ -39,8 +39,12 @@ var MOUNT_ROOT = "/.lahe-source/";
 var LIBRARY_PREFIX = "/.lahe-library/";
 var LIBRARY_PATH = LIBRARY_PREFIX + heal.BUNDLE_BASENAME;
 
+// A CSV or TSV is sent as plain text, not text/csv: browsers download a
+// text/csv response rather than show it, and a reviewer following an evidence
+// link wants to read the rows in the tab.
 var MIME = {
   ".css": "text/css; charset=utf-8",
+  ".csv": "text/plain; charset=utf-8",
   ".gif": "image/gif",
   ".html": "text/html; charset=utf-8",
   ".jpeg": "image/jpeg",
@@ -51,6 +55,7 @@ var MIME = {
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".txt": "text/plain; charset=utf-8",
+  ".tsv": "text/plain; charset=utf-8",
   ".webp": "image/webp",
   ".woff2": "font/woff2"
 };

@@ -257,8 +257,8 @@ test.describe("the reviewer ends the review from the rail", () => {
 
     const info = await endInfo(page);
     expect(info.present, "the footer carries the way out").toBe(true);
-    expect(info.label, "one sentence, and a screen reader gets all of it").toBe("End this review and perform cleanup");
-    expect(info.title, "the same sentence on hover").toBe("End this review and perform cleanup");
+    expect(info.label, "one sentence, and a screen reader gets all of it").toBe("End this review, close it and show your hand edits");
+    expect(info.title, "the same sentence on hover").toBe("End this review, close it and show your hand edits");
     expect(info.icon, "door iconography, drawn, not an emoji").toBe(true);
     expect(info.text, "no label beside the icon: it is a narrow strip, not a submit button").toBe("");
     expect(info.rect.width, "it is really on screen").toBeGreaterThan(0);

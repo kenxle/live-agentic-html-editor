@@ -379,6 +379,12 @@ function renderPage(source, options) {
       return "<span class=\"lahe-local-link\" title=\"local file, open it on disk: " +
         escapeHtml(decision.target) + "\">" + text + "</span>";
     }
+    if (decision.kind === "blocked") {
+      // A link type outside the allow list (a script-running one among them)
+      // keeps its words and loses its address, with a title saying why.
+      return "<span class=\"lahe-blocked-link\" title=\"" + escapeHtml(decision.scheme) +
+        ": links are not opened from a rendered page\">" + text + "</span>";
+    }
     // relative and anchor links stay in the same tab, same as translate above;
     // external links (including protocol-relative //host ones) leave the
     // documentation, so they open in a new tab unless they hand off to another

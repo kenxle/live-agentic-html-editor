@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518.2-brightgreen.svg)](package.json)
 [![Runtime dependencies: none](https://img.shields.io/badge/runtime%20dependencies-none-brightgreen.svg)](package.json)
-[![Agents: Claude Code, Codex, Antigravity](https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex%20%7C%20Antigravity-8A7CFF.svg)](#which-agents-this-works-with)
+[![Agents: Claude Code, Codex, Gemini CLI, Antigravity](https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex%20%7C%20Gemini%20CLI%20%7C%20Antigravity-8A7CFF.svg)](#which-agents-this-works-with)
 [![Formats: HTML and Markdown](https://img.shields.io/badge/formats-HTML%20%7C%20Markdown-orange.svg)](#features)
 
 ![The Steady Thread home page under review, with a threaded exchange in the rail: a reviewer note, the agent's question, the answer, and the agent's fix](docs/images/hero-thread.jpg)
@@ -141,6 +141,7 @@ Each host wakes an agent differently, so each gets its own instruction. The agen
 | --- | --- |
 | Claude Code | Runs `lahe monitor` with Bash in the background, and runs it again after each batch of work. A Stop hook that `npm run install-skills` adds stops the agent from ending a turn while its watcher is down. |
 | Codex | Runs `lahe monitor --codex`, which returns after starting a local watcher. Real feedback queues a follow-up to the same conversation with `codex queue`; idle reviews make no model calls. Requires the local shared Codex daemon. |
+| Gemini CLI | Finds the skill in the shared Agent Skills folder and runs `lahe monitor` in the foreground. |
 | Antigravity | Runs `lahe monitor` as a background terminal task. Task completion wakes it. |
 | Anything else | Runs `lahe monitor` in the foreground after warning you it owns the chat. |
 

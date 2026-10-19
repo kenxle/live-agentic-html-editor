@@ -11,7 +11,7 @@ either is the human asking; nothing else is.
 **Open it** when they ask for "the lahe library":
 
 ```sh
-lahe library --name "<your name>"          # the first time, with no LAHE session
+lahe library --name "<your name>"          # the first time, with no Lahe session
 lahe library --session <your-session-id>   # after that, or when you already have one
 open <the URL it printed>
 ```

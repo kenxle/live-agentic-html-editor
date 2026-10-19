@@ -6,25 +6,25 @@
 local packages for deterministic Markdown review: Marked for CommonMark/GFM and
 Mermaid's dependency-free browser bundle for diagrams. Both are vendored under
 `vendor/` in this repository, so there is no `npm install` step and nothing is
-fetched at runtime; there is no separate global package or npm-published LAHE
+fetched at runtime; there is no separate global package or npm-published Lahe
 release to keep in sync either. (The Playwright browser suite in `test/browser/`
 needs Node 20 and a `npm install` for its devDependencies; running the tool does
 not.)
 
-**Optional: pandoc 3 or later.** When pandoc is on the machine, LAHE renders
+**Optional: pandoc 3 or later.** When pandoc is on the machine, Lahe renders
 Markdown with it, so pandoc fenced divs (`::: callout-req`, `::: stat`,
 `:::: cardgrid`) draw as the house components the feature-forge and
 research-report builds draw. Without it, Markdown renders with the vendored
 Marked and those blocks show as plain text, and the rail says so. Install it
 with `brew install pandoc` on macOS, your package manager on Linux, or from
-[pandoc.org](https://pandoc.org/installing.html). LAHE finds it on `PATH` or in
+[pandoc.org](https://pandoc.org/installing.html). Lahe finds it on `PATH` or in
 `/opt/homebrew/bin` and `/usr/local/bin`; `LAHE_PANDOC=/path/to/pandoc` names
 it outright. A running helper looks again within a minute of the install, and the next page
 load renders with it.
 
 **A current Chrome, Edge, Safari, or Firefox.** The floor is the
 [Custom Highlight API](https://developer.mozilla.org/en-US/docs/Web/API/CSS_Custom_Highlight_API),
-and it is a floor for a reason worth stating: it is how the library draws a
+and it is a floor for a reason worth stating: it is how the review layer draws a
 highlight over your text **without putting anything into the page's DOM**. The
 alternative is wrapping the highlighted words in `<span>` elements, which changes
 the page you are trying to review: the app's own scripts see nodes that were
@@ -63,12 +63,12 @@ exactly two locations:
 - `~/.agents/skills/lahe/SKILL.md` for Codex and Gemini CLI
 - `~/.claude/skills/lahe/SKILL.md` for Claude Code
 
-Both Codex and Gemini discover the shared Agent Skills location, so LAHE does
+Both Codex and Gemini discover the shared Agent Skills location, so Lahe does
 not install redundant `.codex` or `.gemini` copies. Claude Code uses its own
 personal skill directory and needs the second identical copy. These installed
 files are projections, not separate sources: update the repository skill first,
 then rerun `npm run install-cli` (or the narrower `npm run install-skills`). A
-pre-existing hand-maintained LAHE skill is preserved once under
+pre-existing hand-maintained Lahe skill is preserved once under
 `~/.local/state/lahe/skill-backups/` before migration.
 
 The repository keeps the responsibilities separate to limit drift:
@@ -96,11 +96,11 @@ running**. It prints what it did and the one URL to open.
 
 **It writes nothing into your page's folder.** The helper serves the page at its
 stable address, puts the script line into it as it serves it, and publishes the
-library on its own route,
+review layer on its own route,
 so your file stays byte-identical and there is no `lahe-layer.js` sitting beside
 it. That matters because a page's folder is usually a git checkout, and a script
 line plus a bundle committed together will load the review rail on a deployed
-copy of the page. The on-disk line and the sibling library copy still exist for
+copy of the page. The on-disk line and the sibling review layer copy still exist for
 the cases with no server to inject for them: a plain `lahe add`, and any page
 opened from disk.
 
@@ -126,7 +126,7 @@ Markdown is also a first-class input:
 lahe review path/to/SKILL.md
 ```
 
-LAHE renders the Markdown itself, gives generated documents a simple readable
+Lahe renders the Markdown itself, gives generated documents a simple readable
 style, preserves proper block and list structure, resolves relative assets, and
 turns fenced `mermaid` flowcharts into diagrams using a local browser asset.
 With pandoc installed it renders through pandoc, so fenced divs draw as house
@@ -143,14 +143,14 @@ rewritten to make them work. What each link form does:
   that folder as it always was.
 - A link that leaves the folder, such as `../crucible/SKILL.md`, and an
   absolute path under your home directory, are both resolved against the source
-  file's directory. LAHE serves the target's folder read-only for the session
+  file's directory. Lahe serves the target's folder read-only for the session
   and points the rendered link at it.
 - A link to another `.md` or `.markdown` file opens as the same rendered
   reading view, marked read-only and not under review. Its own links are
   translated the same way, so a skill to a template to a sub-template chain
   works.
 - `#heading` links stay ordinary in-page anchors.
-- A link LAHE will not serve renders as plain text, not a broken link, with the
+- A link Lahe will not serve renders as plain text, not a broken link, with the
   full path in its tooltip so you can open it on disk. That covers a target
   outside your home directory, a symlink pointing out of it, a hidden
   (dot-prefixed) location, a missing file, and links past the 64-folder cap on
@@ -181,7 +181,7 @@ of that file.
 
 That server belongs to the agent session. `session close` stops it, and
 `session reopen` restores it. Passing `--origin` means you supplied an external
-server instead, so LAHE neither starts nor stops that process.
+server instead, so Lahe neither starts nor stops that process.
 
 Opening the file directly (`file://`) also works and is the fallback: a page
 opened from disk sends the origin `null`, which `add` always registers. What does
@@ -471,7 +471,7 @@ with `lahe add path/to/page.html --remove` before the page ships.
 
 Four separate things, because they come apart:
 
-**Take the library out of a page.**
+**Take the review layer out of a page.**
 
 ```sh
 lahe add path/to/page.html --remove
@@ -489,7 +489,7 @@ whenever you like. (Older reviews may also have left one in an `assets/` or
 printed by `lahe review`. It closes only the session and keeps every review and
 reply. The session's pages stay at their addresses. Without the install, the
 helper stops once no session is open and nothing needs it; with it, the helper
-keeps running. Application dev servers are never stopped by LAHE.
+keeps running. Application dev servers are never stopped by Lahe.
 
 **Stop starting the helper at login.** Run `lahe uninstall`. See "Keeping
 addresses working" above.
