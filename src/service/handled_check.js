@@ -80,32 +80,10 @@ var reviewFormat = require("../shared/review_format.js");
 // their exact characters, and a raw containment test misses every sentence with
 // an apostrophe in it. normalize.textOf resolves the one entity it has a reason
 // to (&nbsp;), so the rest are resolved here, between the text extraction and
-// the typography fold. Both sides of the comparison go through this same
-// function, so it can never make the two disagree.
-var NAMED_ENTITIES = {
-  amp: "&",
-  lt: "<",
-  gt: ">",
-  quot: '"',
-  apos: "'",
-  nbsp: " "
-};
-
-function decodeEntities(text) {
-  return String(text)
-    .replace(/&#[xX]([0-9a-fA-F]+);/g, function (whole, hex) {
-      var code = parseInt(hex, 16);
-      return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
-    })
-    .replace(/&#(\d+);/g, function (whole, dec) {
-      var code = parseInt(dec, 10);
-      return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
-    })
-    .replace(/&([a-zA-Z]+);/g, function (whole, name) {
-      var lower = name.toLowerCase();
-      return Object.prototype.hasOwnProperty.call(NAMED_ENTITIES, lower) ? NAMED_ENTITIES[lower] : whole;
-    });
-}
+// the typography fold, by the decoder the Markdown renderer's heading ids use.
+// Both sides of the comparison go through this same function, so it can never
+// make the two disagree.
+var decodeEntities = markdown.decodeEntities;
 
 /**
  * The page's words, as one comparison string.

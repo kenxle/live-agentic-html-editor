@@ -291,3 +291,24 @@ test("every Markdown heading gets the GitHub-style id an in-page link names", ()
   assert.match(html, /<div class="sheet-head"><h2 id="6-sub-agents-reviews-and-personas">6\. Sub-agents, reviews, and personas<\/h2>/,
     "a section heading keeps its sheet-head wrapper");
 });
+
+// From the code review: where a slug departs from a naive reading of the
+// heading text, it follows GitHub, except for the review layer's own ids.
+test("a heading id keeps GitHub's edge cases and stays out of the layer's ids", () => {
+  const html = renderText("edges.md", [
+    "## <a name=\"install\"></a> Install",
+    "## Logo ![x](a.png)",
+    "## Use `&amp;` literally",
+    "## Caf&#233; A&nbsp;B",
+    "## Lahe surface root",
+    "## `lahe-highlight-styles`"
+  ].join("\n"));
+  assert.deepEqual(html.match(/<h2[^>]*>/g), [
+    "<h2 id=\"-install\">",
+    "<h2 id=\"logo-\">",
+    "<h2 id=\"use-amp-literally\">",
+    "<h2 id=\"café-ab\">",
+    "<h2 id=\"section-lahe-surface-root\">",
+    "<h2 id=\"section-lahe-highlight-styles\">"
+  ]);
+});

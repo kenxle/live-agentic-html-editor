@@ -242,20 +242,57 @@ function headingText(tokens) {
   return (tokens || []).map(function (token) {
     if (token.type === "image" || token.type === "html") return "";
     if (token.tokens) return headingText(token.tokens);
-    return token.type === "escape" ? token.text : decodeEntities(String(token.text || ""));
+    // A code span's text is the code as written; everything else is source
+    // text, where "&#233;" or "&amp;" means its character. A named entity the
+    // decoder does not know ("&eacute;") is dropped rather than spelled into
+    // the slug as a word.
+    if (token.type === "codespan" || token.type === "escape") return token.text;
+    // A no-break space is not a space to GitHub's slugger, so it is dropped
+    // there; the shared decoder folds it to a plain space for the handled check.
+    var text = String(token.text || "").replace(/&nbsp;/gi, "\u00a0");
+    return decodeEntities(text).replace(/&[a-zA-Z][a-zA-Z0-9]*;/g, "");
   }).join("");
 }
 
+// The renderer escapes the reviewer's punctuation (an apostrophe is written
+// `&#39;`), and Markdown source may spell a character as an entity. The
+// handled check reads rendered text through this same function.
+var NAMED_ENTITIES = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " "
+};
+
 function decodeEntities(text) {
-  return text.replace(/&(amp|lt|gt|quot|#39);/g, function (whole, name) {
-    return { amp: "&", lt: "<", gt: ">", quot: "\"", "#39": "'" }[name];
-  });
+  return String(text)
+    .replace(/&#[xX]([0-9a-fA-F]+);/g, function (whole, hex) {
+      var code = parseInt(hex, 16);
+      return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+    })
+    .replace(/&#(\d+);/g, function (whole, dec) {
+      var code = parseInt(dec, 10);
+      return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+    })
+    .replace(/&([a-zA-Z]+);/g, function (whole, name) {
+      var lower = name.toLowerCase();
+      return Object.prototype.hasOwnProperty.call(NAMED_ENTITIES, lower) ? NAMED_ENTITIES[lower] : whole;
+    });
 }
 
+// No trim: github-slugger keeps the hyphen a leading image or tag leaves
+// behind ("## <a name=x></a> Install" is "#-install" on GitHub too). The one
+// departure from GitHub is the review layer's own namespace: the layer finds
+// its mount point and stylesheet by "lahe-" ids, and a heading named "Lahe
+// surface root" taking one would stop the rail mounting. Those slugs gain a
+// "section-" prefix.
 function slugify(text) {
-  return text.toLowerCase().trim()
+  var slug = text.toLowerCase()
     .replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, "")
     .replace(/ /g, "-");
+  return /^lahe-/.test(slug) ? "section-" + slug : slug;
 }
 
 function headingIds(tokens) {
@@ -538,6 +575,7 @@ function writeArtifact(dir, sessionId, source, options) {
 }
 
 module.exports = {
+  decodeEntities: decodeEntities,
   MARKDOWN_EXTENSIONS: MARKDOWN_EXTENSIONS,
   MERMAID_ASSET: MERMAID_ASSET,
   MERMAID_SOURCE: MERMAID_SOURCE,
