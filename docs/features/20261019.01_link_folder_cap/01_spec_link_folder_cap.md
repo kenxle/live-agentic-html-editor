@@ -2,12 +2,9 @@
 
 **Status:** shipped. Merged to `main` as [PR #88](https://github.com/kenxle/live-agentic-html-editor/pull/88), built without a review gate at Ken's request. This page is the record.
 
-## Needs your decision
-
-1. **Should a linked folder serve only the files a page links to?** Today one link to a file directly in your home folder serves the whole home tree, including `~/.ssh` (proven below, under "Premise check"). The cap never limited that. **Recommendation:** serve only the linked files and their images, then drop the cap. Board row `LAHE-linked-folder-scope`.
-
 ## Done since
 
+- **Linked folders will serve only the files a page links to.** You agreed to the recommendation. It starts as its own change with its own spec, which you will see before it merges, since it changes what the page server hands out. Board row `LAHE-linked-folder-scope` (serve only linked files and their images, then drop the cap).
 - **Your helper has the fix now.** The Codex commit `f7255597` repeated heading-id work that PR #86 had already done on `main`, and done more fully: `main`'s ids match GitHub's and also cover pages pandoc renders. `main` passes every check in that commit's test, so the commit was dropped. It is kept on the local branch `codex/heading-fragment-targets` in case you want it. The main checkout now matches `origin/main`, and the always-on helper restarted onto that code.
 
 ## What shipped
@@ -129,4 +126,5 @@ Ken asked for this run partly to see whether the whetstone skill still works. He
 - **The new rule held this change back, and that turned up two real bugs.** Mid-run, Ken's global rules gained "shipping requires passing checks", which counts failures that also fail on `main`. Five browser tests had been failing on `main` in Firefox and WebKit. They were fixed first, in [PR #85](https://github.com/kenxle/live-agentic-html-editor/pull/85). Two were real bugs: in Safari, the second press on the Active filter button did nothing; in Firefox, the style button lost its focus ring after Esc. The third was open PR #39's WebKit zoom fix, which had waited eight days.
 - **`st-land` cannot run in Lahe.** It needs eight fields from `.claude/guardrails.md` (merge method, deploy watch, health check, migration check, smoke command, walkthrough entry points, refuse list) and says to stop when any is missing. Lahe has no deploy, and its file says so. The landing followed CLAUDE.md instead: read `gh pr checks` as pass, then `gh pr merge --merge`, then delete the remote branch.
 - **A Mac that sleeps breaks a long gate.** One `gate:all` run took 7.6 hours and failed 122 tests because the machine slept mid-run. Wrapping it in `caffeinate -i` fixed that.
+- **The forge build that whetstone uses lost the house style.** At 02:01 today, uncommitted changes in `~/.claude` replaced `feature-forge/scripts/build_feature_docs.py` with a short version that uses pandoc's plain default stylesheet. The same changes removed `feature_pandoc_header.html`. Built with it, this page had no Lahe style, components or style switcher. This page is now built with the last committed version of the script, run from a scratch copy. The changes in `~/.claude` are another session's work in progress and were left alone. Whoever owns that work should restore the style before the next spec gets built.
 - **Not covered by the skill:** another session changing the same code mid-run. The fix was to rebase on its commit and ship both together. A line about checking `git log origin/main..main` in the main checkout before shipping would have caught it sooner.
