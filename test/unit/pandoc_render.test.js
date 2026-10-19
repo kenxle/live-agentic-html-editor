@@ -155,7 +155,7 @@ test("a page whose pandoc fails still renders, with marked", { skip: POSIX }, ()
     const page = renderWith("# T\n\n::: callout-req\nR1\n:::\n", { engine: undefined });
     assert.equal(page.engine, "marked");
     assert.match(page.note, /could not render/);
-    assert.match(page.html, /<h1>T<\/h1>/);
+    assert.match(page.html, /<h1 id="t">T<\/h1>/);
   });
 });
 
@@ -215,7 +215,7 @@ test("a heading or paragraph between two callouts ends the run", { skip: NEEDS_P
 
 test("non-goals are an eyebrow and plain content, even when they open with a heading", { skip: NEEDS_PANDOC }, () => {
   const body = pandocBody("::: callout-nongoal\n### Out\n- Not this\n:::\n");
-  assert.match(body, /<p class="eyebrow">Non-goals<\/p>\n<h3>Out<\/h3>\n<ul>\n<li>Not this<\/li>\n<\/ul>/);
+  assert.match(body, /<p class="eyebrow">Non-goals<\/p>\n<h3 id="out">Out<\/h3>\n<ul>\n<li>Not this<\/li>\n<\/ul>/);
   assert.doesNotMatch(body, /<section class="callout/);
 });
 
@@ -284,12 +284,12 @@ test("report kinds map onto their house twins", { skip: NEEDS_PANDOC }, () => {
 
 test("a card grid becomes .cards, and a card's bold first line its name", { skip: NEEDS_PANDOC }, () => {
   const body = pandocBody(":::: cardgrid\n::: card\n**Structure first**\n\nBehavior loads first.\n:::\n\n::: card\n**Examples**\n\n- one\n:::\n::::\n");
-  assert.match(body, /<div class="cards">\n<div class="card">\n<h4>Structure first<\/h4>\n<p>Behavior loads first\.<\/p>\n<\/div>\n<div class="card">\n<h4>Examples<\/h4>/);
+  assert.match(body, /<div class="cards">\n<div class="card">\n<h4 id="structure-first">Structure first<\/h4>\n<p>Behavior loads first\.<\/p>\n<\/div>\n<div class="card">\n<h4 id="examples">Examples<\/h4>/);
 });
 
 test("an unknown kind is a plain div with its inside rendered, even when it opens with a heading", { skip: NEEDS_PANDOC }, () => {
   const body = pandocBody("::: beattable\n### Beat\n**bold** text\n:::\n");
-  assert.match(body, /<div class="beattable">\n<h3>Beat<\/h3>\n<p><strong>bold<\/strong> text<\/p>\n<\/div>/);
+  assert.match(body, /<div class="beattable">\n<h3 id="beat">Beat<\/h3>\n<p><strong>bold<\/strong> text<\/p>\n<\/div>/);
 });
 
 test("same-count nesting and a five-colon fence both nest", { skip: NEEDS_PANDOC }, () => {
@@ -329,10 +329,10 @@ test("hero and one numbered sheet per top-level H2; an H2 in a div or a fence do
     "",
     "## Second"
   ].join("\n"));
-  assert.match(body, /<div class="hero">\n<h1>Title <em>em<\/em><\/h1>\n<p>Lede\.<\/p>\n<\/div>\n<section class="sheet">\n<div class="sheet-head">\n<h2>First <a href="https:\/\/e\.com" target="_blank" rel="noopener noreferrer">link<\/a><\/h2>\n<span class="n">Section 1<\/span><\/div>/);
+  assert.match(body, /<div class="hero">\n<h1 id="title-em">Title <em>em<\/em><\/h1>\n<p>Lede\.<\/p>\n<\/div>\n<section class="sheet">\n<div class="sheet-head">\n<h2 id="first-link">First <a href="https:\/\/e\.com" target="_blank" rel="noopener noreferrer">link<\/a><\/h2>\n<span class="n">Section 1<\/span><\/div>/);
   assert.equal((body.match(/<section class="sheet">/g) || []).length, 2);
   assert.match(body, /<span class="n">Section 2<\/span><\/div>\n<\/section>\s*$/);
-  assert.match(body, /<div class="card">\n<h2>Inside a card<\/h2>/);
+  assert.match(body, /<div class="card">\n<h2 id="inside-a-card">Inside a card<\/h2>/);
 });
 
 test("no # heading: the file name is the title, marked as chrome; an empty file still has its hero", { skip: NEEDS_PANDOC }, () => {
@@ -407,7 +407,7 @@ test("words marked shows stay words: no math, no swallowed --- block", { skip: N
 test("frontmatter and the style line still work under pandoc", { skip: NEEDS_PANDOC }, () => {
   const page = renderWith("---\nname: example\n---\n\n# T\n");
   assert.match(page.html, /<summary>Document metadata<\/summary>/);
-  assert.match(page.html, /<h1>T<\/h1>/);
+  assert.match(page.html, /<h1 id="t">T<\/h1>/);
 });
 
 // --- the fallback -----------------------------------------------------------
@@ -470,4 +470,37 @@ test("the house stylesheet carries the new card components", () => {
   const css = markdown.styleSheet();
   assert.match(css, /\.cards\{/);
   assert.match(css, /\.card\{/);
+});
+
+// LAHE-markdown-heading-ids: an in-page "#section" link lands whichever engine
+// drew the page, so pandoc's headings carry the same GitHub-style ids marked's do.
+test("pandoc's headings get the same ids as marked's", { skip: NEEDS_PANDOC }, () => {
+  const text = [
+    "# The Title",
+    "## 6. Sub-agents, reviews, and personas",
+    "### `code` & **bold** [link](https://example.com)",
+    "### Repeat",
+    "### Repeat",
+    "### Repeat-1",
+    "> ## In a quote",
+    "",
+    "- item",
+    "",
+    "  #### In a list",
+    "",
+    "## <a name=\"install\"></a> Install",
+    "## Use `&amp;` literally",
+    "## Caf&#233; A&nbsp;B",
+    "## Lahe surface root",
+    "::: callout-note",
+    "### Inside a callout",
+    ":::"
+  ].join("\n\n");
+  const headings = (html) => html.match(/<h[1-6][^>]*>/g);
+  const viaPandoc = headings(pandocBody(text));
+  const viaMarked = headings(renderWith(text, { engine: "marked" }).html);
+  assert.ok(viaPandoc.indexOf("<h2 id=\"6-sub-agents-reviews-and-personas\">") !== -1, JSON.stringify(viaPandoc));
+  assert.ok(viaPandoc.indexOf("<h2 id=\"section-lahe-surface-root\">") !== -1, JSON.stringify(viaPandoc));
+  assert.ok(viaPandoc.indexOf("<h3 id=\"inside-a-callout\">") !== -1, JSON.stringify(viaPandoc));
+  assert.deepEqual(viaPandoc.filter((h) => h !== "<h3 id=\"inside-a-callout\">"), viaMarked.filter((h) => h !== "<h3 id=\"inside-a-callout\">"));
 });
