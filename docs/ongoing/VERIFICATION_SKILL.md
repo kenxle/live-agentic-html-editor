@@ -13,8 +13,9 @@ with recipes that were run end to end. Nothing here changes Lahe itself.
 - **Open the PR?** The branch adds only `skills/`, `.claude/skills` and
   `.agents/skills` links, and docs. `npm run gate:unit` passed on it. The
   repo's rule is to run the full `npm run gate` locally before opening a PR. I
-  have not run it, because nothing under `src/` changed. Say the word and I
-  will run it and open the PR, or open it on the unit gate alone.
+  have not run it, because nothing under `src/` changed. My recommendation is
+  to open it on the unit gate: the project's priorities let a change merge on
+  lint, the bundle check and the unit suite, and the full suite can follow.
 
 ## What changed since the first draft
 
