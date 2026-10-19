@@ -6682,7 +6682,7 @@
           if (event.key !== "Escape") return;
           event.preventDefault();
           event.stopPropagation();
-          closeStylePanel(true);
+          closeStylePanel(true, true);
           return;
         }
         if (fromOurTree(event)) return;
@@ -6700,7 +6700,7 @@
       return true;
     }
 
-    function closeStylePanel(returnFocus) {
+    function closeStylePanel(returnFocus, byKeyboard) {
       if (styleOutsideListener) {
         doc.removeEventListener("pointerdown", styleOutsideListener, true);
         doc.removeEventListener("keydown", styleOutsideListener, true);
@@ -6718,7 +6718,10 @@
       renderStylePanel();
       if (shownRemoved && typeof styleHandlers.dismiss === "function") styleHandlers.dismiss();
       if (typeof styleHandlers.close === "function") styleHandlers.close();
-      if (returnFocus && dom) dom.styleBtn.focus();
+      // After Esc the ring has to show. Firefox does not count a focus move made
+      // by script as keyboard focus (:focus-visible stays false), so ask for it.
+      // A click on the button must not draw one, so only Esc asks.
+      if (returnFocus && dom) dom.styleBtn.focus(byKeyboard ? { focusVisible: true } : undefined);
       return true;
     }
 
