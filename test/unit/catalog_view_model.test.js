@@ -565,7 +565,7 @@ test("a 7-day fixture of 120 reviews: every one is in an open card, with no sear
 // Fetch outcomes and the empty page
 // ---------------------------------------------------------------------------
 
-test("a 401 says LAHE restarted and stops polling", () => {
+test("a 401 says Lahe restarted and stops polling", () => {
   const state = vm.withFetch(okState(), { ok: false, status: 401 });
   const view = build(freshList(), state);
   assert.equal(view.banner.text, "Lahe restarted, reload this page.");

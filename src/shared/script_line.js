@@ -41,7 +41,8 @@ function indentAt(html, index) {
  * THE POSITION RULE, in order:
  *   1. Immediately before the LAST `</body>`, on its own line, at that tag's
  *      indentation. Last, not first, because a page that quotes `</body>` in
- *      prose or in a nested template still ends at the real one.
+ *      prose or in a nested template still ends at the real one. A closer
+ *      inside a comment, a script or a style block is not counted.
  *   2. Failing that, before the last `</html>`, same rule. A fragment with no
  *      body still has a document end.
  *   3. Failing both, appended, with a trailing newline. A fragment included by
@@ -56,14 +57,41 @@ function indentAt(html, index) {
  * `defer` is on the tag, so the position is about being unmissable to a human
  * reading the file, not about execution order.
  */
+// Comments, scripts and style blocks: a closer inside one is text, not the
+// page's end. A commented-out `</body>` or a script string holding one would
+// otherwise get the tag, and the rail would never load (or the page's own
+// script would be cut short by the inserted `</script>`).
+var OPAQUE = /<!--[\s\S]*?(?:-->|$)|<script(?=[\s>\/])[\s\S]*?(?:<\/script\s*>|$)|<style(?=[\s>\/])[\s\S]*?(?:<\/style\s*>|$)/gi;
+
+function opaqueSpans(html) {
+  var spans = [];
+  var found;
+  OPAQUE.lastIndex = 0;
+  while ((found = OPAQUE.exec(html)) !== null) {
+    spans.push([found.index, found.index + found[0].length]);
+    if (found[0].length === 0) OPAQUE.lastIndex += 1;
+  }
+  return spans;
+}
+
+function insideAny(spans, index) {
+  for (var i = 0; i < spans.length; i += 1) {
+    if (index > spans[i][0] && index < spans[i][1]) return true;
+  }
+  return false;
+}
+
 function placeScriptLine(html, tag) {
   var closers = [/<\/body\s*>/gi, /<\/html\s*>/gi];
+  var spans = opaqueSpans(html);
   for (var i = 0; i < closers.length; i += 1) {
     var last = null;
     var regex = closers[i];
     var found;
     regex.lastIndex = 0;
-    while ((found = regex.exec(html)) !== null) last = found;
+    while ((found = regex.exec(html)) !== null) {
+      if (!insideAny(spans, found.index)) last = found;
+    }
     if (last) {
       var at = last.index;
       var indent = indentAt(html, at);

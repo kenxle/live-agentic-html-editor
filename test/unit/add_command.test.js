@@ -397,6 +397,16 @@ test("on a minified page the script line goes directly before </body>, and comes
   assert.equal(noBody.where, "just before </html>");
   assert.equal(noBody.html, "<html><style>p{}</style><p>x</p>" + tag + "</html>");
 
+  const commented = "<html><body><p>x</p></body></html><!-- old </body> -->";
+  assert.equal(scriptLine.placeScriptLine(commented, tag).html,
+    "<html><body><p>x</p>" + tag + "</body></html><!-- old </body> -->", "a commented-out closer is not the page's end");
+  const scripted = "<html><body><p>x</p><script>var s = \"</body>\";</script></body></html>";
+  assert.equal(scriptLine.placeScriptLine(scripted, tag).html,
+    "<html><body><p>x</p><script>var s = \"</body>\";</script>" + tag + "</body></html>", "a closer in a script string is not either");
+  const multiLine = "<html>\n  <body>\n    <p>x</p>\n  </body>\n</html>\n<!-- </body> -->\n";
+  assert.ok(scriptLine.placeScriptLine(multiLine, tag).html.indexOf(tag) < multiLine.indexOf("  </body>"),
+    "a commented closer on its own last line does not pull the tag into the comment");
+
   const formatted = "<html>\n  <body>\n    <p>x</p>\n  </body>\n</html>\n";
   assert.equal(scriptLine.placeScriptLine(formatted, tag).html.indexOf("  " + tag.split("\n")[0] + ""), formatted.indexOf("  </body>"),
     "a closer on its own line still gets the tag on the line above, at its indentation");
