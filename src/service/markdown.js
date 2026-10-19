@@ -259,7 +259,8 @@ function headingText(tokens) {
 
 // The renderer escapes the reviewer's punctuation (an apostrophe is written
 // `&#39;`), and Markdown source may spell a character as an entity. The
-// handled check reads rendered text through this same function.
+// handled check reads rendered text, and attrOf reads the pandoc filter's link
+// attributes, through this same function.
 var NAMED_ENTITIES = {
   amp: "&",
   lt: "<",
@@ -405,18 +406,6 @@ function hasFencedDiv(body) {
     if (/^ {0,3}:{3,}/.test(line)) return true;
   }
   return false;
-}
-
-function decodeEntities(value) {
-  return String(value).replace(/&(#x[0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos|#39);/g, function (whole, name) {
-    if (name === "amp") return "&";
-    if (name === "lt") return "<";
-    if (name === "gt") return ">";
-    if (name === "quot") return "\"";
-    if (name === "apos" || name === "#39") return "'";
-    var code = name.charAt(1) === "x" || name.charAt(1) === "X" ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
-    return Number.isFinite(code) ? String.fromCodePoint(code) : whole;
-  });
 }
 
 function attrOf(attrs, name) {
