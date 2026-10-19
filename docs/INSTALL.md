@@ -140,8 +140,8 @@ rewritten to make them work. What each link form does:
 - A link LAHE will not serve renders as plain text, not a broken link, with the
   full path in its tooltip so you can open it on disk. That covers a target
   outside your home directory, a symlink pointing out of it, a hidden
-  (dot-prefixed) location, a missing file, and links past the 16-folder cap on
-  how many folders one document may mount.
+  (dot-prefixed) location, a missing file, and links past the 64-folder cap on
+  how many new folders one document may mount.
 
 That direct path is for a single Markdown file that is itself the document. If
 the deliverable is assembled from chapters, includes, templates, citations,

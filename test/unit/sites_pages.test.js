@@ -181,6 +181,25 @@ test("V13 (unit half): a Markdown page renders from source, its images stay on t
   assert.ok(outside);
 });
 
+test("the folder cap counts one page's links, not every folder the site already serves", async (t) => {
+  const w = await sitesWorld(t);
+  const folder = path.join(w.home, "ws", "repo", "notes");
+  const mounts = {};
+  for (let i = 0; i < 16; i += 1) {
+    const dir = path.join(w.home, "ws", "earlier-" + i);
+    writeFile(dir, "doc.md", "# Earlier " + i + "\n");
+    mounts["/.lahe-source/" + String(i).padStart(16, "0") + "/"] = dir;
+  }
+  writeFile(w.home, "ws/fresh/far.md", "# Far\n\nfar away\n");
+  writeFile(folder, "doc.md", "# Doc\n\n[far](../../fresh/far.md)\n");
+  const bound = w.helper.sites.bind({ root: folder, mode: "folder", entry: "doc.md", mounts: mounts });
+  const res = await getPage(w, bound.name, "/doc.md");
+  assert.equal(res.status, 200);
+  const link = /href="(\/\.lahe-source\/[a-f0-9]+\/far\.md)"/.exec(res.text);
+  assert.ok(link, "the new folder was mounted, though the site already serves 16");
+  assert.match((await getPage(w, bound.name, link[1])).text, /far away/);
+});
+
 // --- V17: CORP ----------------------------------------------------------------
 
 test("V17: every page response carries Cross-Origin-Resource-Policy: same-origin", async (t) => {

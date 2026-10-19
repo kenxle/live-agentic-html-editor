@@ -1388,7 +1388,6 @@ var renderCache = new Map();
 function renderMarkdown(file, options) {
   var stat = fs.statSync(file);
   var mounts = Object.assign({}, options.mounts || {});
-  var consumed = Object.keys(mounts);
   if (options.siteRoot) mounts["/"] = options.siteRoot;
   var key = [file, stat.mtimeMs, stat.size, options.assetPrefix, options.noFollow ? 1 : 0,
     options.note === null ? "\u0001readonly" : options.note, JSON.stringify(mounts)].join("\u0000");
@@ -1400,7 +1399,6 @@ function renderMarkdown(file, options) {
   }
   var registry = markdownLinks.createRegistry({
     mounts: mounts,
-    consumed: consumed,
     cap: options.noFollow ? 0 : undefined
   });
   var renderOptions = { assetPrefix: options.assetPrefix, links: registry, noFollow: !!options.noFollow };

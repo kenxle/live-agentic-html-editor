@@ -36,8 +36,10 @@ function isPage(file) {
 
 // The bound on distinct directories one render may mount. A document that links
 // out to more than this many folders is linking to a tree, not to siblings, and
-// mounting the tree is not something a review should do silently.
-var MOUNT_CAP = 16;
+// mounting the tree is not something a review should do silently. Folders the
+// site already serves do not count: the bound is one page's, not the site's,
+// since a site never forgets a folder and any site-wide number runs out.
+var MOUNT_CAP = 64;
 
 // The home root is the outer boundary for every auto-registered mount.
 // LAHE_HOME_DIR moves that boundary, the same seam LAHE_STATE_DIR gives the
@@ -78,13 +80,12 @@ function mountPrefix(dir) {
 }
 
 // One render's view of which directories are mounted and how many more it may
-// mount. `mounts` are prefixes already served (free to reuse); `consumed` are
-// the prefixes that already counted against the cap.
+// mount. `mounts` are prefixes already served (free to reuse); only the
+// directories this render adds count against the cap.
 function createRegistry(options) {
   var opts = options || {};
   var cap = typeof opts.cap === "number" ? opts.cap : MOUNT_CAP;
   var mounts = Object.assign({}, opts.mounts || {});
-  var consumed = (opts.consumed || []).slice();
   var added = [];
   // The real path of every file a link in this render now points at, whether
   // the link was translated into another folder's mount or rewritten under the
@@ -114,9 +115,8 @@ function createRegistry(options) {
         var relative = path.relative(base, path.resolve(dir));
         return existing[i] + (relative ? relative.split(path.sep).map(encodeURIComponent).join("/") + "/" : "");
       }
-      if (consumed.length >= cap) { skipped += 1; return null; }
+      if (added.length >= cap) { skipped += 1; return null; }
       mounts[prefix] = dir;
-      consumed.push(prefix);
       added.push({ prefix: prefix, dir: dir });
       return prefix;
     }

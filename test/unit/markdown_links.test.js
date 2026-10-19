@@ -146,7 +146,7 @@ test("links reuse an already served parent folder after the mount cap is reached
     const source = path.join(project, "docs");
     write(path.join(source, "index.md"), "# Index\n");
     const registry = links.createRegistry({
-      mounts: { "/": project }, consumed: ["/"], cap: 1
+      mounts: { "/": project }, cap: 0
     });
     for (let i = 0; i < links.MOUNT_CAP + 3; i += 1) {
       const target = write(path.join(project, "skills", "skill " + i, "SKILL.md"), "# Skill\n");
