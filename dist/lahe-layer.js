@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.4.0+519b48bf044d
+ * version 0.4.0+fa2214b66806
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.4.0+519b48bf044d";
+  g.LAHE.version = "0.4.0+fa2214b66806";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -26726,6 +26726,15 @@
         closeStylePanel(false);
         closeShortcuts(false);
         closePdfTray(false);
+        // Let go of the keyboard. A reviewer who chose Present mode from the
+        // menu has the focus on a control in the rail, and hiding the rail does
+        // not move it: the browser takes the focus off a hidden control at its
+        // next rendering update, which under load can come after the reviewer
+        // has already pressed the chord to bring the library back. Until then
+        // the page reports the library's own host as holding the keyboard, so
+        // the comment chord pressed in that gap is taken for a key inside the
+        // library and ignored (present_mode.spec.js, WebKit, 2026-10).
+        releaseFocus();
       }
       if (persist !== false) persistCollapsedPreference();
       renderPresent();
@@ -53447,7 +53456,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.4.0+519b48bf044d";
+  var VERSION = "0.4.0+fa2214b66806";
 
   var protocol = ns.protocol;
   var record = ns.record;

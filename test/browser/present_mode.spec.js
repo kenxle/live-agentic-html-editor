@@ -214,6 +214,43 @@ test.describe("present mode: the library hidden, and still working", () => {
     }
   });
 
+  test("hiding lets go of the keyboard, so the chord still works the moment the library is back", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      // A reviewer who chose Present mode from the menu has the keyboard on a
+      // control inside the rail. Hiding the rail does not move it: the browser
+      // takes the focus off a hidden control at its next rendering update, and
+      // until then the page reports the library's own host as holding it. A
+      // key pressed in that gap is the library's, not the page's, so the
+      // comment chord is ignored. Read in the same task as the hide, which is
+      // before any rendering update can run.
+      const held = await page.evaluate(() => {
+        const rail = window.__lahe.rail;
+        rail.openMenu(0);
+        const root = rail.tabBody("active").getRootNode();
+        root.querySelector('.menuitem[data-action="view"]').click();
+        const item = root.querySelector('.menuitem[data-action="present"]');
+        const host = document.getElementById("lahe-surface-root");
+        const before = document.activeElement === host;
+        item.click();
+        return { before, presenting: window.__lahe.present(), after: document.activeElement === host };
+      });
+      expect(held.presenting, "the menu item went into present mode").toBe(true);
+      expect(held.after, "and the hidden library does not keep the keyboard").toBe(false);
+
+      // Straight back, with no pause for the browser to tidy up first.
+      await page.evaluate(() => window.__lahe.present(false));
+      await commentOnSelection(page, "h1", "the chord works right away");
+      await pollPage(page, () => window.__lahe.items().length === 1, undefined, {
+        message: "commenting to work the moment the library is back"
+      });
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
   test("an answer that lands during the talk is waiting when the reviewer comes back", async ({ page }) => {
     const { app, helper, token } = await startBoth();
     try {
