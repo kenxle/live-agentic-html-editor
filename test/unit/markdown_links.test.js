@@ -140,6 +140,28 @@ test("the per-render mount cap is honored, counted, and does not fail the render
   });
 });
 
+test("links reuse an already served parent folder after the mount cap is reached", () => {
+  withHome((home) => {
+    const project = path.join(home, "project");
+    const source = path.join(project, "docs");
+    write(path.join(source, "index.md"), "# Index\n");
+    const registry = links.createRegistry({
+      mounts: { "/": project }, consumed: ["/"], cap: 1
+    });
+    for (let i = 0; i < links.MOUNT_CAP + 3; i += 1) {
+      const target = write(path.join(project, "skills", "skill " + i, "SKILL.md"), "# Skill\n");
+      const result = links.classify("../skills/skill " + i + "/SKILL.md#details", source, registry);
+      assert.equal(result.kind, "translate");
+      assert.equal(result.url, "/skills/skill%20" + i + "/SKILL.md#details");
+      assert.ok(registry.linked.includes(target));
+    }
+    assert.equal(registry.added.length, 0);
+    assert.equal(registry.skipped, 0);
+    write(path.join(home, "project-other", "SECRET.md"), "# Outside this site\n");
+    assert.equal(links.classify("../../project-other/SECRET.md", source, registry).reason, "cap");
+  });
+});
+
 test("rendering translates local links, marks the read-only view, and stays deterministic", () => {
   withHome((home) => {
     const source = path.join(home, "skills", "lahe");

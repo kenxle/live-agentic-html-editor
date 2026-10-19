@@ -223,6 +223,33 @@ test("a link alone never claims a file; a linking review with a comment on it do
 // A handoff the human confirmed in the Library ends with the agent running
 // the takeover. While the session's agent is listening, the CLI takes it over
 // only with the pending Library request that asked for it.
+test("a commented descendant reopens through its existing ancestor mount", async (t) => {
+  const w = await cliWorld(t);
+  const notes = path.join(w.home, "ws/repo/notes");
+  const guide = writeFile(w.home, "ws/shared/chapter one/guide two.md", "# Guide\n");
+  writeFile(w.home, "ws/shared/index.md", "# Shared\n\n[guide](chapter%20one/guide%20two.md)\n");
+  const hubFile = writeFile(notes, "hub.md", "# Hub\n\n[shared](../../shared/index.md)\n");
+  const hub = review(w, [hubFile]);
+  assert.equal(hub.code, 0, hub.stderr);
+  const hubUrl = new URL(openUrl(hub));
+  const page = await raw(Number(hubUrl.port), { path: hubUrl.pathname, headers: { host: hubUrl.host } });
+  const mount = /href="(\/\.lahe-source\/[a-f0-9]+\/)index\.md"/.exec(page.text)[1];
+  await raw(Number(hubUrl.port), { path: mount + "index.md", headers: { host: hubUrl.host } });
+  const guidePath = mount + "chapter%20one/guide%20two.md";
+  comment(w, reviewOf(hub), hubUrl.origin, guidePath);
+  const sitesFile = path.join(w.state, "sites.json");
+  const sitesBefore = fs.readFileSync(sitesFile, "utf8");
+  const reopened = run(w, ["review", guide]);
+  assert.equal(reopened.code, 0, reopened.stderr);
+  assert.equal(reviewOf(reopened), reviewOf(hub));
+  const printed = new URL(openUrl(reopened));
+  assert.equal(printed.host, hubUrl.host);
+  assert.equal(printed.pathname, guidePath);
+  assert.equal(fs.readFileSync(sitesFile, "utf8"), sitesBefore, "reopening binds no site");
+  const shown = await raw(Number(printed.port), { path: printed.pathname, headers: { host: printed.host } });
+  assert.match(shown.text, new RegExp('data-lahe-review="' + reviewOf(hub) + '"'));
+});
+
 test("a takeover of a listened-to session goes through with the Library request that asked for it, and only with it", async (t) => {
   const w = await cliWorld(t);
   const file = writeFile(w.home, "ws/repo/docs/page.html", PAGE);

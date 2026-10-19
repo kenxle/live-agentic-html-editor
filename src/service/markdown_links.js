@@ -105,6 +105,15 @@ function createRegistry(options) {
     add: function (dir) {
       var prefix = mountPrefix(dir);
       if (mounts[prefix]) return prefix;
+      var existing = Object.keys(mounts).sort(function (a, b) {
+        return mounts[b].length - mounts[a].length;
+      });
+      for (var i = 0; i < existing.length; i += 1) {
+        var base = path.resolve(mounts[existing[i]]);
+        if (!within(path.resolve(dir), base)) continue;
+        var relative = path.relative(base, path.resolve(dir));
+        return existing[i] + (relative ? relative.split(path.sep).map(encodeURIComponent).join("/") + "/" : "");
+      }
       if (consumed.length >= cap) { skipped += 1; return null; }
       mounts[prefix] = dir;
       consumed.push(prefix);

@@ -11,6 +11,7 @@ const path = require("node:path");
 const reviewCommand = require("../../src/cli/commands/review.js");
 const sessionCommand = require("../../src/cli/commands/session.js");
 const scriptLine = require("../../src/shared/script_line.js");
+const markdownLinks = require("../../src/service/markdown_links.js");
 
 function tempDir(prefix) {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
@@ -57,6 +58,48 @@ function write(file, body) {
   fs.writeFileSync(file, body);
   return file;
 }
+
+test("a nested index links every sibling document already inside its review site", async (t) => {
+  const home = tempDir("lahe-linked-index-home-");
+  const state = path.join(tempDir("lahe-linked-index-state-"), "state");
+  const previousHome = process.env.LAHE_HOME_DIR;
+  process.env.LAHE_HOME_DIR = home;
+  t.after(() => {
+    if (previousHome === undefined) delete process.env.LAHE_HOME_DIR;
+    else process.env.LAHE_HOME_DIR = previousHome;
+  });
+  const project = path.join(home, "project");
+  const root = write(path.join(project, "README.md"), "# Review\n\n[Index](docs/index.md)\n");
+  const targets = [];
+  const lines = ["# Index", ""];
+  for (let i = 0; i < markdownLinks.MOUNT_CAP + 3; i += 1) {
+    const relative = "skills/skill-" + i + "/SKILL.md";
+    targets.push(relative);
+    write(path.join(project, relative), "# Skill " + i + "\n");
+    lines.push("- [Skill " + i + "](../" + relative + ")");
+  }
+  const index = write(path.join(project, "docs", "index.md"), lines.join("\n"));
+  const original = fs.readFileSync(index, "utf8");
+  const port = await freePort();
+  const first = await capture(() => reviewCommand.run([root, "--state-dir", state, "--port", String(port)]));
+  assert.equal(first.code, 0, first.stderr);
+  const sessionId = first.stdout.match(/^\s*session\s+(s_[a-f0-9]+)/m)[1];
+  const open = first.stdout.match(/^\s*open\s+(http:\/\/\S+)/m)[1];
+  t.after(async () => {
+    await capture(() => sessionCommand.run(["close", sessionId, "--state-dir", state, "--port", String(port)]));
+  });
+  const start = await request(open);
+  const review = scriptLine.reviewAlreadyInFile(start.body);
+  const page = await request(new URL("/docs/index.md", open).href);
+  assert.equal(page.status, 200);
+  for (const relative of targets) {
+    assert.ok(page.body.includes('href="/' + relative + '"'), relative);
+    const linked = await request(new URL("/" + relative, open).href);
+    assert.equal(linked.status, 200, relative);
+    assert.equal(scriptLine.reviewAlreadyInFile(linked.body), review, relative);
+  }
+  assert.equal(fs.readFileSync(index, "utf8"), original);
+});
 
 test("a reviewed Markdown document's local links serve rendered documents with its rail, hop to hop", async (t) => {
   const home = tempDir("lahe-linked-home-");
