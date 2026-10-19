@@ -45,7 +45,7 @@ None: the change adds an attribute and draws nothing new.
 The run is in a Linux cloud container on Node 20.20.0. Its resolver does not answer `*.localhost` names, so the gate ran with a scratch preload that resolves them to loopback, the way macOS and browsers do. Its Chromium is Playwright's 1194 build, which the run named by path.
 
 - Branch, 0567373, gate run alone: lint passed, bundle check passed, menu bar check skipped (not macOS). Unit 3,036 pass, 2 fail. Chromium 907 passed, 1 failed, 8 skipped.
-- The 2 unit failures fail the same way on main: the container has no IPv6 address to refuse (V10), and the style 404 test (fix round 1) shares that cause.
+- The 2 unit failures fail the same way on main and come from the container: V10 expects a refused IPv6 address the container does not refuse, and the style 404 test (fix round 1) uses `chmod 000`, which root, the container's user, reads through.
 - The 1 Chromium failure, `reply_toast.spec.js:559`, passed 18 of 18 when its spec file ran alone.
 - Helpers: 0 before and 0 after.
 
