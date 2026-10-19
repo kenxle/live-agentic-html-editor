@@ -1,50 +1,40 @@
-# Read, style and export documents
+# Document style and PDF
+
+A Markdown review renders in the house document style. From the rail, the
+reviewer can preview another installed style, ask the agent to switch the page
+to it, and ask the agent for a PDF. The style and PDF requests reach the agent
+as notes.
 
 ## Sub-features
 
-Render Markdown and diagrams, follow document links, preview a style, ask to keep it, and export.
+- `style-preview`: picking a style changes how the page looks without changing the file.
+- `style-ask`: "Ask the agent to use <style>" sends a note naming the style.
+- `pdf-ask`: "Save as PDF" sends "Make a PDF of this page." to the agent.
+- `markdown-render`: headings, lists, fonts and Mermaid diagrams render (not yet driven with lahe-verify).
+- `doc-links`: relative links between documents open inside the review (not yet driven).
 
 ## How to get to it (user POV)
 
-Open a Markdown or house-style HTML review. Use the Document style control in the rail for preview and Ask; use the PDF control for export. Follow relative document links in the page.
+- Click the "Document style" icon at the top of the rail, then a style's row. "Back to the document's style" undoes the preview.
+- In the same panel, click "Ask the agent to use <style>".
+- Click "Ask the agent for a PDF", then "Save as PDF".
 
-## Driving it with Playwright
+## Driving it with lahe-verify
 
-Precondition: the setup and isolation checks in [verify-lahe](../SKILL.md) pass.
+Preconditions:
 
-Read the rendered headings, lists, fonts and Mermaid diagram.
+- A fresh run on the sample document.
+- A made-up style installed into this run's own state: `lv cli -- style add test/fixtures/styles/sample`, then `lv page reload`.
 
-```sh
-npm exec -- playwright test test/browser/markdown_render.spec.js --workers 1 --trace on --output /tmp/lahe-proof-document-presentation-markdown_render
-```
-
-Open Document style, preview a fixture style, return with Back or ask the agent to keep it. Confirm reading position and text survive.
-
-```sh
-npm exec -- playwright test test/browser/style_switcher.spec.js --workers 1 --trace on --output /tmp/lahe-proof-document-presentation-style_switcher
-```
-
-Follow document links and confirm the review rail and document ownership.
-
-```sh
-npm exec -- playwright test test/browser/linked_docs_rail.spec.js --workers 1 --trace on --output /tmp/lahe-proof-document-presentation-linked_docs_rail
-```
-
-Use the PDF button and verify its declared exporter boundary.
-
-```sh
-npm exec -- playwright test test/browser/pdf_button.spec.js --workers 1 --trace on --output /tmp/lahe-proof-document-presentation-pdf_button
-```
-
-Observable proof: The rendered document keeps the expected structure. Preview changes appearance without losing edits. Asking to keep a style creates a real pending request. Export invokes the expected path.
+- **Open the panel.** Run `lv page click "rail-text:Document style"`. `lv page eval "JSON.stringify(window.__lahe.stylePanel().rows.map(r=>r.id))"` lists `international` and `sample`.
+- **Preview.** Run `lv page click "rail:[data-style-id=sample]"`. `lv page eval "JSON.stringify(window.__lahe.style())"` shows `"previewing":true,"shown":"sample"`. `lv page shot style-preview` shows the new look.
+- **Ask to keep it.** Run `lv page click "rail-text:Ask the agent to use Sample"`. `lv agent wait "lahe-style: sample"` shows a note "Use the Sample style for this page (lahe-style: sample)."
+- **Ask for a PDF.** Run `lv page click "rail-text:Ask the agent for a PDF"`, then `lv page click "rail-text:Save as PDF"`. `lv agent wait "Make a PDF"` shows a note.
+- **Proof.** The preview screenshot and both drain lines.
 
 ## Gotchas
 
-Use made-up styles from test/fixtures/styles, never private paid assets. PDF tests may use a stub; they do not certify real PDF fidelity. A Markdown-only pass does not cover style, links or export.
-
-Source anchors:
-
-- [src/service/markdown.js](../../../src/service/markdown.js)
-- [src/layer/style_switch.js](../../../src/layer/style_switch.js)
-- [test/browser/style_switcher.spec.js](../../../test/browser/style_switcher.spec.js)
-- [test/browser/pdf_button.spec.js](../../../test/browser/pdf_button.spec.js)
+- Use only the made-up styles in `test/fixtures/styles/`. Paid styles never enter this repo.
+- `style add` through `lv cli` installs into the run's state folder, not the real one. Without the reload, the panel lists only the built-in style.
+- The PDF note is a request to the agent. Making the PDF is the agent's job and needs a real exporter; this recipe does not prove PDF output.
+- Regression specs: `style_switcher.spec.js`, `pdf_button.spec.js`, `markdown_render.spec.js`, `linked_docs_rail.spec.js`.

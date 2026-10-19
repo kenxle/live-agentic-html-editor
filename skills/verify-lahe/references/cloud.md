@@ -1,6 +1,6 @@
 # Cloud verification
 
-The same headless Playwright harness is the intended cloud route. This is a
+The same headless Chromium that `lahe-verify` drives locally is the intended cloud route. This is a
 setup contract, not a claim that Claude Code cloud has been exercised.
 
 ## Runner setup
@@ -13,8 +13,10 @@ setup contract, not a claim that Claude Code cloud has been exercised.
 - Allow local listeners, browser child processes and writable temporary storage.
   The harness uses free ports and `*.lahe.localhost` hostnames. Verify name
   resolution in the actual runner through the seed journey, not by assumption.
-- Run the seed command in [the verification skill](../SKILL.md), using a fresh
-  output directory. Upload its trace and command log before destroying the runner.
+- Run one journey with `lahe-verify` as the first proof: `up`, `doctor`, the
+  comment recipe in [the feature map](../features/reviews-and-comments.md), and
+  `down`. Pass `--evidence <artifact dir>` to `up`, and upload that folder before
+  destroying the runner. `down` must print `left running: nothing`.
 - Keep the browser suite serial across agents on a shared machine. Each cloud
   job should own its checkout, state and artifact directory.
 

@@ -1,26 +1,70 @@
-# Lahe feature map
+# Lahe verification map
 
-This is the starting user-path map, not a claim of exhaustive coverage. Read the
-entry for the behavior you change. Run commands from the repository root.
-Use a fresh `--output` path per run so previous proof survives.
+This folder is the maintained list of what a Lahe user can do, and how to prove
+each one works. Read this page, then the file for the feature you are proving.
+Each recipe was driven end to end with `lahe-verify` against version 0.4.0.
+Entries marked "not yet driven" are written from source and the browser specs,
+and need a live run before anyone calls them verified.
 
-| Feature | Entry points and proof |
-| --- | --- |
-| [Open reviews and exchange comments](reviews-and-comments.md) | Open HTML or Markdown, comment on a passage, send a note, read an agent reply, and end a review. |
-| [Edit text and write new blocks](editing-and-writing.md) | Edit an existing passage, add headings and lists, format text, undo, recover through reload, and start a blank notes page. |
-| [Answer choices on a document](choices.md) | Press a document choice, revise the answer, use keyboard controls, and see reply and persistence states. |
-| [Find documents and hand work to an agent](library-and-handoff.md) | Open a closed review, pick up a document from the Library, and confirm moving a watched session. |
-| [Read, style and export documents](document-presentation.md) | Render Markdown and diagrams, follow document links, preview a style, ask to keep it, and export. |
+## Baseline preconditions
 
-## Coverage discipline
+- A run started from this checkout: `lv up --run <name>` (or `--write` for a notes page).
+- `lv doctor --run <name>` prints only `ok` lines.
+- The document is [fixtures/sample.md](../fixtures/sample.md) unless the recipe says otherwise. Its sentences are unique, so an anchor never has to guess.
+- Nothing from the real helper (port 7817, `~/.local/state/lahe`) is involved.
 
-The generation proof exercises the Markdown placement journey only. Other
-entries are source-grounded recipes until their named live runs succeed.
-Run every listed entry point before describing a feature as fully verified.
-Use narrower specs during development; the existing gate policy still applies.
+## Driving conventions
 
-Not yet mapped in depth: installation and upgrades, multi-window ownership,
-offline recovery outside writing, security boundaries, and host wake delivery.
-The Mac menu bar requires macOS. Track additions on
-[the bulletin board](../../../docs/BULLETIN.md). For platform distinctions read
-[cloud verification](../references/cloud.md).
+- `lv` means `skills/verify-lahe/bin/lahe-verify`, run from the checkout root.
+- Every command takes `--run <name>`. The recipes leave it out to stay short.
+- Start each recipe from a fresh run unless it says it continues another.
+- Reviewer actions use real input: `page select`, `page caret`, `page key`, `page type`, `page click`.
+- Read state with `page rail`, `page eval`, `agent drain`. Never cause the outcome with them.
+- Wait with `page wait` or `agent wait`, never a sleep.
+- `<item>` and `<rev>` come from the `id` and `rev` fields of the `agent drain` line.
+- `<source>` is the `source` path that `up` printed.
+
+## Proof and skip reporting
+
+- Capture the action and the result: a `page shot` or `page rail <name>` after the key step, plus the drain line or the source file.
+- An agent-side change is proven only after `page reload` still shows it.
+- Record the feature file, the sub-feature id and the entry point with every result.
+- Report each entry point as passed, failed, blocked (name the missing precondition and the command you tried), or not run.
+- Never report one entry point as verified because a different one passed.
+
+## Feature entry contract
+
+Each feature file has an H1, one paragraph on what the user sees, then exactly
+these H2s in order:
+
+1. `Sub-features`: short ids, one line each.
+2. `How to get to it (user POV)`: every way a user reaches it.
+3. `Driving it with lahe-verify`: `Preconditions:`, then labelled bullets pairing each user action with the exact command and what you should observe.
+4. `Gotchas`: traps that waste a run or make a result wrong, plus the regression spec for the area.
+
+Keep code details out. Name user paths, stable handles, commands and proof.
+
+## Features
+
+- [Comments and replies](reviews-and-comments.md): comment on a passage, leave a page note, read the agent's answer, answer back, delete.
+- [Editing and writing](editing-and-writing.md): edit a passage, see the agent place it, and write on a blank notes page.
+- [Choices](choices.md): press an answer button in a document and change the answer.
+- [Review controls](review-controls.md): mark a card done, hold sending, end the review.
+- [Document style and PDF](document-presentation.md): preview a style, ask the agent to keep it, ask for a PDF.
+- [Library and hand-off](library-and-handoff.md): find a review in the Library, open it, hand it to an agent.
+- [The agent's loop](agent-loop.md): drain, reply, monitor wake and exit codes.
+
+## Not yet mapped
+
+These are real user paths with browser specs but no recipe here yet. Add them
+as recipes once driven:
+
+- conflicts between a reviewer edit and an agent change (`replay_branches` behaviour, `keep_mine_live_page.spec.js`, `conflict_toast.spec.js`)
+- the Edits tab and undo (`edits_tab.spec.js`, `editing_undo.spec.js`)
+- two windows on one review (`duplicate_tab.spec.js`)
+- linked documents in one review (`linked_docs_rail.spec.js`)
+- present mode and zoom (`present_mode.spec.js`, `zoom_viewer.spec.js`)
+- offline and helper restarts (`helper_restart_holds.spec.js`, `graceful_failure.spec.js`)
+- install and upgrade (`install_walk_3b.spec.js`)
+- the Mac menu bar (needs macOS; `npm run check:menubar`)
+- a real Claude or Codex host waking on feedback (needs that host; see [cloud.md](../references/cloud.md))

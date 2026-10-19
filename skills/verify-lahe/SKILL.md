@@ -1,138 +1,216 @@
 ---
 name: verify-lahe
-description: Verify Lahe browser, CLI and review-service behavior using isolated real reviews, the existing Playwright harness and a user-facing feature map. Use for proving a repo change, reproducing a bulletin-board issue or preparing evidence for an agent PR.
+description: Drive a disposable Lahe review the way a reviewer and an agent would (open a page, select, comment, edit, press choices, use the rail and the Library, answer as the agent) and capture proof. Use to prove a Lahe change works, reproduce a reported bug, or gather evidence for a PR. Covers the browser page, the rail, the helper and the lahe CLI.
 ---
 
 # Verify Lahe
 
-Read the relevant entry in [the feature map](features/README.md), then drive the
-changed user path. A passing unit test alone does not prove the browser workflow.
-This skill supplements [the repo gates](../../CLAUDE.md), not replaces them.
-For running a human review, use [the Lahe skill](../lahe/SKILL.md).
+Lahe has two users at once: a reviewer in the browser and an agent at the
+command line. A change is proven when you have done what each of them does, in
+a real browser against a real helper, and captured what changed.
+
+`bin/lahe-verify` is the control tool. It starts a throwaway review from this
+checkout, holds a browser on it, and lets you act one command at a time. Every
+command is logged as evidence. Read [the feature map](features/README.md) to
+find the recipe for the feature you are proving.
+
+The Playwright suite is the regression net, not a replacement for this. Use it
+as the repo's gates say (see [Regression specs](#regression-specs)).
 
 ## Launch
 
-Run commands from this checkout's root, in an isolated worktree. Use Node from
-`.nvmrc`. A fresh checkout needs `npm ci` for the development harness and
-`npx playwright install chromium`. On a fresh Linux runner use
-`npx playwright install --with-deps chromium`; this requires package-install
-permission and network during setup. Lahe itself has no runtime dependencies.
-See [cloud prerequisites and limits](references/cloud.md).
-
-Run `npm run check:layer` before driving. If stale, run `npm run build:layer`
-and follow the repo's generated-bundle rules. Do not test an old bundle as if it
-were the current source. Do not restore somebody else's lockfile or changes.
-
-The existing harness is the control tool. Each named spec starts its own helper,
-fixture and browser, then stops them. There is no shared dev server to find or
-global CLI to install. For the seed journey, run:
+From the checkout root, using the Node in `.nvmrc` (20 or later, because
+Playwright needs it):
 
 ```sh
-npm exec -- playwright test test/browser/free_writing_seams.spec.js --grep 'placement: a header' --workers 1 --trace on --reporter list --output /tmp/lahe-verification-seed-proof
+skills/verify-lahe/bin/lahe-verify up --run <name>
 ```
 
-Use a fresh output directory for each later run; Playwright clears its output
-directory at startup. Save the command's output alongside, not inside, that
-directory. The seed command launches `node <checkout>/bin/lahe.js review` through
-`test/browser/support/lahe_world.js`, with a newly written Markdown document,
-its own state directory and free helper port. The Playwright config sets free
-page ports and disables actual Terminal launches. No credentials are required.
+`<name>` is any short id you choose, such as `fix-choice-reword`. Pass the same
+`--run <name>` to every later command. Without `--run`, `up` invents an id and
+prints it.
 
-Ready means the generated page loaded, the review layer booted and the expected
-fixture is present. The spec calls `booted(page)` before typing. The seed is
-usable from empty state; it needs no account, database or existing human review.
+What `up` does:
+
+- Makes `$TMPDIR/lahe-verify/<name>/` with `state/`, `work/`, `profile/` and `evidence/`.
+- Copies the document into `work/`. The default is
+  [fixtures/sample.md](fixtures/sample.md), which has a heading per feature, a
+  list, a choice group and unique sentences to anchor on. Use `--doc <file>`
+  for another `.md` or `.html` file.
+- Runs `node bin/lahe.js review <work/doc> --port <free>` with
+  `LAHE_STATE_DIR=<run>/state`, `LAHE_PAGES_PORT=0` and `LAHE_DIRECT_LAUNCH=off`.
+  It never touches the real helper on 7817 or `~/.local/state/lahe`.
+- Starts a keeper process that launches Chromium (headless; set
+  `LAHE_VERIFY_HEADED=1` to watch it) and opens the review.
+
+Ready means `up` printed `open`, `session` and `review`, and returned. It waits
+for the rail to boot (`window.__lahe.booted`) before it returns.
+
+Variants:
+
+- `up --write --doc notes.md` runs `lahe write` instead, for a blank notes page.
+  The file does not need to exist.
+- `up --evidence <dir>` puts the evidence somewhere that survives a reboot. The
+  OS clears `$TMPDIR` eventually.
+
+A fresh machine needs `npm ci` (for Playwright only; Lahe itself has no
+dependencies) and `npx playwright install chromium` once. On Linux use
+`npx playwright install --with-deps chromium`. See [references/cloud.md](references/cloud.md).
 
 ## Doctor
 
-Before a run, `npm run check:layer` is the read-only build check. Confirm that no
-other browser suite is running before starting a checkpoint run.
+Run this first, and again whenever anything surprises you:
 
-For a live world created with `makeWorld`, this read-only check confirms the
-expected document, booted layer and service-owned review. Run it before a custom
-drive and again after surprising behavior:
-
-```js
-const { expect } = require('@playwright/test');
-const fs = require('node:fs');
-const path = require('node:path');
-const record = JSON.parse(fs.readFileSync(path.join(world.stateDir, 'service.json'), 'utf8'));
-process.kill(record.pid, 0);
-expect(page.url()).toBe(world.open);
-await expect(page.locator('h1')).toHaveText('Spike doc');
-expect(await page.evaluate(() => !!(window.__lahe && window.__lahe.booted))).toBe(true);
-expect(fs.existsSync(path.join(world.reviewDir, 'meta.json'))).toBe(true);
-expect((await fetch('http://127.0.0.1:' + record.port + '/lahe/v1/health')).ok).toBe(true);
+```sh
+skills/verify-lahe/bin/lahe-verify doctor --run <name>
 ```
 
-An empty review may not have `review.json` until its first item is projected;
-check its registration (`meta.json`) here. Use the actual fixture heading for
-other journeys. Ownership comes from the
-new state directory and the CLI launched from this checkout, not a response
-from the human's helper. A healthy process is insufficient when the page is
-wedged: close that world and relaunch the same journey in fresh state. Preserve
-the failed run's evidence before retrying. Never silently mark it passed.
+It reads only, prints `ok` or `FAIL` per check, and exits 2 on any failure:
+
+- the helper in this run's state folder is alive, owned by this run, and answers `/lahe/v1/health`
+- `dist/lahe-layer.js` matches `src/` (the same check as `npm run check:layer`)
+- the keeper and its Chromium are running on this run's profile
+- the page is this run's review, the rail booted, the layer version matches `package.json`, and the rail shows no failures
+
+A stale bundle means you would be testing old code. Run `npm run build:layer`,
+then `down` and `up` again. Builders do not commit the rebuilt `dist/`; put it
+back with `git checkout -- dist/lahe-layer.js` when you are done.
+
+If the process is healthy but the page is stuck (an editor that will not open,
+a card that will not change), do not keep poking. Save a screenshot, `down`,
+and `up` a fresh run.
 
 ## Drive
 
-Use the map's exact spec and user action. Read that spec before changing it.
-For the seed journey, the reviewer enters edit mode with
-`ControlOrMeta+Shift+KeyE`, types new blocks after
-`main > section:first-of-type > p:first-of-type`, applies bold with the real
-toolbar button and commits with Escape. The scripted agent reads the real
-`review.json`, writes the source and answers with `lahe reply`. The page must
-reload itself and show the new blocks once, with their formatting, including
-after a reviewer reload. The handled check must agree.
+Four kinds of command. All take `--run <name>`.
 
-Lahe's rail uses a closed shadow root. Existing helpers read geometry through
-`window.__lahe` and click the real button with `page.mouse`; normal page controls
-use locators. Reading state or locating a button through a hook is fine.
-Calling internal setters to create the outcome is not user-path proof.
-Selection/caret helpers are acceptable setup, but the actual typing, commit,
-press and navigation must use browser input. A stub agent proves the protocol,
-not an actual Claude or Codex host wake.
+**The reviewer, in the browser** (`page <action>`):
 
-When fixing a bulletin-board item, record the expected user-visible result,
-reproduce it, change the code, and rerun the relevant journey. Preserve a failing
-assertion instead of weakening it to fit a regression. Follow the existing
-gate policy before PR or merge; this focused run is not the full gate.
+| Action | What it does |
+| --- | --- |
+| `page select <target> --text "<phrase>"` | Drags the mouse across the phrase inside the target, like a reviewer selecting text. Prints what got selected. |
+| `page caret <target> --text "<phrase>"` | Clicks just after the phrase (add `--start` for just before). Without `--text`, clicks at the end of the target. |
+| `page key <combo> [<combo>...]` | Presses keys, such as `ControlOrMeta+Shift+KeyC`, `ControlOrMeta+Enter`, `Escape`, `Enter`. |
+| `page type "<text>"` | Types into whatever has focus. |
+| `page click <target>` (also `dblclick`, `hover`) | A real mouse click at the element's centre. |
+| `page goto [<url>]`, `page reload` | Navigate. Without a URL, `goto` opens the run's review. Both wait for the rail on the review page. |
+| `page wait "<js expression>" [--timeout ms]` | Waits until the expression is true in the page. Use this, never a sleep. |
+| `page text <target>`, `page html <target>` | Reads an element. |
+| `page eval "<js expression>"` | Reads page state. Read only: never use it to cause the outcome you are proving. |
+| `page rail [<name>]` | Prints the rail as JSON: tab, status, failures, items with state and reply, and every visible control with its label. With a name, also saves it as evidence. |
+| `page shot <name> [--full]` | Screenshot into evidence. |
+| `page aria <name>` | Accessibility snapshot of the page into evidence. It cannot see inside the rail; use `page rail` for that. |
+
+**Targets.** The page is ordinary DOM; the rail sits in a closed shadow root
+that normal selectors cannot reach.
+
+- A page target is any Playwright selector: `text=The shed roof leaks`,
+  `[data-choice="bed-size"] button[value="large"]`, `role=button[name="Open"]`.
+- `rail:<css>` looks inside the rail: `rail:[data-tab=done]`,
+  `rail:[data-style-id=sample]`.
+- `rail-text:<words>` finds the visible rail control whose label, title or
+  text holds those words: `rail-text:Mark as done`, `rail-text:End review`.
+  Run `page rail` to see the labels.
+
+**The agent** (`agent ...`), using this run's session and review:
+
+| Command | What it does |
+| --- | --- |
+| `agent drain` | `lahe status --session <s> --json --quiet`: what an agent would be handed. |
+| `agent wait "<text>" [--timeout ms]` | Polls the drain until a line contains the text. Choice presses and some drafts reach the helper a moment after the click, so wait on the drain, not the page. |
+| `agent reply <item> <rev> <status> [--text ...] [--reason ...]` | `lahe reply` for this review as agent `verify`. `handled` also names the run's source file. |
+| `agent status` | The full catch-up status, including `ended_reviews`. |
+
+To act as the agent on a change, edit the file printed as `source` by `up`
+(also in `info`), then reply. The helper notices the file changed and the page
+reloads itself. Never reload the page to cover for a rebuild that did not happen.
+
+**Any other lahe command**, against this run's helper and state:
+`lahe-verify cli --run <name> -- <args>`. Examples: `-- session close <s>`,
+`-- monitor --session <s>`, `-- style add test/fixtures/styles/sample`,
+`-- library --port <helperPort>`. For commands that read stdin (such as
+`reply --batch`), add `--stdin <file>`. The helper's port is `helperPort` in
+`info`.
+
+**Housekeeping:** `info --run <name>` prints run.json (paths, session, review,
+ports, commit). `list` shows every run and whether it is up or down.
+
+### Proof standards
+
+- Use the reviewer's real input: mouse selection, the documented chords, clicks on the real buttons. The hooks on `window.__lahe` are for reading state and finding rail elements, not for making things happen.
+- Capture the action and the result. Screenshot or `page rail` before and after, not only at the end.
+- Check the other side too. A reviewer action is proven when the agent's drain shows it. An agent action is proven when the page shows it, and still shows it after `page reload`.
+- A real file change is part of the proof for an edit: read the source file and the rebuilt page.
+- The stub agent here is you, through the real CLI. It proves the protocol and the page. It does not prove that a real Claude or Codex host wakes up.
 
 ## Evidence
 
-Keep the command, checkout SHA, dirty diff, runtime/platform, actual result and
-coverage limits together. `--trace on` retains browser actions and snapshots
-even on success. Open a saved trace with `npm exec -- playwright show-trace`
-and its trace path. Screenshots alone cannot prove an edit reached the agent.
-The seed's assertions also check `review.json`, the drain, source placement,
-the rebuilt page and the handled reply. Preserve logs that identify any failed
-assertion. Capture screenshots when visual behavior changes.
+Everything lands in the run's `evidence/` folder (printed by `up` and `down`):
 
-Record each mapped entry point as passed, failed, blocked by a named prerequisite,
-or not run. A seed passing does not certify the whole feature map. Keep output
-outside the harness's disposable run root. Verify the trace still exists after
-the command returns. Do not commit real review tokens or personal documents.
+- `commands.jsonl`: one line per command with time, arguments, result or error, and CLI stdout, stderr and exit code
+- `NNN-<name>.png` from `page shot`, `NNN-<name>.aria.yml` from `page aria`, `NNN-<name>.rail.json` from `page rail <name>`
+
+`run.json` beside it records the checkout, commit, number of dirty files, Node
+version and platform. When you report, give: the run id, the commit, the
+feature and entry point from the map, what you did, what you saw, and the
+evidence paths. Mark each mapped entry point as passed, failed, blocked (with
+the missing precondition), or not run. Never report a path you did not drive as
+verified through a different one. Do not commit evidence that holds real review
+tokens or personal documents.
 
 ## Cleanup
 
-`closeWorld(world)` closes the session and awaits `stopTempHelpers(world.stateDir)`
-in `afterEach`. Browser fixtures close their contexts. The Playwright global
-teardown detects and stops remaining helpers owned by this run, then fails the
-run if it found a leak. Inspect that failure even when assertions passed.
-Use `try/finally` for custom drives and stop only processes owned by their state
-directory. Never kill by name or touch the shared human helper.
+```sh
+skills/verify-lahe/bin/lahe-verify down --run <name>
+```
 
-Count helper processes before and after with the repo's documented command:
-`ps -axo command | grep -c '[l]ahe.js serve'`. Investigate an increase; use the
-run-owned guard to distinguish another agent's process. On Windows that guard
-does not establish process cleanup, so do not claim that platform proved.
-Leave proof artifacts intact. Do not run removal commands during agent work.
+`down` closes the session, stops the helper with the repo's own
+`stopTempHelpers` (only pids named by this run's state folder), stops the
+keeper and its Chromium (only processes whose command line names this run),
+and prints `left running: nothing`. It exits 3 if anything survived. It never
+touches the evidence folder; it prints the path and file count so you can see
+the proof survived.
 
-## Maintenance and origin
+Run `down` after every run, including failed ones, before starting the next.
+Check the repo's leak count before and after your work:
+`ps -axo command | grep -c "[l]ahe.js serve"`. The two numbers should match.
+Do not delete run folders yourself; `$TMPDIR` belongs to the OS.
 
-Use [maintain-verification-skill](../maintain-verification-skill/SKILL.md) to
-refresh the map against source and live journeys. Add a feature when a new
-user path lands; update its commands when the harness changes.
+## Helpers
 
-Created using Lauren Tan's pstack
-[create-verification-skill](https://github.com/cursor/plugins/blob/main/pstack/skills/create-verification-skill/SKILL.md)
-and its feature-map shape. This repo uses `skills/` as the canonical source,
-with project-local host discovery links, rather than a Cursor-only location.
+`bin/lahe-verify` is one Node file with no dependencies beyond the repo's own
+Playwright. Run it with no arguments for usage.
+
+The keeper (`lahe-verify _keeper`, started by `up`) is the one process that
+holds the browser. Page commands send it their action over a local port with a
+per-run token. This matters: Chromium blurs the page every time a DevTools
+client disconnects, and a blur ends an open edit (an empty notes page closes, a
+half-typed block commits). One long-lived holder keeps focus steady across
+commands.
+
+The keeper runs the tool's code as it was at `up`. After you change
+`bin/lahe-verify`, `down` and `up` a new run before trusting the change.
+
+In zsh, a variable holding `--run name` does not split into two words. Write
+`--run <name>` out in each command.
+
+## Regression specs
+
+The browser suite already covers most features in depth, with its own helper,
+fixture and teardown per spec. After your live proof, run the spec the feature
+map names for the area you changed, by itself:
+
+```sh
+npx playwright test test/browser/<file>.spec.js --workers 1 --trace on --output <fresh folder>
+```
+
+Do not run the whole suite during development; the repo's
+[gate rules](../../CLAUDE.md) say when that happens. A spec passing is not a
+substitute for driving the user path, and the user path is not a substitute
+for the gate.
+
+## Maintenance
+
+[maintain-verification-skill](../maintain-verification-skill/SKILL.md) keeps
+this skill and the map honest as Lahe changes. When a user-facing path lands,
+add it to the map with a recipe you have driven.

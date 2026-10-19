@@ -1,102 +1,89 @@
-# Verification for future cloud agents
+# Verification skill for Lahe
 
-The verification skill and starting feature map are written and the live seed
-journey passed. Nothing is needed from you right now. You have already given
-the direction: make verification reliable, then let cloud agents take work
-from the bulletin board.
+Updated: 2026-10-19T01:13-04:00
 
-Updated: 2026-10-18T22:35:17-04:00
+**Ready for review on `docs/verification-skill`.** An agent can now start a
+throwaway Lahe review, use it the way you do (select, comment, edit, press
+choices, use the rail and the Library), answer as the agent through the real
+CLI, and keep screenshots and a command log as proof. Eight features are mapped
+with recipes that were run end to end. Nothing here changes Lahe itself.
 
-## What happens next
+## Needs your call
 
-**The next engineering task is to prove the rest of the starting feature map.**
-The skill is written, but only the Markdown writing journey has been exercised
-for this handoff. We should establish which other journeys work before giving
-a cloud agent responsibility for fixes.
+- **Open the PR?** The branch adds only `skills/`, `.claude/skills` and
+  `.agents/skills` links, and docs. `npm run gate:unit` passed on it. The
+  repo's rule is to run the full `npm run gate` locally before opening a PR. I
+  have not run it, because nothing under `src/` changed. Say the word and I
+  will run it and open the PR, or open it on the unit gate alone.
 
-- **Finish local verification and land the skill.** Exercise the mapped comment,
-  choice, Library and document workflows. Record failures honestly, complete
-  the required checks, and prepare the branch for the normal PR process.
-- **Prove a fresh cloud run.** Use Claude Code cloud as the initial target,
-  following your suggestion. Start with the existing writing journey and retain
-  its evidence. Check setup, browser execution and cleanup in that environment.
-- **Pilot a board task.** Choose a small, clearly specified bug with a testable
-  outcome. Have the agent reproduce it, fix it, run verification and submit a PR
-  for review. A successful pilot should include evidence of the failure and fix.
-- **Then automate pickup and maintenance.** Define which board items agents may
-  take and how they claim work without colliding. Add the feature-map maintenance
-  run so the verification instructions keep pace with the product.
+## What changed since the first draft
 
-The local verification work needs no further decision from you. If the cloud
-trial reaches account access or repository connection that only you can provide,
-I will bring you the exact setup action. Before unattended pickup is enabled,
-we will need your choice of allowed work and whether agents stop at a PR or
-may merge. My recommendation for the pilot is to stop at a PR.
+Codex wrote the first version last night from the upstream pstack skill. It
+mapped five features to existing browser specs and ran one of them. This pass
+follows the upstream `/create-verification-skill` steps directly. It added the
+pieces that version was missing:
 
-## What this adds
+- **A control tool, [`lahe-verify`](../../skills/verify-lahe/bin/lahe-verify).**
+  `up` starts a review from the checkout in its own temp state folder (never
+  your real helper) and opens it in a headless Chromium. `page`, `agent` and
+  `cli` commands then act one step at a time. `doctor` checks the run is
+  healthy and owned by this run. `down` stops only what the run started and
+  keeps the evidence.
+- **Recipes an agent can follow cold.** Each [feature file](../../skills/verify-lahe/features/README.md)
+  now has the upstream shape: sub-feature ids, how a user gets there, then
+  "do this, run this, see this" steps with real labels and selectors.
+- **Every recipe was run.** Earlier, only one spec had been run.
 
-- [Verify Lahe](../../skills/verify-lahe/SKILL.md): exact setup, isolation,
-  readiness checks, user-path proof, evidence and cleanup.
-- [Feature map](../../skills/verify-lahe/features/README.md): routes from a
-  user action to existing browser journeys and observable outcomes.
-- [Maintenance skill](../../skills/maintain-verification-skill/SKILL.md):
-  compare source and live behavior, repair drift, and distinguish product bugs.
-- Project-local discovery links for Claude Code and Codex point to the same
-  canonical files under skills. No separate installed copies to drift.
+## What was proven
 
-## Verification record
+Each line was driven with `lahe-verify` on commit `47e786b6` (macOS, Node
+20.19.0, Chromium from Playwright 1.62):
 
-The generated bundle matches source. The Markdown placement journey passed in
-Chromium, including source placement, automatic page rebuild, handled state and
-reload. Its trace survives teardown at:
+- **Comments:** select words, Cmd-Shift-C, Cmd-Enter; the agent drains it, asks a question, the card shows it; the reviewer answers in the thread (revision 2); a page note; delete.
+- **Editing:** edit a paragraph; the agent changes the file and replies handled; the page shows it once, after a reload too.
+- **Notes page:** `lahe write` opens ready to type; a heading and a paragraph reach the agent as new blocks; placed once in the file and on the page.
+- **Choices:** a press, a changed answer (same item, revision 2), a keyboard press (revision 3).
+- **Rail controls:** mark as done (leaves the drain, shows in Done), hold sending (nothing reaches the agent until released), end review (shows in the agent's status).
+- **Style and PDF:** preview a made-up style, ask the agent to use it, ask for a PDF; both requests reach the agent.
+- **Library:** the run's review is listed; "Pick this up" with no agent listening shows the paste-in hand-off message.
+- **Agent loop:** `lahe monitor` exits 0 with work waiting and 5 after the session closes.
 
-`/tmp/lahe-verification-seed-proof/free_writing_seams-free-wr-ec216--tags-and-bold-not-reopened-chromium/trace.zip`
+After every run, `down` printed `left running: nothing`. The Lahe helper count
+matched before and after (1, your own helper).
 
-The exact command is in [Verify Lahe](../../skills/verify-lahe/SKILL.md). Product
-code was unchanged from `6cedb552`. This was a local macOS run with an already
-installed browser, not a clean Linux cloud runner. Fresh-runner browser and
-system-package installation remain unverified. Dependency installation with
-`npm ci` succeeded in the worktree.
+![The agent's question on a comment card, driven by lahe-verify](verification-proof/comment-reply.png)
 
-The readiness recipe was exercised separately against a fresh CLI-created
-review. Its first attempts caught incorrect assumptions about the empty review
-file and health route; both were corrected and the recipe passed. The screenshot
-below survives closing its browser and helper.
+![A blank notes page after the agent placed the reviewer's notes](verification-proof/notes-placed.png)
 
-![An isolated Markdown review with the Lahe rail ready](verification-proof/ready.png)
+## Found along the way
 
-Both skills pass the skill validator. Local document links, named specs and
-Claude/Codex discovery links resolve. Under Node 20.19.0, `npm run gate:unit`
-passed: 3042 passed, no failures, 5 skipped and 2 todo. The helper leak guard
-passed. Results are in `/tmp/lahe-verification-unit-node20.log`.
-An earlier attempt used a different Node through npm and failed before executing
-the suite; its log remains at `/tmp/lahe-verification-unit.log`.
+- **Focus.** Chromium blurs the page each time a DevTools client disconnects,
+  and a blur ends an open edit. The first version of the tool reconnected per
+  command, so a blank notes page closed itself before anyone could type. The
+  tool now keeps one process holding the browser for the whole run. This is a
+  harness fact, not a Lahe bug: the real browser suite passes the same journey.
+- **Library from a test helper.** `lahe library` looks for the real helper on
+  7817 unless given `--port`. The recipe passes the run's own port.
+- No Lahe bugs turned up.
 
-Only the Markdown placement journey and readiness recipe were driven for this
-generation proof. Other mapped paths remain source-grounded recipes, not passed
-coverage. Full browser gates were not run for this documentation change.
+## Not covered yet
 
-The files are on `docs/verification-skill` in the isolated verification-skill
-worktree, not on main. This branch is ready for review; cloud scheduling remains
-follow-up work.
+Listed in the map's "Not yet mapped" section: conflicts between a reviewer edit
+and an agent change, the Edits tab and undo, two windows on one review, linked
+documents, present mode and zoom, helper restarts, install and upgrade, the
+menu bar, and a real Claude or Codex host waking up. The Library's queued
+hand-off and `lahe session takeover` also still need a live run.
 
-## Cloud readiness
+## Next steps (from the bulletin board)
 
-The browser harness already starts disposable reviews and checks process
-cleanup. [The runner contract](../../skills/verify-lahe/references/cloud.md)
-spells out setup and evidence retention. The local seed proves its user path,
-not that Claude Code cloud has the required browser dependencies or host queue.
-
-GitHub CI currently runs lint, the bundle check and unit tests. Its browser
-suite remains local by project policy. The Mac menu bar needs a Mac; actual
-agent wakes need the intended host. Both remain separate from browser proof.
-
-The follow-ups above are recorded on [the bulletin board](../BULLETIN.md).
+- **Prove a cloud run.** Follow [cloud.md](../../skills/verify-lahe/references/cloud.md):
+  one `lahe-verify` journey on a fresh Linux runner, evidence uploaded.
+- **Keep the map current.** Run [maintain-verification-skill](../../skills/maintain-verification-skill/SKILL.md)
+  after user-facing changes, and turn the "not yet mapped" list into recipes.
+- **Pilot a board task** with this as the proof step, stopping at a PR.
 
 ## Source
 
-This follows Lauren Tan's upstream pstack
+Follows Lauren Tan's pstack
 [create-verification-skill](https://github.com/cursor/plugins/blob/main/pstack/skills/create-verification-skill/SKILL.md)
 and [maintain-verification-skill](https://github.com/cursor/plugins/blob/main/pstack/skills/maintain-verification-skill/SKILL.md).
-The [linked X article](https://x.com/poteto/article/2094457600259842065?lang=en)
-was inaccessible directly, so the implementation uses the upstream skills.
