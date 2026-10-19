@@ -44,7 +44,12 @@ reproduces the page shape that `personal/lib/scripts/build_styled_doc.py`
 builds: the first H1 becomes a `<div class="hero">` title, everything up to the
 first H2 is the lede inside it, and every H2 opens a numbered `section.sheet`.
 The one class it still writes for the stylesheet is `.scrollx` around a table,
-because the base does not wrap a bare table for horizontal scroll. Mermaid gets
+because the base does not wrap a bare table for horizontal scroll. When pandoc
+is installed, the same page shape comes from the filter
+`src/service/lahe_render.lua`, which also maps pandoc fenced divs onto the
+components here (the table is in `COMPONENTS.md`, "Components in Markdown").
+`.card` and `.cards` were added to `document.css` on 2026-10-18 for that
+mapping. Mermaid gets
 the palette through a theme object in that same file, since its theme variables
 are read by JavaScript before any stylesheet exists and cannot be `var(--token)`;
 each hex there is a token from `system-tokens.css`, named in a comment beside it.

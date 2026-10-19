@@ -96,7 +96,7 @@ Editing the page directly has its own risk. Tools that make a page editable have
 - **Velocity, then dogfooding, then security.** For decisions about how the project runs, weigh them in that order. [CLAUDE.md](../../CLAUDE.md) states this. A real security hole still blocks. Velocity of completed work and completed features is the top priority.
 - **Don't waste tokens.** This is additional infrastructure and a chat window is also running. Sloppy infrastructural design easily wastes tokens. We respect users on low budgets and this tool does not waste tokens.
 - **Don't cause no-ops**. Another for not wasting tokens. We do not want to have an idle document constantly waking an agent and burning tokens when there's nothing to do.
-- **Zero runtime dependencies.** The tool runs from a `git clone` with no install step. Third-party files are vendored, not installed. When a library would help, borrow its technique and leave the library out.
+- **Zero runtime dependencies.** The tool runs from a `git clone` with no install step. Third-party files are vendored, not installed. When a library would help, borrow its technique and leave the library out. The one exception is pandoc, an optional system tool Ken allowed on 2026-10-17: when it is installed, Markdown renders through it so fenced divs match the document builds, and without it everything still works.
 - **The record is the truth and the page is a view.** Each finished comment or edit becomes a durable record the moment it exists. Nothing on screen can take a record back.
 
 ## Commitments

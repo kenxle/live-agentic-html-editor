@@ -130,6 +130,7 @@ npm run install-cli                       # writes ~/.local/bin/lahe
 lahe review path/to/page.html             # or path/to/notes.md
 lahe write notes/today.md                 # a blank notes page to write into
 lahe install                              # optional: keep addresses working after sessions end and reboots
+brew install pandoc                       # optional: draws ::: fenced divs in Markdown (or see pandoc.org/installing.html)
 ```
 
 ## Which agents this works with
@@ -171,7 +172,8 @@ The rail also shows these as hints, so you do not need this file open to work th
 
 ## Requirements
 
-- Node 18.2 or later. No runtime dependencies: the two Markdown packages are vendored in the repo, so a clone works with no install step.
+- Node 18.2 or later. No npm runtime dependencies: the two Markdown packages are vendored in the repo, so a clone works with no install step.
+- Optional: [pandoc](https://pandoc.org/installing.html) 3 or later. With it, Markdown pages render through pandoc, so pandoc fenced divs (`::: callout-req`, `::: stat`) draw as styled panels, the way the feature-forge and research-report builds draw them. Without it, LAHE renders with its vendored Markdown package and those blocks show as plain text.
 - A current Chrome, Edge, Safari, or Firefox.
 - macOS or Linux for the `install-cli` wrapper. On Windows, run `node bin/lahe.js` from the clone or work in WSL.
 

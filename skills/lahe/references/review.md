@@ -95,7 +95,9 @@ the rail, so there is nothing to enroll page by page.
 
 Pass the source file. Direct `.md` and `.markdown` targets are rendered by
 `lahe review` itself, including fenced `mermaid` blocks, and it never writes the
-Markdown source.
+Markdown source. With pandoc installed it renders through pandoc, so pandoc
+fenced divs (`::: callout-req`, `::: stat`) draw as house components; the kinds
+are in the components reference, "Components in Markdown".
 
 Use this row only when that one file is the document. A document assembled from
 several inputs is the multi-source row. When a project already builds with
