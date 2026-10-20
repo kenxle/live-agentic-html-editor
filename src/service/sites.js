@@ -14,7 +14,10 @@
 // Origin header).
 //
 // LOSS. sites.json is a cache of sites.log, which is append-only: every grant
-// and every change to a site appends that site's whole entry. A sites.json
+// and every change to a site appends that site's whole entry, except
+// `mount_files`: the list of files a site's mounts may serve can run to
+// thousands of paths, so the log carries only the paths each change added, on
+// their own `mount-files` lines, and a reader joins them. A sites.json
 // that cannot be read is rebuilt from the log, never started empty, because an
 // empty registry would hand an old bookmark's name to whatever folder asked
 // next. When neither reads, the registry serves nothing new: it is read-only
@@ -246,6 +249,25 @@ function cleanLinked(table) {
   return out;
 }
 
+// The files a site's mounts may serve, as real paths: absolute strings, once each.
+function cleanMountFiles(list) {
+  var out = [];
+  if (!Array.isArray(list)) return out;
+  var seen = Object.create(null);
+  list.forEach(function (file) {
+    if (typeof file !== "string" || !path.isAbsolute(file) || seen[file]) return;
+    seen[file] = true;
+    out.push(file);
+  });
+  return out;
+}
+
+function withoutMountFiles(site) {
+  var copy = Object.assign({}, site);
+  delete copy.mount_files;
+  return copy;
+}
+
 function isEntry(value) {
   return !!value && typeof value === "object" && typeof value.root === "string" &&
     (value.mode === MODE.FOLDER || value.mode === MODE.PAGE_ONLY);
@@ -272,13 +294,23 @@ function createSites(options) {
     try { text = fs.readFileSync(logPath(dir), "utf8"); } catch (err) { return null; }
     var out = {};
     var good = 0;
+    var added = {};
     text.split("\n").forEach(function (line) {
       if (!line.trim()) return;
       var parsed;
       try { parsed = JSON.parse(line); } catch (err) { return; }
-      if (!parsed || typeof parsed.name !== "string" || !isEntry(parsed.site)) return;
+      if (!parsed || typeof parsed.name !== "string") return;
+      if (parsed.event === "mount-files" && Array.isArray(parsed.add)) {
+        added[parsed.name] = (added[parsed.name] || []).concat(parsed.add);
+        return;
+      }
+      if (!isEntry(parsed.site)) return;
       out[parsed.name] = parsed.site;
       good += 1;
+    });
+    // The list is the joined `mount-files` lines of the name, wherever they sit.
+    Object.keys(out).forEach(function (name) {
+      out[name].mount_files = cleanMountFiles(added[name]);
     });
     return good > 0 || !text.trim() ? out : null;
   }
@@ -296,7 +328,9 @@ function createSites(options) {
         if (parsed && parsed.version === VERSION && parsed.sites && typeof parsed.sites === "object") {
           table = {};
           Object.keys(parsed.sites).forEach(function (name) {
-            if (isEntry(parsed.sites[name])) table[name] = parsed.sites[name];
+            if (!isEntry(parsed.sites[name])) return;
+            table[name] = parsed.sites[name];
+            table[name].mount_files = cleanMountFiles(table[name].mount_files);
           });
           replayLog();
           return api;
@@ -331,11 +365,22 @@ function createSites(options) {
   function replayLog() {
     var fromLog = readLog();
     if (!fromLog) return;
+    // Entries are compared with `mount_files` set aside; the two lists are
+    // joined instead, since each side may hold paths the other lacks.
     var caught = Object.keys(fromLog).filter(function (name) {
-      return JSON.stringify(table[name]) !== JSON.stringify(fromLog[name]);
+      var mine = table[name];
+      var joined = cleanMountFiles((mine ? mine.mount_files || [] : []).concat(fromLog[name].mount_files));
+      var sameEntry = !!mine && JSON.stringify(withoutMountFiles(mine)) === JSON.stringify(withoutMountFiles(fromLog[name]));
+      return !sameEntry || joined.length !== (mine.mount_files || []).length;
     });
     if (!caught.length) return;
-    caught.forEach(function (name) { table[name] = fromLog[name]; });
+    caught.forEach(function (name) {
+      var mine = table[name];
+      var joined = cleanMountFiles((mine ? mine.mount_files || [] : []).concat(fromLog[name].mount_files));
+      var sameEntry = !!mine && JSON.stringify(withoutMountFiles(mine)) === JSON.stringify(withoutMountFiles(fromLog[name]));
+      if (!sameEntry) table[name] = fromLog[name];
+      table[name].mount_files = joined;
+    });
     if (reader) return;
     say("sites: " + caught.length + " name(s) were in " + LOG_FILE + " but not yet in " + JSON_FILE + "; " + JSON_FILE + " is written again");
     writeJson();
@@ -352,7 +397,7 @@ function createSites(options) {
 
   function record(event, name) {
     stateDir.ensureDir(dir);
-    var line = JSON.stringify({ at: new Date(now()).toISOString(), event: event, name: name, site: table[name] });
+    var line = JSON.stringify({ at: new Date(now()).toISOString(), event: event, name: name, site: withoutMountFiles(table[name]) });
     stateDir.appendLine(logPath(dir), line + "\n");
     writeJson();
   }
@@ -444,6 +489,7 @@ function createSites(options) {
       mode: s.mode,
       mounts: cleanMounts(s.mounts),
       linked_files: {},
+      mount_files: [],
       main_checkout: where.main_checkout,
       worktree_root: where.worktree_root,
       worktree_admin: where.worktree_admin,
@@ -494,6 +540,53 @@ function createSites(options) {
     return true;
   }
 
+  /**
+   * Add real paths to the files `name`'s mounts may serve. The log gets one
+   * short line holding only the paths that are new; sites.json is written
+   * whole. Returns whether anything was added.
+   */
+  function addMountFiles(name, files) {
+    var entry = get(name);
+    if (!entry || readOnly || !Array.isArray(files)) return false;
+    var have = cleanMountFiles(entry.mount_files);
+    var known = Object.create(null);
+    have.forEach(function (file) { known[file] = true; });
+    var fresh = cleanMountFiles(files).filter(function (file) { return !known[file]; });
+    if (!fresh.length) return false;
+    stateDir.ensureDir(dir);
+    stateDir.appendLine(logPath(dir), JSON.stringify({ at: new Date(now()).toISOString(), event: "mount-files", name: name, add: fresh }) + "\n");
+    entry.mount_files = have.concat(fresh);
+    writeJson();
+    return true;
+  }
+
+  // The real path of every file a site's mounts may serve, kept until the
+  // entry's lists are replaced. A `linked_files` key is a real path too, but
+  // maybe in the spelling of the link that wrote it, so each key is read
+  // through the same call a request's path is (fs.realpathSync.native).
+  var listedCache = Object.create(null);
+
+  function listedSet(name, entry) {
+    var cached = listedCache[name];
+    if (cached && cached.entry === entry && cached.files === entry.mount_files && cached.linked === entry.linked_files) return cached.set;
+    var set = Object.create(null);
+    cleanMountFiles(entry.mount_files).forEach(function (file) { set[file] = true; });
+    Object.keys(entry.linked_files || {}).forEach(function (file) {
+      if (!path.isAbsolute(file)) return;
+      set[file] = true;
+      try { set[fs.realpathSync.native(file)] = true; } catch (err) { /* the key stands as written */ }
+    });
+    listedCache[name] = { entry: entry, files: entry.mount_files, linked: entry.linked_files, set: set };
+    return set;
+  }
+
+  /** May `name`'s mounts serve this real path? True for a mount_files entry or a linked_files key. */
+  function listed(name, real) {
+    var entry = get(name);
+    if (!entry || typeof real !== "string") return false;
+    return listedSet(name, entry)[real] === true;
+  }
+
   function list() {
     ensureLoaded();
     return Object.keys(table).map(function (name) { return { name: name, site: table[name] }; });
@@ -508,6 +601,8 @@ function createSites(options) {
     bind: bind,
     addMounts: addMounts,
     addLinked: addLinked,
+    addMountFiles: addMountFiles,
+    listed: listed,
     list: list
   };
   return api;
@@ -525,6 +620,7 @@ module.exports = {
   nameFor: nameFor,
   rootProblem: rootProblem,
   cleanMounts: cleanMounts,
+  cleanMountFiles: cleanMountFiles,
   worktreeOf: worktreeOf,
   ensureCliSecret: ensureCliSecret,
   readCliSecret: readCliSecret,

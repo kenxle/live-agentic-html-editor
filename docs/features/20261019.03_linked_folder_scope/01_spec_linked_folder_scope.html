@@ -1,0 +1,3067 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Linked folder scope</title>
+<style data-lahe-doc-style>
+/*
+  System tokens, Ken St. Clair
+  SOURCE OF TRUTH for documents: this file is what document.css and day-page.css
+  read, and a paid style is a replacement for this file rather than a rewrite of
+  the surface files.
+
+  Scope. This is the document system. The web surface keeps its own values (its
+  column is narrower and its spacing scale is its own) and shares only the
+  palette and the fonts with this file. The presentation surface vendors a copy.
+  Neither one is a consumer that constrains a change here.
+
+  Do not redefine a token below in a surface stylesheet. If a surface needs a
+  value this file does not have, add it here so the other surfaces can see it.
+
+  Token names are stable. Renaming one breaks every surface that imports it, and
+  at least one surface vendors a copy rather than importing across repos (the
+  Columbia deck system). If you rename or add a token, say so in the commit and
+  tell the deck maintainer.
+
+  What belongs here, and what does not:
+    Here      any colour, type or spacing role more than one surface uses.
+    Not here  values only one surface can use. Slide-only type scales, slide
+              margins, page-print margins and the like stay in that surface's
+              own file under surface-specific names. If such a value turns out
+              to be a shared role, move it here rather than copying it.
+
+  Agreed with the deck surface on 2026-09-11: the vendored copy is taken whole
+  including this header, nobody edits it locally, and any new shared role comes
+  back here as a request rather than being defined in the copy.
+
+  Two layers. The raw names (--ink, --s5, --cobalt) are the palette and the
+  scale. The semantic roles below them (--on-surface, --gutter, --text-body) are
+  what a surface file and an agent reach for, because a role survives a restyle
+  and a raw name does not.
+*/
+
+:root{
+  /* ---------- colour ---------- */
+
+  /* Structural neutrals. Every surface uses these. */
+  --white:#ffffff;
+  --paper:#f7f7f5;
+  --ink:#1f1e1a;
+  --ink-soft:#55534b;
+  --ink-faint:#6b6860;
+  --rule:#dcdad6;
+  --rule-ondark:#4a4842;
+
+  /* Accents. One jab of colour per element, never a gradient. */
+  --purple:#46188c;
+  --purple-hover:#35126b;
+  /* Derived to match the other two tints rather than picked by eye: hue held,
+     lightness 95%. Ink reads 14.30:1 on it, against 14.39 on cobalt-tint and
+     14.46 on sage-tint, so the three are interchangeable for contrast. */
+  --purple-tint:#f1ebfa;
+  --link:#6d28d9;
+  --cobalt:#0760c7;
+  --cobalt-hover:#054a99;
+  --cobalt-tint:#e6effc;
+  /*
+    Two sages, and they are one colour with two legibility variants rather than
+    two colours. #8fb5a0 is the brand sage: it is what STYLE_GUIDE.md lists and
+    what the logo's middle segment uses, on white and on ink. It is unreadable
+    as a mark on white, at 2.26:1, so marks on white use a darkened version.
+
+                      on ink      on white
+      --sage-fill     7.38:1      2.26:1
+      --sage          3.57:1      4.67:1
+
+    Each fails where the other passes, so pick by ground, not by taste.
+  */
+  --sage-fill:#8fb5a0;   /* brand sage: fills, illustrations, the logo segment, anything on ink */
+  --sage:#637a63;        /* darkened: bullet dots and marks on white */
+  --sage-tint:#e7f1ed;
+
+  /* Status. Problems only: a source that wasn't read, a run that stopped, a
+     change that didn't save. They sit outside the accent budget, so a page
+     can show them beside a sage or cobalt panel. They are never decoration:
+     a page with no problem shows neither. Measured by
+     lib/scripts/measure_status_contrast.py; each clears 4.5:1 as text on
+     white, on paper, and on its own tint.
+                      on white   on paper   on its tint
+      --red           7.19:1     6.70:1     6.26:1
+      --amber         6.45:1     6.01:1     5.81:1
+     Amber is darkened to a brown so it passes as text. A status dot or a
+     notice border uses the same colour, so red and amber also differ by
+     shape on the page (a filled dot against a ring), never by hue alone. */
+  --red:#a8231c;
+  --red-tint:#fbeceb;
+  --amber:#8a5100;
+  --amber-tint:#fcf2e0;
+
+  /* Deprecated alias, kept because the deck surface vendors this file and a
+     rename would break it. Was #84c1ae, now resolves to the brand sage, which
+     clears the floor on ink at 7.38:1 and matches the logo. Use --sage-fill. */
+  --sage-lift:var(--sage-fill);
+
+  /* ---------- text on an ink ground ---------- */
+  /* Body text on dark is full white, 16.68:1. This is a house decision, not a
+     contrast one: a softened grey for body copy on a dark band was rejected.
+     The two values below are for secondary and meta text only.
+     Large-format surfaces such as slides may use soft for secondary copy where
+     full white at size glares. */
+  --ink-soft-ondark:#d9d7d1;   /* 11.59:1, secondary copy at large sizes */
+  --ink-faint-ondark:#b3b0a8;  /* 7.70:1, meta, section numbers, captions */
+
+  /* ---------- palette families, for the specimen ----------
+     Read only by the specimen script in document-every-component.html, which
+     draws the palette as key colours first, then each family's shades. Groups
+     are split by |. The first name in a group is the key colour; the text after
+     the colon is its one-line job. The job sits in the same string rather than
+     a second property so a family and its job cannot drift out of step when a
+     group is added or reordered. A style that leaves this out gets the older
+     view, roles plus leftover colours.
+
+     Sage leads its family, not sage-fill, because sage is what the mark and
+     fill roles use on a white page. Link sits with purple as its brighter
+     sibling. The two light ondark greys sit with white, since they are what
+     stands in for white on an ink ground. Paper is a shade of white here: it
+     only ever raises a ground, it never carries a job of its own. The alias
+     sage-lift is left out on purpose and shows under "Also defined". */
+  --palette-families:"white paper ink-soft-ondark ink-faint-ondark: The page ground, and text on an ink band \
+    | ink ink-soft ink-faint rule rule-ondark: Body text, headings, dividers and the default band \
+    | cobalt cobalt-hover cobalt-tint: The structural accent: the insight label, the accent band, code \
+    | sage sage-fill sage-tint: Bullet dots and marks, the third fill, the default quiet panel \
+    | purple purple-hover purple-tint link: Emphasis, for the one thing worth pausing on, and links \
+    | red red-tint: Status: something failed or is missing, and needs Ken \
+    | amber amber-tint: Status: something may be off, and will likely fix itself";
+
+  /* ---------- type ---------- */
+
+  --font-display:"Schibsted Grotesk","Hanken Grotesk",system-ui,sans-serif;
+  --font-body:"Hanken Grotesk",system-ui,sans-serif;
+  /* Code, in documents and on slides. Ken chose JetBrains Mono 2026-09-11.
+     The fallbacks are the platform faces, so a surface that has not bundled or
+     loaded the webfont still gets a real monospace rather than Courier. */
+  --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+
+  /* Weights. The wordmark stays at 600 wherever it appears. */
+  --w-body:400;
+  --w-medium:500;
+  --w-display:600;
+  --w-bold:700;
+
+  /* Headings apart from labels. --font-display is the label voice (section
+     numbers, table heads, the facts figure, the insight label, calendar
+     heads); headings read these, which point at it in the house, so a style
+     can set its headings in one face and its labels in another without a
+     rule. The tracking suits a proportional face; a mono sets it to 0. */
+  --font-heading:var(--font-display);
+  --w-heading:var(--w-display);
+  --lh-heading:1.12;
+  --tracking-heading:-.012em;
+  --font-number:var(--font-display);  /* the section number */
+  --font-thead:var(--font-display);   /* a table's column names */
+  --font-caption:var(--font-body);    /* a figure's caption */
+
+  /* ---------- spacing, 4px-rooted ---------- */
+
+  --s1:4px; --s2:8px; --s3:12px; --s4:18px;
+  --s5:28px; --s6:44px; --s7:72px; --s8:104px;
+
+  /* ---------- lines and radius ---------- */
+
+  --r:4px;
+  --r-lg:6px;
+  /* Two corners the base used to type as literals, so a square style could
+     not reach them. Inline code is a chip, and a chip rounded as far as a
+     panel reads as a pill; the today marker is a pill on purpose. */
+  --r-code:3px;
+  --r-pill:999px;
+  --line:1px solid var(--rule);
+  --line-ink:1px solid var(--ink);
+  --divider:2px solid var(--ink);
+
+  /* ---------- layout ---------- */
+
+  --maxw:1080px;
+  --read:68ch;
+
+  /* Layout widths a style reads when it moves off the house layout. The base
+     reads none of them except --layout-bleed's arithmetic, so the house page
+     is unchanged by any value here; they are declared once so every style
+     spells the same idea the same way.
+       --layout-margin      a margin column beside the text (Textbook's notes)
+       --layout-rail        a narrow rail with a hairline (Field Guide)
+       --layout-label       a label column beside an entry (Ledger)
+       --layout-hang        the column a display numeral hangs in (Folio)
+       --layout-numeral     the size of a display numeral at a section head
+       --layout-display-h2  a section heading above the h2 token, for a style
+                            whose sections open like covers
+       --layout-bleed       the inline padding that lets a block run edge to
+                            edge while its content stays on the column. It
+                            resolves 100% where it is used, so it is the
+                            element's own width, not the root's.
+       --layout-cols        how many columns a style's page grid has
+       --layout-ruler       the height of a ruler strip showing those columns */
+  --layout-margin:12rem;
+  --layout-rail:9rem;
+  --layout-label:14rem;
+  --layout-hang:9rem;
+  --layout-numeral:calc(var(--text-h1) * 1.6);
+  --layout-display-h2:var(--text-h2);
+  --layout-bleed:max(var(--gutter), calc((100% - var(--maxw)) / 2 + var(--gutter)));
+  --layout-cols:12;
+  --layout-ruler:var(--s2);
+
+  /* ---------- semantic roles ----------
+     What a surface file writes. Each one points at a raw token above, so a new
+     style repoints these rather than editing document.css. */
+
+  /* Colour by job, not by name. Every colour a component rule in
+     document.css or day-page.css paints is one of these. A second style
+     overrides the roles from its own raw palette, so it never has to pour its
+     colours into slots named after the house hues. */
+
+  /* Ground and text. */
+  --surface:var(--white);            /* the page ground */
+  --surface-raised:var(--paper);     /* a quiet ground inside the page: the boxed table's header */
+  --on-surface:var(--ink);           /* body text on it */
+  --on-surface-soft:var(--ink-soft); /* secondary copy */
+  --on-surface-faint:var(--ink-faint); /* meta, captions, section numbers */
+  --border:var(--rule);              /* hairline colour */
+
+  /* Accent: the structural colour. */
+  --accent:var(--cobalt);            /* the one accent a document uses */
+  --accent-hover:var(--cobalt-hover); /* its hover state; no document rule uses it today */
+  --accent-tint:var(--cobalt-tint);  /* the structural panel, the insight panel, code */
+  /* --link is declared with the raw colours above and is already a job name,
+     so it serves as both: a style overrides --link directly. */
+  --focus:var(--link);               /* the focus ring */
+
+  /* Marks and emphasis. */
+  --mark:var(--sage);                /* bullet dots, accent numerals, small marks on the page ground */
+  --fill:var(--sage);                /* the third fill: the sage callout and icon circle */
+  --on-fill:var(--white);            /* text and glyphs on that fill */
+  --tint:var(--sage-tint);           /* the default quiet panel */
+  --emphasis:var(--purple);          /* the one thing worth pausing on: its band, callout, caveat label */
+  --emphasis-hover:var(--purple-hover); /* its hover state; no document rule uses it today */
+  --emphasis-tint:var(--purple-tint); /* the emphasis panel and the caveat insight */
+
+  /* On a filled ground. */
+  --structure:var(--ink);            /* heavy structural marks: dividers, filled bands, callouts */
+  --on-structure:var(--white);       /* text on a filled band, callout or icon circle */
+  --on-structure-soft:var(--ink-soft-ondark);   /* secondary copy on a filled ground */
+  --on-structure-faint:var(--ink-faint-ondark); /* section numbers and meta on a filled ground */
+  /* Text on the accent and emphasis fills. The house carries white on all
+     three, so both point at --on-structure; a style whose accent or emphasis
+     is light enough to want ink repoints one of these, not a rule. */
+  --on-accent:var(--on-structure);   /* text on the accent callout, band and icon circle */
+  --on-emphasis:var(--on-structure); /* text on the emphasis callout, band and icon circle */
+
+  /* Status, by job. A page paints problems through these, so a style can
+     repoint them. --muted is for a line that is neither fine nor a problem:
+     "pending switchover", "no sources were recorded for this page". It reuses
+     the faint ink on paper, so it reads as quiet rather than as a third
+     status colour. */
+  --danger:var(--red);               /* failed, missing, not saved: the red notice, dot and label */
+  --danger-tint:var(--red-tint);     /* the red notice's ground */
+  --on-danger:var(--white);          /* text on a filled danger button */
+  --warning:var(--amber);            /* may be off: the amber line, ring and label */
+  --warning-tint:var(--amber-tint);  /* the amber line's ground */
+  --muted:var(--ink-faint);          /* neither fine nor a problem */
+  --muted-tint:var(--paper);         /* the muted line's ground */
+
+  /* The section number, the table head and the figure. Each was a fixed
+     choice inside a rule, and every style that wanted another look had to
+     restate the rule; these name the choice so a style sets a value. */
+  --number-color:var(--on-surface-faint); /* the "Section N" label on the page ground */
+  --thead-color:var(--on-surface-faint);  /* a table's column names */
+  --thead-rule:var(--divider);            /* the rule under a naked table's head */
+  --thead-rule-boxed:var(--line);         /* the rule under a boxed table's head */
+  --figure-border:0 solid transparent;    /* a figure's frame; the house has none */
+  --figure-ground:transparent;            /* the ground a figure is printed on */
+  --figure-pad:0;                         /* the room between the frame and the image */
+  --caption-color:var(--on-surface-faint);
+
+  /* Spacing by purpose. The numeric scale above still exists; these name the
+     three distances a document actually keeps repeating. */
+  --gutter:var(--s5);                /* the column's side inset */
+  --section-gap:var(--s7);           /* between sections */
+  --section-gap-narrow:var(--s6);    /* the same gap on a narrow screen */
+  --block-gap:var(--s4);             /* between stacked blocks inside a section */
+
+  /* Type scale. Taken from the M5 tearsheet's actual sizes, not invented.
+     There is no 16px: lists, tables and the facts explanations sit at body
+     size like everything else. */
+  --text-h1:clamp(34px,4.6vw,52px);
+  --text-h2:clamp(25px,3vw,34px);
+  --text-h3:clamp(19px,2vw,23px);
+  --text-h4:18px;
+  --text-figure:23px;                /* the number in a facts grid */
+  --text-lede:20px;
+  --text-body:17px;
+  --text-small:15px;                 /* .small, code, the section number */
+  --text-meta:14px;                  /* table heads, captions, meta lines */
+  --text-micro:12px;                 /* chips, labels, month-grid events */
+  /* Three sizes from the X3 components page, which is built on M5. A stat
+     tile is number-first, so its number sits a step above the facts figure;
+     the single large tile is the one number a section is about. A pull quote
+     sits between h3 and h2, so it reads as a quote and not as a heading. */
+  --text-stat:clamp(30px,3.4vw,38px);        /* the number in a stat tile */
+  --text-stat-large:clamp(44px,6vw,64px);    /* the number in the single large stat tile */
+  --text-quote:clamp(22px,2.4vw,28px);       /* a pull quote's line */
+
+  /* ---------- images ----------
+     The frame every image treatment draws (image beside text, image cards,
+     the gallery, the full-width image, the peek pair). A screenshot of a white
+     page on a white page needs an edge, so the house draws a hairline. A style
+     that prints its images as plates or cuts them square sets these. */
+  --image-frame:var(--line);
+  --image-radius:var(--r);
+}
+
+/*
+  Document style system, Ken St. Clair
+  Spec: docs/document-style-guide.md (read that first; this file is the "how", not the "why")
+  Skeleton that demonstrates every component: lib/templates/document-every-component.html
+
+  Standalone. No brand assets in the base system below, drop this file into any
+  HTML document and it works with no dependency on St. Clair AI branding.
+  An optional, clearly separate brand section for the masthead lives at the
+  bottom of this file. Only include that section's markup in a document that
+  is an actual St. Clair AI deliverable.
+
+  Two rules govern everything below.
+
+  1. The column is declared once, as a rule about the page (see the next
+     block). No component sets its own max-width or inline padding, so a new
+     component cannot be off the grid: it never knows where the grid is.
+  2. Every colour, font, weight, size and spacing value is a var() from
+     system-tokens.css. A pixel value appears only on a border, an outline, a
+     stroke width, inside a media query, or with a same-line marker naming the
+     geometry it comes from. That is what makes a second style a new token file
+     rather than a rewrite of this file.
+*/
+
+/*
+  Tokens live in system-tokens.css, shared with the presentation surface. Add
+  surface-specific rules below, never redefine a shared token.
+*/
+
+/* ---------- the column ----------
+   Every direct child of the body sits in the column. A full-bleed band opts
+   out (it runs edge to edge) and its inner element opts back in through the
+   same rule. Three element types render nothing and are skipped, and
+   [data-lahe] is the review layer's own chrome: it lives in the body too, and
+   the page must not lay it out.
+
+   A full-width image (.bleed) opts out the same way a band does. Its caption
+   opts back in through the second selector, and only the picture itself runs
+   edge to edge. */
+
+:is(body, .band) > :not(.band, .bleed, script, style, template, [data-lahe]),
+.bleed > :not(img, picture, svg, video){
+  max-width:var(--maxw);
+  margin-inline:auto;
+  padding-inline:var(--gutter);
+}
+
+/* ---------- base ---------- */
+
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  background:var(--surface);
+  color:var(--on-surface);
+  font-family:var(--font-body);
+  font-size:var(--text-body);
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---------- headings ----------
+   A heading carries its own room, sized to its level, so it is correct
+   wherever it lands: inside a section, inside rendered Markdown with no
+   wrapper at all, or written by an agent who does not know the hero markup.
+   The six head wrappers already provide that room, so they zero it, and the
+   first child of any padded container drops its top margin so the container's
+   padding is the only gap. */
+
+h1,h2,h3,h4,h5,h6{
+  font-family:var(--font-heading);
+  font-weight:var(--w-heading);
+  line-height:var(--lh-heading);
+  letter-spacing:var(--tracking-heading);
+  /* Sentence case only. Never set a heading in all caps. */
+}
+h1{font-size:var(--text-h1);margin:var(--section-gap) 0 var(--block-gap)}
+h2{font-size:var(--text-h2);margin:var(--section-gap) 0 var(--block-gap)}
+h3{font-size:var(--text-h3);margin:var(--section-gap-narrow) 0 var(--s3)}
+h4{font-size:var(--text-h4);margin:var(--s5) 0 var(--s2)}
+h5{font-size:var(--text-body);margin:var(--s5) 0 var(--s2)}
+h6{font-size:var(--text-small);margin:var(--s5) 0 var(--s2);color:var(--on-surface-soft)}
+
+:is(.hero,.sheet-head,.fold-head,.checkin-head,.cols,.icon-row,.sequence,.option,.image-card-body,.media-body) :is(h1,h2,h3,h4,h5,h6){margin:0}
+:is(.fold-body,.panel,.insight,.callout,.band,td) > :first-child{margin-top:0}
+
+/* ---------- text ---------- */
+
+p{margin:0 0 var(--block-gap)}
+p:last-child{margin-bottom:0}
+
+/* A long unbroken run (a raw URL) wraps rather than widening the page. */
+p,li,dd{overflow-wrap:anywhere}
+td{overflow-wrap:break-word}   /* break-word keeps whole words when columns size; a long URL still breaks */
+
+a{color:var(--link);text-decoration:underline}
+a{
+  text-decoration-thickness:1px;   /* px: a hairline underline, not a second rule on the page */
+  text-underline-offset:3px;       /* px: clears the descenders at body size */
+}
+:focus-visible{outline:2px solid var(--focus);outline-offset:3px;border-radius:var(--r)}
+
+/* ---------- plain elements ----------
+   Rendered Markdown carries no classes, so every element Markdown can produce
+   has a house look with no class needed. The classes further down are
+   optional upgrades, not the only way to get the style. */
+
+img{max-width:100%;height:auto}
+/* The frame, ground and padding are all nothing in the house; they are tokens
+   so a style that prints its figures as plates or drawings sets values. */
+figure{margin:var(--block-gap) 0;border:var(--figure-border);background:var(--figure-ground);padding:var(--figure-pad)}
+figcaption{margin-top:var(--s2);font-family:var(--font-caption);font-size:var(--text-meta);line-height:1.5;color:var(--caption-color)}
+blockquote{
+  margin:var(--block-gap) 0;
+  padding-left:var(--s4);
+  border-left:3px solid var(--border);
+  color:var(--on-surface-soft);
+}
+hr{border:0;border-top:var(--line);margin:var(--section-gap-narrow) 0}
+
+/* Stacked blocks carry their own room, so the markup needs no inline margins. */
+:is(.panel,.callout,.insight,.icon-line){margin-bottom:var(--block-gap)}
+:is(.panel,.callout,.insight,.icon-line):last-child{margin-bottom:0}
+
+/* ---------- the reading measure ----------
+   Prose gets the measure by default and the full-width blocks opt out. The
+   container half of the selector is :where(), so its specificity is zero and
+   any class below can override it without a fight. */
+
+:where(section.sheet,.fold-body,.checkin,.hero) :where(p,ul,ol,blockquote){max-width:var(--read)}
+/* A paragraph that is only an image is a figure, not prose: a chart or a
+   screenshot wants the column, not the reading measure. Markdown always wraps
+   an image in a paragraph, which is why this is decided here. */
+p:has(> img:only-child){max-width:none}
+:is(table,.facts,.cols,pre) :is(p,ul,ol,blockquote){max-width:none}
+
+/* ---------- layout helpers ---------- */
+
+.read{max-width:var(--read)}
+/* .small and .soft are for captions, footnotes, the footer, and a meta line: never
+   for running prose. Body text is one size and one colour, or the page reads as
+   two systems. */
+.soft{color:var(--on-surface-soft)}
+.lede{font-size:var(--text-lede);line-height:1.55;color:var(--on-surface-soft);max-width:none}
+.small{font-size:var(--text-small);line-height:1.5}
+
+/* ---------- masthead (unbranded) ----------
+   Even an unbranded document can carry a plain meta line: doc type + date,
+   no mark, no wordmark. See the brand section at the bottom for the branded
+   version. */
+.masthead{padding-block:var(--section-gap-narrow) 0}
+.masthead .meta{margin-top:var(--s2);font-size:var(--text-meta);color:var(--on-surface-faint)}
+
+/* ---------- hero ----------
+   The hero's bottom padding is deliberately small. It used to carry the full
+   section-gap on the assumption that the section below would zero its own
+   top padding and let the hero supply the room; that broke the moment the
+   hero sat on its own coloured ground (a band), because the band's edge, the
+   section's top, and the hanging rule all landed on the same pixel. A block
+   is correct wherever it lands and carries its own space, so the hero keeps
+   a narrow close of its own and the section below always adds its full gap
+   on top of it. */
+
+.hero{padding-block:var(--section-gap-narrow) var(--gutter)}
+.hero h1{max-width:17ch;margin-bottom:var(--block-gap)}
+.hero .lede{max-width:58ch}
+
+/* ---------- the chrome: numbered sections under a hanging rule ----------
+   A section carries its vertical rhythm and nothing else. The column comes
+   from the page rule at the top of this file, so a section is correct
+   wherever it lands in the body and cannot be double-padded by a wrapper.
+   That includes the first section: it always pays its own top padding, never
+   zero, so it never depends on whatever sits above it (a hero, a band, a
+   masthead) to supply the room. */
+
+section.sheet{padding-block:var(--section-gap)}
+
+.sheet-head{
+  display:flex;
+  gap:var(--block-gap);
+  align-items:baseline;         /* section number aligns to the heading's baseline, never the row's bottom */
+  justify-content:space-between;
+  flex-wrap:wrap;
+  border-top:var(--divider);    /* the hanging rule, always full column width, never a short stub */
+  padding-top:var(--s3);
+  margin-bottom:var(--section-gap-narrow);
+}
+.sheet-head .n{
+  font-family:var(--font-number);
+  font-weight:var(--w-display);
+  font-size:var(--text-small);
+  color:var(--number-color);
+}
+
+/* Two smaller levels under the section head. Each drops one thing: the
+   medium head's rule is 1px ink instead of the 2px divider and it carries an
+   h3 with a label on the right; the small head's rule is a hairline and it
+   carries an h4 alone, with no label. Both still run the full column width,
+   never a stub. They sit inside a section, after other content, so each pays
+   its own top room, and drops it when it is the first thing in its box. */
+.sheet-head--medium{
+  border-top:var(--line-ink);
+  margin-top:var(--section-gap-narrow);
+  margin-bottom:var(--gutter);
+}
+.sheet-head--medium .n{font-size:var(--text-meta)}
+.sheet-head--small{
+  border-top:var(--line);
+  padding-top:var(--s2);
+  margin-top:var(--gutter);
+  margin-bottom:var(--s3);
+}
+:is(.sheet-head--medium,.sheet-head--small):first-child{margin-top:0}
+
+/* ---------- facts (a definition-list grid for key figures) ---------- */
+
+.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--section-gap-narrow)}
+.facts dt{font-family:var(--font-display);font-weight:var(--w-display);font-size:var(--text-figure);letter-spacing:-.012em;margin-bottom:var(--s2)}
+.facts dd{margin:0;font-size:var(--text-body);line-height:1.5;color:var(--on-surface-soft)}
+
+/*
+  Facts grid with icons. Use when the three items are genuinely three points
+  rather than three columns of text, which is what a facts grid is for. The
+  icon sits above the term so the eye lands on it, then the number, then the
+  explanation.
+
+  One icon per fact or none at all. Two of three looks like an oversight.
+  Use one fill across the row rather than a different colour per fact; three
+  colours in one row is decoration, not signal.
+*/
+/*
+  Default icon treatment: a line icon on the term's line. Sized in em so it
+  tracks the term's type rather than a fixed pixel value. This is the preferred
+  version because the icon sits near the type's cap height and reads as part of
+  the line. A circled icon is always larger than the type beside it, which is
+  the thing that makes the row look heavier.
+*/
+.facts--line dt{display:flex; align-items:center; gap:var(--s3)}
+.facts--line dt .icon,.facts--line dt svg{width:.88em; height:.88em; color:var(--accent); flex:none}
+
+/*
+  Second option: a filled circle on the term's line. Louder, and it puts colour
+  on the page without needing a panel or a band. Use it when the document has no
+  other accent; prefer the line version otherwise.
+*/
+.facts--icons dt{display:flex; align-items:center; gap:var(--s3)}
+.facts--icons .icon-circle{width:32px; height:32px}   /* px: the contrast floor for white on sage is a 32px circle */
+.facts--icons .icon-circle .icon,.facts--icons .icon-circle svg{width:16px; height:16px}   /* px: the glyph inside a 32px circle */
+
+/* ---------- code ---------- */
+/*
+  Inline code and code blocks. The tint is cobalt, which the guide already
+  assigns to code blocks and table headers; ink on it reads 14.39:1.
+
+  The face is whatever --font-mono names, and that token ends in a platform
+  fallback stack, so a document that has not loaded the webfont still gets a
+  real monospace. Load the face in the head alongside the other two, or omit it
+  and accept the fallback; nothing breaks either way.
+
+  Code sits at --text-small against --text-body. A monospace at the same
+  nominal size reads larger than the surrounding prose because its characters
+  are wider.
+*/
+code{
+  font-family:var(--font-mono);
+  font-size:var(--text-small);
+  background:var(--accent-tint);
+  padding:.1em .35em;
+  border-radius:var(--r-code);   /* a corner this small reads as a chip; var(--r) rounds an inline run too far */
+}
+pre{
+  font-family:var(--font-mono);
+  font-size:var(--text-small);
+  line-height:1.55;
+  background:var(--accent-tint);
+  padding:var(--s4) var(--s5);
+  border-radius:var(--r);
+  white-space:pre-wrap;     /* a long line wraps inside the box; line breaks and indents stay */
+  overflow-wrap:anywhere;   /* a long URL or token breaks instead of running out of the box */
+  margin:0 0 var(--block-gap);
+}
+pre code{background:none; padding:0; font-size:inherit}
+
+/* ---------- tables ----------
+   Two styles. See docs/document-style-guide.md for when to use each.
+   A table carries space under it, so the paragraph after one is not cramped
+   against the last row. */
+
+table{width:100%;border-collapse:collapse;font-size:var(--text-body);margin:0 0 var(--s5)}  /* s5 not block-gap: the prose after a table crowded it at the smaller step */
+
+/* 1. Naked ruled table, the default. No outer border, no header tint. */
+thead th{
+  font-family:var(--font-thead);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  color:var(--thead-color);
+  text-align:left;
+  padding:0 var(--s4) var(--s3) 0;
+  border-bottom:var(--thead-rule);
+}
+td{padding:var(--s4) var(--s4) var(--s4) 0;border-bottom:var(--line);vertical-align:top}
+td:last-child,th:last-child{padding-right:0}
+
+/* 2. Bordered box table, tinted header, for dense reference tables
+      (a scope-and-duration table, a pricing table). Add class "boxed". */
+table.boxed{border:var(--line)}
+table.boxed thead th{
+  background:var(--surface-raised);
+  border-bottom:var(--thead-rule-boxed);
+  padding:var(--s3) var(--s4);
+}
+table.boxed td{padding:var(--s3) var(--s4);border-bottom:var(--line)}
+table.boxed tr:last-child td{border-bottom:0}
+table.boxed td:last-child,table.boxed th:last-child{padding-right:var(--s4)}
+
+.scrollx{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* 3. Data table, for columns of numbers. Add class "data" to either table
+      above: every figure is set in tabular numerals, so digits are the same
+      width and a column of them stacks. A cell or head holding a number takes
+      class "num" and aligns right, so the decimals and dollar signs line up.
+      A total goes in a tfoot row. .num works on its own in any table. */
+table.data,.num{font-variant-numeric:tabular-nums}
+:is(th,td).num{text-align:right}
+
+/* The total row. Any table's tfoot gets it, class or not, because a total
+   row reads the same wherever it is: display weight and a rule above that is
+   heavier than the row rules, so it reads as the sum and not as one more
+   row. The naked table takes the 2px divider, which wins over the hairline
+   under the last body row where the two meet. */
+tfoot td{font-weight:var(--w-display);border-top:var(--divider)}
+tfoot tr:last-child td{border-bottom:0}
+/* The boxed table's total takes the raised ground and a 1px ink rule; the
+   boxed table already drops the hairline under its last body row. */
+table.boxed tfoot td{background:var(--surface-raised);border-top:var(--line-ink)}
+
+/* ---------- two-column prose ---------- */
+
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:var(--section-gap-narrow)}
+.cols h4{margin-bottom:var(--s3)}
+
+/* ---------- lists ----------
+   A list with no class gets the house look, because rendered Markdown has no
+   classes. A list that carries any class has opted out, which is how .tasks,
+   .cal-events and .email-list keep their own shape. Every list, including
+   one inside the insight panel, draws its marker at left:0 and starts its
+   text at the same inset, so stacked lists line up to the pixel. */
+
+/* Dot-bullet list. Pick one accent colour per list, don't mix cobalt and sage dots. */
+ul:where(:not([class]), .dot){list-style:none;padding:0;margin:0 0 var(--block-gap)}
+ul:where(:not([class]), .dot) > li{position:relative;padding-left:2.1em;   /* same inset as a numbered list, so text starts on one line when the two stack */margin-bottom:var(--s3);font-size:var(--text-body);line-height:1.5}
+ul:where(:not([class]), .dot) > li::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:.6em;
+  width:7px;      /* px: the dot's drawn size, fixed so it does not swell with the line */
+  height:7px;     /* px: the dot's drawn size */
+  border-radius:50%;
+  background:var(--mark);
+}
+ul.dot--cobalt li::before{background:var(--accent)}
+
+/* Numbered steps, optionally two columns for short lines. The numeral is
+   drawn by a counter at a fixed inset rather than left to the browser's own
+   marker, so every numbered list has the same gap between numeral and text
+   as the accent version below. Ken asked for the two to match. */
+ol:where(:not([class]), .steps){list-style:none;counter-reset:step;margin:0 0 var(--block-gap);padding-left:0}
+ol:where(:not([class]), .steps) > li{counter-increment:step;position:relative;padding-left:2.1em;margin-bottom:var(--s3);font-size:var(--text-body);line-height:1.5;break-inside:avoid}
+ol:where(:not([class]), .steps) > li::before{
+  content:counter(step) ".";
+  position:absolute; left:0; top:0;
+  color:var(--on-surface);
+}
+ol.steps b{font-family:var(--font-display);font-weight:var(--w-display)}
+/* A list that starts at a number other than one keeps the browser's own
+   numerals, since a CSS counter cannot read the start attribute everywhere
+   yet. The text inset stays the same, so it still lines up with its
+   neighbours; only the numeral is drawn by the browser. */
+ol:where(:not([class]), .steps)[start]{list-style:decimal;padding-left:2.1em}
+ol:where(:not([class]), .steps)[start] > li{padding-left:0}
+ol:where(:not([class]), .steps)[start] > li::before{content:none}
+/* Where the browser can read the start attribute into the counter (Chromium
+   can), the list keeps its drawn numeral on the shared line instead. */
+@supports (counter-reset: step calc(attr(start type(<integer>), 1) - 1)){
+  ol:where(:not([class]), .steps)[start]{list-style:none;padding-left:0;counter-reset:step calc(attr(start type(<integer>), 1) - 1)}
+  ol:where(:not([class]), .steps)[start] > li{padding-left:2.1em}
+  ol:where(:not([class]), .steps)[start] > li::before{content:counter(step) "."}
+}
+
+ol.steps--two-col{columns:2;column-gap:var(--section-gap-narrow)}
+
+/* Checklist, for what is included rather than what to do in order. The
+   check is drawn in the mark colour at the list's usual inset, so a
+   checklist lines up with a dot list or a numbered list stacked beside it.
+   Like the insight icon, it is a mask painted with a token, so a restyle can
+   reach its colour. The stroke is 2, since the glyph is drawn smaller than
+   an icon beside body text and a thinner line breaks up at that size. */
+ul.checklist{list-style:none;padding:0;margin:0 0 var(--block-gap)}
+ul.checklist > li{position:relative;padding-left:2.1em;margin-bottom:var(--s3);line-height:1.5}
+ul.checklist > li::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:.2em;
+  width:1.1em;
+  height:1.1em;
+  background-color:var(--mark);
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* ---------- step sequence, boxed ----------
+   An ol for a process whose steps each carry a name and a line of detail.
+   Two layouts:
+     .sequence          one ink border round the whole set, the steps side
+                        by side with hairlines between them. Four steps or
+                        fewer; it stacks under the facts grid's width.
+     .sequence--rows    ruled rows, the number hanging at the list inset.
+                        For more than four steps, or a step that needs more
+                        than two lines.
+   The number is drawn by a counter in the accent, the structural colour, so
+   the markup is only the step's name and its line. The plain numbered list
+   (ol.steps) stays: it is for a sequence of sentences, this is for a
+   sequence of named stages. */
+ol.sequence{
+  list-style:none;
+  counter-reset:seq;
+  margin:0 0 var(--block-gap);
+  padding:0;
+  max-width:none;   /* a grid, not prose: it opts out of the reading measure like the facts grid */
+  display:grid;
+  grid-auto-flow:column;
+  grid-auto-columns:minmax(0,1fr);
+  border:var(--line-ink);
+  border-radius:var(--r-lg);
+  overflow:hidden;
+}
+ol.sequence > li{counter-increment:seq;padding:var(--s4) var(--s5) var(--s5);line-height:1.5}
+ol.sequence > li + li{border-left:var(--line)}
+ol.sequence > li::before{
+  content:counter(seq);
+  display:block;
+  margin-bottom:var(--s3);
+  font-family:var(--font-number);
+  font-weight:var(--w-display);
+  font-size:var(--text-small);
+  font-variant-numeric:tabular-nums;
+  color:var(--accent);
+}
+ol.sequence h4{margin-bottom:var(--s1)}
+ol.sequence p{margin:0;font-size:var(--text-small);color:var(--on-surface-soft)}
+
+ol.sequence--rows{display:block;border:0;border-radius:0;overflow:visible}
+ol.sequence--rows > li{
+  display:grid;
+  grid-template-columns:2.1em minmax(0,1fr);   /* the numeral column is the list inset every list shares */
+  padding:var(--s4) 0;
+  border-top:var(--line);
+}
+ol.sequence--rows > li + li{border-left:0}
+ol.sequence--rows > li:last-child{border-bottom:var(--line)}
+ol.sequence--rows > li::before{margin:0;font-size:var(--text-body);line-height:var(--lh-heading)}
+
+/* ---------- eyebrow label ----------
+   A short faint label above a heading: "Quarterly review", "Option B",
+   "Section 2". It carries the heading's top room and the heading after it
+   drops its own, so the pair sits where the heading alone would have. No
+   rule and no box under it: a stub rule under a label is the device that
+   keeps failing. */
+.eyebrow{
+  margin:var(--section-gap-narrow) 0 var(--s2);
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  line-height:1.3;
+  color:var(--on-surface-faint);
+}
+.eyebrow:first-child{margin-top:0}
+.eyebrow + :is(h1,h2,h3,h4,h5,h6){margin-top:0}
+
+/* ---------- badges ----------
+   A small square tag for a status or a category: Open, Done, Draft. Square
+   corners in every case; a rounded tag reads as a pill button. Five fills,
+   one per badge:
+     .badge              ink, the loudest
+     .badge--outline     an ink outline on the page ground
+     .badge--cobalt      accent on its tint, 5.17:1
+     .badge--purple      emphasis on its tint, 10.17:1
+     .badge--sage        ink on the sage tint. The sage itself measures
+                         4.05:1 on its tint, under the floor at this size,
+                         so the word is ink and the dot carries the sage.
+   A badge may lead with a status dot (.badge-dot) or a Lucide icon. The
+   border is always drawn, transparent where there is none, so every badge
+   is the same height. */
+.badge{
+  display:inline-flex;
+  align-items:center;
+  gap:var(--s2);
+  padding:var(--s1) var(--s2);
+  border:1px solid var(--structure);
+  border-radius:0;
+  background:var(--structure);
+  color:var(--on-structure);
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-micro);
+  line-height:1.4;
+  vertical-align:middle;
+  white-space:nowrap;
+}
+.badge--outline{background:var(--surface);color:var(--on-surface)}
+.badge--cobalt{background:var(--accent-tint);border-color:transparent;color:var(--accent)}
+.badge--purple{background:var(--emphasis-tint);border-color:transparent;color:var(--emphasis)}
+.badge--sage{background:var(--tint);border-color:transparent;color:var(--on-surface)}
+.badge .icon,.badge svg{width:1.15em;height:1.15em;vertical-align:0}
+.badge-dot{
+  width:7px;      /* px: the dot's drawn size, the same as a list's dot */
+  height:7px;     /* px: the dot's drawn size */
+  border-radius:50%;
+  flex:none;
+  background:var(--mark);
+}
+.badge:not([class*="badge--"]) .badge-dot{background:currentColor}   /* the ink badge: a sage dot on ink is under the mark floor */
+/* A row of badges. */
+.badges{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s3);margin:0 0 var(--block-gap)}
+
+/* ---------- stat tiles ----------
+   The number-first sibling of the facts grid, which is words-first. Each tile
+   is a faint label, a large number in tabular numerals, and one meta line.
+   Three looks:
+     .stat            a hairline border
+     .stat--tint      the default quiet tint instead of the border. A tint
+                      is the alternative to a border, never added to it.
+     .stat--large     the one number a section is about. It runs the width
+                      of its row, with the number on the left and the label
+                      and meta beside it.
+   No coloured top edge on any of them: that device is what makes a tile read
+   as a template. The row fits as many tiles as it holds, up to four across
+   in the column, and two across on a phone. */
+.stats{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));
+  gap:var(--block-gap);
+  margin:0 0 var(--block-gap);
+}
+.stat{
+  border:var(--line);
+  border-radius:var(--r-lg);
+  padding:var(--s4) var(--s4) var(--s5);
+  min-width:0;
+}
+.stat--tint{background:var(--tint);border-color:transparent}
+.stat p{margin:0;max-width:none}
+.stat-label{font-size:var(--text-meta);line-height:1.3;color:var(--on-surface-faint)}
+.stat .stat-label{margin-bottom:var(--s3)}
+.stat-value{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-stat);
+  line-height:1;
+  letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;
+}
+.stat .stat-value{margin-bottom:var(--s2)}
+.stat-meta{font-size:var(--text-meta);line-height:1.35;color:var(--on-surface-soft)}
+
+.stat--large{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr);
+  grid-template-areas:"value label" "value meta";
+  column-gap:var(--gutter);
+  align-items:end;
+  padding:var(--gutter) var(--s6);
+  margin:0 0 var(--block-gap);
+}
+.stat--large .stat-label{grid-area:label;align-self:end;margin-bottom:var(--s1);font-size:var(--text-small)}
+.stat--large .stat-value{grid-area:value;font-size:var(--text-stat-large);margin:0}
+.stat--large .stat-meta{grid-area:meta;align-self:start;font-size:var(--text-small)}
+
+/* ---------- pull quote ----------
+   One line of the display face, lifted out of the body. Two looks: plain, or
+   ruled above and below with a full-width ink line. Never quotation marks,
+   never a coloured side bar; the base blockquote keeps its hairline side
+   rule, and this is not that. The line is capped at half the reading
+   measure, so it breaks into short lines rather than one long one. */
+blockquote.pullquote{
+  margin:var(--section-gap-narrow) 0;
+  padding:0;
+  border:0;
+  max-width:none;
+  color:var(--on-surface);
+}
+blockquote.pullquote p{
+  max-width:calc(var(--read) / 2);
+  margin:0 0 var(--s4);
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-quote);
+  line-height:1.24;
+  letter-spacing:-.012em;
+  overflow-wrap:normal;
+}
+blockquote.pullquote footer{font-size:var(--text-small);line-height:1.5;color:var(--on-surface-soft)}
+blockquote.pullquote.pullquote--ruled{border-block:var(--line-ink);padding-block:var(--s5)}
+
+/* ---------- figure with a caption plate ----------
+   An image or chart printed on a plate: a hairline frame, the picture with
+   room round it, and the caption on its own strip under a hairline, led by a
+   bold figure number. Two plates:
+     figure.plate          white, the default
+     figure.plate--tint    the raised ground behind the picture; the caption
+                           strip stays on the page ground
+   The plain figure (no class) stays as it is: no frame at all. */
+figure.plate{
+  padding:0;
+  border:var(--line);
+  border-radius:var(--r-lg);
+  background:var(--surface);
+  overflow:hidden;
+}
+figure.plate > :is(img,svg,picture){
+  display:block;
+  width:100%;
+  height:auto;
+  padding:var(--s5) var(--s5) var(--s4);
+}
+figure.plate--tint > :is(img,svg,picture){background:var(--surface-raised)}
+figure.plate figcaption{
+  margin:0;
+  padding:var(--s3) var(--s5);
+  border-top:var(--line);
+  font-size:var(--text-small);
+  color:var(--on-surface-soft);
+}
+figure.plate figcaption b{font-family:var(--font-display);font-weight:var(--w-display);color:var(--on-surface)}
+
+/* ---------- option cards ----------
+   A grid of cards for a page that asks the reader to pick. Each card holds a
+   short label (an eyebrow or a badge), a name, a line or two, and, if it
+   helps, a short list. The grid fits as many cards as the column holds and
+   stacks on a phone. A recommended option says so with a badge, not with a
+   coloured edge. */
+.options{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));
+  gap:var(--block-gap);
+  margin:0 0 var(--block-gap);
+}
+.option{
+  position:relative;
+  border:var(--line);
+  border-radius:var(--r-lg);
+  padding:var(--s5);
+  min-width:0;
+}
+.option > :first-child{margin-top:0}
+.option > :last-child{margin-bottom:0}
+.option h4{margin-bottom:var(--s2)}
+/* A badge sits on the card's top border at the right, out of the flow, so a
+   recommended card's text starts at the same height as its neighbours. */
+.option > .badge{position:absolute;top:0;right:var(--s5);transform:translateY(-50%);margin:0}
+.option > .badge:first-child + *{margin-top:0}   /* the badge left the flow; what follows is the first line */
+.option p:not(.eyebrow){color:var(--on-surface-soft)}
+.option :is(ul,ol) > li{margin-bottom:var(--s2)}
+
+/* ---------- cards ----------
+   Two or three parallel points side by side: the three findings, the parts
+   of a comparison. Each card is a name and a short body, bullets allowed. It
+   is the option card's quieter sibling: the same frame, no badge, and nothing
+   asks the reader to pick. A lone .card outside .cards is one framed block in
+   the column. The grid fits up to three across in the column (15rem is the
+   option grid's floor, so the two read as one family) and stacks on a phone. */
+.cards{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));
+  gap:var(--block-gap);
+  margin:0 0 var(--block-gap);
+}
+.card{
+  border:var(--line);
+  border-radius:var(--r-lg);
+  padding:var(--s5);
+  margin:0 0 var(--block-gap);
+  min-width:0;
+}
+.cards > .card{margin:0}
+.card > :first-child{margin-top:0}
+.card > :last-child{margin-bottom:0}
+.card h4{margin:0 0 var(--s2)}
+.card :is(p,li){color:var(--on-surface-soft)}
+.card :is(ul,ol) > li{margin-bottom:var(--s2)}
+
+/* ---------- choice group ----------
+   A question with a set of answers the reader clicks. It grew out of option
+   cards: the cards explain the alternatives, the group collects the answer.
+   The agent writes a question and real buttons; Lahe arms them on a page it
+   serves, and a click goes to the agent as the answer.
+
+   The buttons are square and outlined, like a badge, never a pill. The
+   recommended one carries the Recommended badge, drawn here from
+   data-recommended so the agent writes no badge markup. The answer is the
+   one ink fill in the group, and the other buttons go quiet. Two attributes
+   name the answer:
+     data-chosen         on a button, written into the source by the agent once
+                         it has acted. A page with no Lahe still shows it, and
+                         so does print.
+     data-lahe-pressed   on a button, painted by Lahe while a review runs: the
+                         button the reviewer pressed. A newer press than the one
+                         written into the source, so it wins and the chosen
+                         button goes quiet.
+   Lahe also paints data-lahe-choice-state on the group, and the state shows
+   as a word at the end of the row in the rail's own words. A group Lahe
+   refused (a bad name, one button) gets data-lahe-inert and draws as plain
+   content: a dashed box, quiet buttons, no hover.
+
+   The box border is a hairline on all four sides in every state. The state
+   is a word, never a colour alone. */
+.choice{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:var(--s3);
+  margin:0 0 var(--block-gap);
+  padding:var(--s4) var(--s5);
+  border:var(--line);
+  border-radius:var(--r-lg);
+}
+.choice:last-child{margin-bottom:0}
+.choice > .choice-q{
+  flex:1 0 100%;
+  max-width:none;
+  margin:0 0 var(--s1);
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  color:var(--on-surface);
+}
+.choice > button{
+  display:inline-flex;
+  align-items:center;
+  gap:var(--s2);
+  margin:0;
+  padding:var(--s2) var(--s4);
+  border:var(--line-ink);
+  border-radius:0;
+  background:var(--surface);
+  color:var(--on-surface);
+  font-family:var(--font-display);
+  font-weight:var(--w-medium);
+  font-size:var(--text-small);
+  line-height:1.4;
+  cursor:pointer;
+  -webkit-appearance:none;
+  appearance:none;
+}
+.choice > button:focus-visible{border-radius:0}   /* the house ring, square like the button */
+
+/* The Recommended badge: the badge--purple look, inside the button so it
+   travels with the answer it marks. Its block padding is zero so a button
+   that carries it is the same height as one that does not. */
+.choice > button[data-recommended]::after{
+  content:"Recommended";
+  padding:0 var(--s2);
+  background:var(--emphasis-tint);
+  color:var(--emphasis);
+  font-weight:var(--w-display);
+  font-size:var(--text-micro);
+  line-height:1.4;
+  white-space:nowrap;
+}
+
+/* The answer: ink, and the rest of the group quiet. */
+.choice > button:is([data-chosen],[data-lahe-pressed]){
+  background:var(--structure);
+  border-color:var(--structure);
+  color:var(--on-structure);
+}
+.choice:has(> button:is([data-chosen],[data-lahe-pressed])) > button:not([data-chosen],[data-lahe-pressed]),
+.choice:has(> button[data-lahe-pressed]) > button[data-chosen]:not([data-lahe-pressed]){
+  background:var(--surface);
+  border-color:var(--border);
+  color:var(--on-surface-soft);
+}
+
+/* The state word, at the end of the row. A data-chosen group with no state
+   painted is decided, and reads as Done, the same as the rail's done. */
+.choice[data-lahe-choice-state]::after,
+.choice:not([data-lahe-choice-state]):has(> button[data-chosen])::after{
+  margin-left:auto;
+  padding:var(--s1) var(--s2);
+  border:1px solid transparent;
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-micro);
+  line-height:1.4;
+  white-space:nowrap;
+}
+.choice[data-lahe-choice-state="kept"]::after{content:"Kept in this browser";border-color:var(--border);color:var(--on-surface-soft)}
+.choice[data-lahe-choice-state="open"]::after{content:"Open";background:var(--accent-tint);color:var(--accent)}
+.choice[data-lahe-choice-state="question"]::after{content:"Question";background:var(--structure);color:var(--on-structure)}
+.choice[data-lahe-choice-state="not_handled"]::after{content:"Open";border-color:var(--structure);color:var(--on-surface)}
+.choice[data-lahe-choice-state="done"]::after,
+.choice:not([data-lahe-choice-state]):has(> button[data-chosen])::after{content:"Done";background:var(--tint);color:var(--on-surface)}
+
+/* Hover, on a button that is not the answer, in a group that is not refused. */
+.choice:not([data-lahe-inert]) > button:not([data-chosen],[data-lahe-pressed]):hover{background:var(--surface-raised)}
+
+/* Refused: plain content, not live buttons. The rail says which group and
+   why. A decision already in the source still shows. */
+.choice[data-lahe-inert]{border-style:dashed}
+.choice[data-lahe-inert] > button{cursor:default}
+.choice[data-lahe-inert] > button:not([data-chosen],[data-lahe-pressed]){border-color:var(--border);color:var(--on-surface-soft)}
+/* A refused group shows no decision either: two buttons carrying data-chosen is one
+   of the reasons it was refused, so neither may draw as the answer. */
+.choice[data-lahe-inert] > button:is([data-chosen],[data-lahe-pressed]){background:var(--surface);border-color:var(--border);color:var(--on-surface-soft)}
+.choice[data-lahe-inert]::after{content:none}
+
+/* ---------- images ----------
+   Five ways to place a picture beyond the plain one in the column. Every one
+   draws the same frame (--image-frame, a hairline in the house) so a
+   screenshot of a white page does not melt into the white page. */
+
+/* Image beside text: a picture and a short block of text side by side, the
+   picture taking two fifths. .media--right puts the picture on the right.
+   Under the facts grid's width it stacks, picture first either way. */
+.media{
+  display:grid;
+  grid-template-columns:minmax(0,2fr) minmax(0,3fr);
+  gap:var(--gutter);
+  align-items:start;
+  margin:0 0 var(--gutter);
+}
+.media > img,.media > .peek-pair{border:var(--image-frame);border-radius:var(--image-radius)}
+.media > img{display:block;width:100%;height:auto}
+.media--right{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}
+.media--right > :is(img,.peek-pair){order:2}
+.media-body h4{margin-bottom:var(--s2)}
+
+/* Image cards: a picture on top, then a name and a line. Two across by
+   default, .image-cards--3 for three. The picture is cropped to one shape so
+   a row lines up, anchored at the top, where a screenshot's title is. */
+.image-cards{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:var(--block-gap);
+  margin:0 0 var(--block-gap);
+}
+.image-cards--3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.image-card{border:var(--image-frame);border-radius:var(--r-lg);overflow:hidden;min-width:0}
+.image-card > img{
+  display:block;
+  width:100%;
+  aspect-ratio:16 / 10;
+  object-fit:cover;
+  object-position:top;
+  border-bottom:var(--image-frame);
+}
+.image-card-body{padding:var(--s4) var(--s5) var(--s5)}
+.image-card-body h4{margin-bottom:var(--s1)}
+.image-card-body p{margin:0;font-size:var(--text-small);color:var(--on-surface-soft)}
+
+/* Gallery: a grid of figures, each with one caption line. Two-up by default,
+   .gallery--3 for three-up. It holds figures, not cards, so there is no box
+   round each one, only the picture's frame. Three-up drops to two under the
+   facts grid's width; two-up stays two, since a gallery is thumbnails. */
+.gallery{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:var(--block-gap);
+  margin:0 0 var(--block-gap);
+}
+.gallery--3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.gallery figure{margin:0;min-width:0}
+.gallery img{
+  display:block;
+  width:100%;
+  aspect-ratio:4 / 3;
+  object-fit:cover;
+  object-position:top;
+  border:var(--image-frame);
+  border-radius:var(--image-radius);
+}
+
+/* Full-width image: a picture that runs to the page edge, for a hero shot or
+   a wide chart. It works the way a band does: a figure.bleed is a direct
+   child of the body, the column rule at the top of this file lets it run
+   edge to edge, and its caption comes back into the column. A picture taller
+   than most of the screen is cropped from the top. */
+figure.bleed{margin:0;padding:0;border:0;background:none}
+.bleed > :is(img,picture,svg,video){
+  display:block;
+  width:100%;
+  height:auto;
+  max-height:70vh;
+  object-fit:cover;
+  object-position:top;
+  border-block:var(--image-frame);
+}
+.bleed > figcaption{margin-top:var(--s2)}
+
+/* Peek pair: a main picture filling a frame, with a second one inset at an
+   angle, peeking in from the lower right. For showing two views of one thing
+   (a page and its table). The pair fills the width it is given and keeps one
+   shape, so put it in a grid cell, a .media block or an image card rather
+   than across the whole column. The inset carries an ink frame so it reads as
+   a second sheet laid on the first. */
+.peek-pair{
+  position:relative;
+  display:block;
+  aspect-ratio:16 / 11;
+  overflow:hidden;
+  background:var(--surface-raised);
+  border:var(--image-frame);
+  border-radius:var(--image-radius);
+}
+.peek-pair > img{position:absolute;display:block;height:auto}
+.peek-pair > img:first-child{inset:0;width:100%;height:100%;object-fit:cover;object-position:top}
+.peek-pair > img + img{
+  width:60%;
+  right:-7%;
+  bottom:-16%;
+  transform:rotate(4deg);
+  border:var(--line-ink);
+}
+
+/* ---------- panel: a tint holding a short aside (one to three sentences) ---------- */
+
+/*
+  Tinted panel. Three colourways, all carrying ink at about 14.3:1 and ink-soft
+  at about 6.6:1, so the choice is tone rather than contrast:
+    sage    the default, quiet, for a caveat or an aside
+    cobalt  for something structural, a definition or a scope note
+    purple  for the one thing on the page worth pausing on
+  One tint per page. Two tinted panels in different colours read as decoration.
+*/
+.panel{background:var(--tint);padding:var(--gutter);border-radius:var(--r)}
+/* The modifier names still say the house hues. They paint through roles, so a
+   style never needs to touch them; a follow-up can rename them to the roles. */
+.panel--cobalt{background:var(--accent-tint)}
+.panel--purple{background:var(--emphasis-tint)}
+/*
+  The error panel. The one panel that carries the danger red, and only for a
+  problem: something failed, is missing, or did not save. Same shape as the
+  other three (tint, padding, corner), plus the full 1px border every status
+  notice carries, so red never relies on hue alone. The bold lead is the
+  label and takes the red; the explanation after it stays ink.
+    danger label on its tint   6.26:1
+    ink on the danger tint    14.54:1
+  It sits outside the one-tint-per-page budget, like every status colour.
+*/
+.panel--danger{background:var(--danger-tint);border:1px solid var(--danger)}
+.panel--danger b{color:var(--danger)}
+.panel p:last-child{margin-bottom:0}
+
+/* ---------- insight panel: a tinted panel with a generated label row ---------- */
+
+/*
+  A tint carrying a label row (icon plus label) and then the content: a bold
+  lead line, and under it either a short numbered list or another sentence or
+  two. The label and the icon are generated by CSS, so the markup holds only
+  the content.
+
+  Two variants, and two is the limit:
+    .insight            cobalt tint, label "Key insight", for the point a
+                        reader should carry out of the section
+    .insight--caveat    purple tint, label "Caveat", for the limit or the
+                        objection attached to what was just said
+
+  Contrast, measured. The label is --text-meta at display weight, under the
+  WCAG large-text threshold, so it has to clear 4.5:1 on its own tint:
+    cobalt label on cobalt-tint    5.17:1
+    purple label on purple-tint   10.17:1
+    sage label on sage-tint        4.05:1   fails, so there is no sage variant
+  Body text inside is ink: 14.39:1 on cobalt tint, 14.30:1 on purple tint.
+
+  Never give this panel a single-side coloured border. The tint is the device.
+*/
+.insight{
+  position:relative;          /* the icon below is placed against this box */
+  margin:var(--gutter) 0;
+  padding:var(--gutter);
+  border-radius:var(--r);
+  max-width:var(--read);
+  background:var(--accent-tint);
+  font-size:var(--text-body);
+  line-height:1.6;
+}
+.insight--caveat{background:var(--emphasis-tint)}
+
+.insight::before{
+  display:block;
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  margin-bottom:var(--s2);
+  padding-left:22px;    /* px: the 16px icon plus its gap, so the label clears it */
+  min-height:18px;      /* px: the icon's box, so a one-line label never clips it */
+  content:"Key insight";
+  color:var(--accent);
+}
+.insight--caveat::before{
+  content:"Caveat";
+  color:var(--emphasis);
+}
+
+/*
+  The icon is a mask, not a background image. A data-URI background has the
+  stroke colour written into it as a hex, which puts a colour outside the token
+  file and means a restyle cannot reach it. A mask paints the pseudo-element's
+  own background-color through the glyph, so the colour is the token and the
+  SVG carries only the shape. It sits on ::after rather than ::before because a
+  mask clips everything the element paints, and ::before is the label text.
+*/
+.insight::after{
+  content:"";
+  position:absolute;
+  left:var(--gutter);
+  top:calc(var(--gutter) + 3.2px);   /* px: half the label's 22.4px line box less half the 16px icon, which is where background-position:center put it */
+  width:16px;                        /* px: the icon's drawn size */
+  height:16px;                       /* px: the icon's drawn size */
+  background-color:var(--accent);
+  -webkit-mask-repeat:no-repeat;
+  mask-repeat:no-repeat;
+  -webkit-mask-size:contain;
+  mask-size:contain;
+  -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18h6'/%3E%3Cpath d='M10 22h4'/%3E%3Cpath d='M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14'/%3E%3C/svg%3E");
+  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18h6'/%3E%3Cpath d='M10 22h4'/%3E%3Cpath d='M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14'/%3E%3C/svg%3E");
+}
+.insight--caveat::after{
+  background-color:var(--emphasis);
+  -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
+  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
+}
+/*
+  Override the label text with data-label when "Key insight" or "Caveat" is
+  wrong for the content. The icon and the colour stay with the variant.
+  Keep the replacement to two or three words; it is a label, not a heading.
+*/
+.insight[data-label]::before{content:attr(data-label)}
+
+/* Lists inside the panel use the same inset and drawn markers as every other
+   list, so text lines up across the page; only the marker takes the panel's
+   colour. */
+.insight li{margin:0 0 var(--s2)}
+.insight ol > li::before{color:var(--accent)}
+.insight--caveat ol > li::before{color:var(--emphasis)}
+.insight ul > li::before{background:var(--accent)}
+.insight--caveat ul > li::before{background:var(--emphasis)}
+.insight > :first-child{margin-top:0}
+.insight > :last-child{margin-bottom:0}
+
+/* ---------- callout: a filled, saturated block holding one short line ---------- */
+
+/*
+  Four fills. White text on each, with measured contrast:
+    ink 16.68:1, purple 11.87:1, cobalt 5.99:1, sage 4.67:1.
+  Sage is the tightest and passes only because callout text is short. Do not
+  put a long paragraph on sage, and never drop callout text below body size.
+  It is the loudest small element available.
+*/
+.callout{background:var(--structure);color:var(--on-structure);padding:var(--s4) var(--gutter);border-radius:var(--r)}
+/* Hue-named modifiers painting through roles; a follow-up can rename them.
+   The third fill names its own text colour, because a style's third fill may
+   be light enough that it carries ink rather than white. */
+.callout--cobalt{background:var(--accent);color:var(--on-accent)}
+.callout--purple{background:var(--emphasis);color:var(--on-emphasis)}
+.callout--sage{background:var(--fill);color:var(--on-fill)}
+.callout p{color:inherit;margin:0}
+
+/* ---------- icons ---------- */
+/*
+  Any icon set works: Lucide, Font Awesome, Hero Icons. The rules are about
+  size, stroke and colour, not about which library. Lucide is the default
+  because the web surface already uses it.
+
+  Stroke weight tracks the type it sits beside. 1.75 next to body text,
+  2 next to display weights. An icon that is purely decorative gets
+  aria-hidden="true". An icon carrying meaning gets a label.
+*/
+.icon,[data-lucide],svg.lucide{
+  width:1.15em; height:1.15em;
+  stroke-width:1.75;
+  flex:none;
+  vertical-align:-.16em;
+}
+
+/* Inline icon leading a line of text. */
+.icon-line{display:flex; gap:var(--s3); align-items:flex-start}
+.icon-line .icon,.icon-line svg{margin-top:.15em; color:var(--on-surface)}
+
+/*
+  Icon in a filled circle. The second way to get colour onto a page, and the
+  quieter one, since a circle is small.
+  Contrast of white on each fill, all above the 4.5 floor:
+    ink 16.68:1, purple 11.87:1, cobalt 5.99:1, sage 4.67:1.
+  Sage is the tightest. Do not put white on a sage circle smaller than 32px.
+*/
+.icon-circle{
+  width:44px;      /* px: the circle's drawn size, also the tap-target floor */
+  height:44px;     /* px: the circle's drawn size */
+  border-radius:50%;
+  display:grid; place-items:center; flex:none;
+  background:var(--structure); color:var(--on-structure);
+}
+.icon-circle .icon,.icon-circle svg{width:20px; height:20px; vertical-align:0}   /* px: the glyph inside a 44px circle */
+/* Hue-named modifiers painting through roles, as with .callout above. */
+.icon-circle--cobalt{background:var(--accent);color:var(--on-accent)}
+.icon-circle--purple{background:var(--emphasis);color:var(--on-emphasis)}
+.icon-circle--sage{background:var(--fill);color:var(--on-fill)}
+
+/*
+  The icon reference. Twelve Lucide icons cover what documents need: check,
+  arrow-right, file-text, calendar, users, mail, search, terminal,
+  git-branch, book-open, clock, triangle-alert. A new one is added to this
+  list, and to the skeleton's reference section, before it is used.
+
+  Stroke follows type weight. 1.75 is the default above, for an icon beside
+  body text. Beside display type (a heading, a badge, an eyebrow) the letters
+  are heavier, so the stroke steps up to 2 to match.
+
+  Four colours, and an icon takes one of them: ink (the default, inherited
+  from the text), the accent for structure, the emphasis for the one thing to
+  act on, and the mark for status. */
+:is(h1,h2,h3,h4,h5,h6,.badge,.eyebrow) :is(.icon,[data-lucide],svg.lucide){stroke-width:2}
+/* :is() lifts these above the .icon-line colour, so a colour class wins
+   wherever the icon sits. */
+:is(.icon,svg,i).icon--cobalt{color:var(--accent)}
+:is(.icon,svg,i).icon--purple{color:var(--emphasis)}
+:is(.icon,svg,i).icon--sage{color:var(--mark)}
+/* The reference grid in the skeleton: each icon at its drawn size over its
+   name. */
+.icon-set{
+  display:grid;
+  grid-template-columns:repeat(6,minmax(0,1fr));
+  gap:var(--block-gap);
+  list-style:none;
+  margin:0 0 var(--block-gap);
+  padding:0;
+  max-width:none;   /* a grid, not prose */
+}
+.icon-set li{display:flex;overflow-wrap:anywhere;flex-direction:column;align-items:center;gap:var(--s2);text-align:center;font-size:var(--text-meta);line-height:1.3;color:var(--on-surface-faint)}
+.icon-set li > :is(.icon,[data-lucide],svg):not([class*="icon--"]){color:var(--on-surface)}
+.icon-set code{font-size:var(--text-micro)}
+.icon-set :is(.icon,[data-lucide],svg){width:24px;height:24px}   /* px: Lucide's drawn size, one-to-one with its 24-unit grid */
+
+/* A row of icon-circle plus text, for a short list of capabilities or steps. */
+.icon-row{display:flex; gap:var(--s4); align-items:flex-start; margin-bottom:var(--gutter)}
+.icon-row h4{margin-bottom:var(--s2)}
+.icon-row p{margin:0; color:var(--on-surface-soft)}
+
+/* ---------- numbered list, optional coloured numerals ---------- */
+/*
+  Plain steps leave the numerals in ink. Add .steps--accent to colour them,
+  which matches the sage dots on a dot list. Use one or the other in a
+  document, not both, or the page starts to look decorated.
+*/
+ol.steps--accent > li::before{
+  font-family:var(--font-display); font-weight:var(--w-display);
+  color:var(--mark);
+}
+
+/* ---------- folded section ----------
+   A native <details>, closed by default. The summary row is the section's
+   head, styled the same as a numbered section's: the hanging rule, an h2 at
+   full heading size, the section number on the right. A chevron sits on the
+   left of the heading, where a disclosure control conventionally lives, and
+   turns to point down when the section is open. No text label: "Show" and
+   "Hide" beside the heading made the row messy.
+
+   It owns only its top spacing, not the bottom, so a closed section takes no
+   more room than its head. The bottom gap lives on .fold-body, which a closed
+   <details> does not render at all. */
+
+details.fold{padding-block-start:var(--section-gap)}
+
+details.fold summary.fold-head{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:var(--s4);
+  flex-wrap:wrap;
+  min-height:44px;              /* px: the tap-target floor, since the whole row is the control */
+  border-top:var(--divider);
+  padding-top:var(--s3);
+  cursor:pointer;
+  list-style:none;
+}
+details.fold summary.fold-head::-webkit-details-marker{display:none}
+details.fold summary.fold-head::marker{content:""}
+details.fold summary.fold-head h2{flex:1 1 auto}
+details.fold summary.fold-head .n{
+  font-family:var(--font-number);
+  font-weight:var(--w-display);
+  font-size:var(--text-small);
+  color:var(--number-color);
+  flex:none;
+}
+details.fold summary.fold-head .fold-arrow{
+  flex:none;
+  align-self:center;
+  width:10px;     /* px: the chevron is drawn from two borders, so its size is geometry */
+  height:10px;    /* px: the chevron's drawn size */
+  margin-right:var(--s1);
+  border-right:2px solid var(--on-surface-faint);
+  border-bottom:2px solid var(--on-surface-faint);
+  transform:rotate(-45deg);      /* closed: points right */
+  transition:transform .15s ease;
+}
+details.fold[open] summary.fold-head .fold-arrow{transform:rotate(45deg)}   /* open: points down */
+details.fold .fold-body{padding-top:var(--section-gap-narrow);padding-bottom:var(--section-gap)}
+
+/* ---------- check-in block ----------
+   A timestamped, unnumbered section. On the day page the newest one renders
+   open and older ones fold below it using the folded section above. */
+
+.checkin{padding-block:var(--section-gap-narrow)}
+.checkin .checkin-head{
+  border-top:var(--divider);
+  padding-top:var(--s3);
+  margin-bottom:var(--gutter);
+}
+.checkin .checkin-head .time{
+  display:block;
+  font-size:var(--text-meta);
+  line-height:1.5;
+  color:var(--on-surface-faint);
+  margin-top:var(--s2);
+}
+
+/* ---------- calendar grids ----------
+   Week view: seven columns, today first. Month view: weeks as rows, held
+   inside .scrollx so a narrow screen scrolls the grid rather than the page.
+   No drop shadow anywhere in this block; today is marked with a heavier rule
+   and a filled day-number label. */
+
+.cal-week{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:var(--s4);
+}
+.cal-day{
+  border-top:var(--line);
+  padding-top:var(--s3);
+}
+.cal-day--today{border-top:var(--divider)}
+
+.cal-day-head{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:var(--s2);
+  margin-bottom:var(--s3);
+}
+.cal-wd{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  color:var(--on-surface-faint);
+}
+.cal-dn{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-body);
+  color:var(--on-surface);
+}
+.cal-day--today .cal-dn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:22px;    /* px: the pill around a two-digit day number */
+  height:22px;       /* px: the pill's drawn height */
+  padding-inline:var(--s1);
+  border-radius:var(--r-pill);
+  background:var(--structure);
+  color:var(--surface);
+}
+
+.cal-events{list-style:none;margin:0;padding:0}
+.cal-event{
+  display:flex;
+  flex-direction:column;
+  gap:1px;            /* px: the time and the title are one unit, a hair apart, not two lines */
+  margin-bottom:var(--s3);
+  font-size:var(--text-meta);
+  line-height:1.4;
+}
+.cal-event:last-child{margin-bottom:0}
+.cal-time{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-micro);
+  color:var(--on-surface-faint);
+}
+.cal-event--allday .cal-time{color:var(--mark)}
+.cal-title{color:var(--on-surface)}
+.cal-account{font-size:var(--text-micro);color:var(--on-surface-faint)}
+
+.cal-open{
+  margin:0;
+  font-size:var(--text-meta);
+  color:var(--on-surface-faint);
+}
+
+.cal-month{min-width:560px}   /* px: seven readable columns; under this the grid scrolls instead of crushing */
+.cal-month-weekdays{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:var(--s2);
+  margin-bottom:var(--s2);
+}
+.cal-month-weekdays span{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  color:var(--on-surface-faint);
+}
+.cal-month-grid{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:var(--s2);
+}
+.cal-month-cell{
+  min-height:84px;    /* px: a cell holds three event lines before it grows */
+  border-top:var(--line);
+  padding-top:var(--s2);
+}
+.cal-month-cell--today{border-top:var(--divider)}
+.cal-month-cell--outside{opacity:.4}
+.cal-month-cell .cal-dn{
+  display:block;
+  font-size:var(--text-meta);
+  margin-bottom:var(--s1);
+}
+.cal-month-cell--today .cal-dn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:20px;    /* px: the pill around a day number in the tighter month cell */
+  height:20px;       /* px: the pill's drawn height */
+  padding-inline:var(--s1);
+  border-radius:var(--r-pill);
+  background:var(--structure);
+  color:var(--surface);
+}
+.cal-month-events{list-style:none;margin:0;padding:0}
+.cal-month-events li{
+  font-size:var(--text-micro);
+  line-height:1.4;
+  color:var(--on-surface-soft);
+  margin-bottom:2px;    /* px: event lines in a month cell sit almost touching, by design */
+  overflow-wrap:anywhere;
+}
+
+/* ---------- links row: the documents of one feature ----------
+   A small label, then the sibling documents separated by a centred dot, between
+   two hairlines. The current page is a span with aria-current, in plain ink
+   and not underlined; a page that does not exist yet is a span.disabled in
+   faint text. Items after the first item get the dot from ::before. */
+
+.toplinks{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:baseline;
+  gap:var(--s1) 0;
+  margin-block:var(--s4) var(--s2);
+  padding-block:var(--s3);
+  border-top:var(--line);
+  border-bottom:var(--line);
+  font-size:var(--text-small);
+}
+.toplinks .toplinks-label{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  color:var(--on-surface-faint);
+  margin-right:var(--s3);
+}
+.toplinks > :is(a,span):not(.toplinks-label) ~ :is(a,span)::before{
+  content:"\00B7";
+  display:inline-block;      /* so the dot is not underlined with the link it sits in */
+  color:var(--on-surface-faint);
+  margin-inline:var(--s2);
+  text-decoration:none;
+}
+.toplinks a:hover{text-decoration-thickness:2px}
+.toplinks [aria-current="page"]{
+  color:var(--on-surface);
+  font-weight:var(--w-display);
+  text-decoration:none;
+}
+.toplinks .disabled{color:var(--on-surface-faint)}
+
+/* ---------- contents list: the list inside a folded section ----------
+   Styles only the list. The fold around it is the folded section above. No
+   bullets, nested levels indented, links in body ink and not underlined until
+   hover. */
+
+.contents-list{font-size:var(--text-small);line-height:1.5}
+.contents-list ul{list-style:none;padding-left:0;margin:0}
+.contents-list ul ul{padding-left:var(--s4);margin-top:var(--s1)}
+.contents-list li{margin-bottom:var(--s1);padding-left:0;font-size:inherit;line-height:inherit}   /* undo the house list item, which a class-free ul gets */
+.contents-list li::before{content:none}   /* and its sage dot */
+.contents-list a{color:var(--on-surface);text-decoration:none}
+.contents-list a:hover{color:var(--link);text-decoration:underline}
+
+/* ---------- cross-reference line ----------
+   One line pointing at the place a point is argued in full: a light accent
+   tint, "See" with an arrow in the display face, then the link in bold ink.
+   As a body child the column rule sets its side inset, so only its block
+   padding is set here. */
+
+.xref{
+  font-size:var(--text-small);
+  line-height:1.5;
+  background:var(--accent-tint);
+  border-radius:var(--r);
+  padding:var(--s3) var(--s4);
+  margin-block:0 var(--block-gap);
+  color:var(--on-surface-soft);
+}
+.xref::before{
+  content:"\21B3  See";
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  color:var(--accent);
+  margin-right:var(--s2);
+}
+.xref > *{display:inline;margin:0}
+.xref a{font-weight:var(--w-display);color:var(--on-surface)}
+
+/* ---------- status dots ----------
+   A small round dot and one short word, for a verdict in a table cell or a
+   line: Accepted, Rejected, Deferred. The dot takes the text colour, so a
+   variant sets only the colour. Measured as text on white:
+     (none)               ink                 16.68:1
+     .status-dot--sage    --mark, the darkened sage  4.67:1
+     .status-dot--purple  --emphasis  11.87:1
+     .status-dot--faint   --on-surface-faint  5.56:1 */
+
+.status-dot{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  white-space:nowrap;
+}
+.status-dot::before{
+  content:"";
+  display:inline-block;
+  width:7px;       /* px: the dot is drawn geometry, a circle of 7px */
+  height:7px;      /* px: the dot's drawn size */
+  border-radius:var(--r-pill);
+  background:currentColor;
+  margin-right:var(--s2);
+  vertical-align:0.12em;
+}
+.status-dot--sage{color:var(--mark)}
+.status-dot--purple{color:var(--emphasis)}
+.status-dot--faint{color:var(--on-surface-faint)}
+
+/* ---------- bands: full-bleed, one per document at most ---------- */
+
+.band{background:var(--structure);color:var(--on-structure);margin-top:var(--section-gap)}
+.band > *{padding-block:var(--section-gap)}    /* the band's inner element carries the vertical room; the column comes from the page rule */
+.band h2{color:var(--on-structure)}   /* no margin of its own: a band head is a .sheet-head like any other, and a bare h2 takes the base margins */
+.band p,.band li{color:var(--on-structure)}          /* full white on a dark band, never a soft grey, contrast holds this way */
+.band .sheet-head{border-top-color:var(--on-structure)}
+.band .sheet-head .n{color:var(--on-structure-faint)}
+
+/*
+  Band colour variants. Ink is the default and the most permissive.
+  Measured contrast decides what text each one may carry:
+
+    on ink     white 16.68, soft-ondark 11.59, faint-ondark 7.70, sage-fill 7.38
+    on purple  white 11.87, soft-ondark  8.24, faint-ondark 5.48, sage-fill 5.25
+    on cobalt  white  5.99, soft-ondark  4.16, faint-ondark 2.76, sage-fill 2.65
+
+  So cobalt is the most constrained despite looking like the safe choice:
+  white text only. No grey meta, no sage marks. Purple carries everything ink
+  does. Pick the band colour for the document, then obey its row above.
+*/
+/* Hue-named modifiers painting through roles; a follow-up can rename them. */
+.band--cobalt{background:var(--accent)}
+.band--cobalt,.band--cobalt :is(h2,p,li){color:var(--on-accent)}
+.band--cobalt .sheet-head .n{color:var(--on-structure); opacity:.72}   /* grey fails here, dim white instead */
+.band--purple{background:var(--emphasis)}
+.band--purple,.band--purple :is(h2,p,li){color:var(--on-emphasis)}
+.band--purple .sheet-head .n{color:var(--on-structure-faint)}
+.band--cobalt .icon-circle,.band--purple .icon-circle,.band .icon-circle{background:var(--on-structure);color:var(--on-surface)}
+
+/* ---------- footer ----------
+   The page footer only. A <footer> inside a card or a component is that
+   component's business and keeps its own look. */
+
+body > footer{
+  border-top:var(--line);
+  margin-top:var(--section-gap);
+  padding-block:var(--gutter) var(--section-gap);
+  font-size:var(--text-meta);
+  color:var(--on-surface-faint);
+}
+body > footer a{color:var(--on-surface)}
+
+/* ---------- responsive ---------- */
+
+@media (max-width:820px){
+  .facts,.cols{grid-template-columns:1fr;gap:var(--gutter)}
+  ol.steps--two-col{columns:1}
+  section.sheet{padding-block:var(--section-gap-narrow)}
+
+  .cal-week{display:block}
+  .cal-day{padding-top:var(--s3);padding-bottom:var(--s3)}
+  .cal-day-head{margin-bottom:var(--s2)}
+
+  /* The boxed sequence stacks, hairlines between the steps instead of beside. */
+  ol.sequence{grid-auto-flow:row}
+  ol.sequence > li + li{border-left:0;border-top:var(--line)}
+  ol.sequence--rows > li + li{border-top:var(--line)}
+
+  /* Image beside text stacks, picture first whichever side it sat on. */
+  .media,.media--right{grid-template-columns:minmax(0,1fr)}
+  .media--right > :is(img,.peek-pair){order:0}
+  .image-cards,.image-cards--3{grid-template-columns:minmax(0,1fr)}
+  .gallery--3{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .icon-set{grid-template-columns:repeat(3,minmax(0,1fr))}
+
+  /* The links row: each item is a 44px-tall tap target. */
+  .toplinks > :is(a,span):not(.toplinks-label){
+    display:inline-block;
+    line-height:44px;   /* px: the tap-target floor; a line box, so the dot before an item is not underlined with its link */
+  }
+
+  /* The large stat stacks: label, number, meta, the way a small tile reads. */
+  .stat--large{grid-template-columns:minmax(0,1fr);grid-template-areas:"label" "value" "meta";padding:var(--gutter)}
+  .stat--large .stat-value{margin-bottom:var(--s2)}
+}
+
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important;animation:none!important;scroll-behavior:auto!important}
+  details.fold summary.fold-head .fold-arrow{transition:none}
+}
+
+@media print{
+  .band{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .callout{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .insight{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  /*
+    Keep-together belongs on a section's head and on the small blocks, not on
+    the section. A section longer than a page with break-inside:avoid starts on
+    a fresh page and leaves the previous one mostly empty, which made most
+    exports worse to help a few.
+  */
+  .sheet-head{break-after:avoid}
+  table,.panel,.insight,.callout{break-inside:avoid}
+  .badge,.stat,.stat--tint,.panel--danger,.choice{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .stat,ol.sequence,figure.plate,.option,.choice,.image-card,.media,.peek-pair,blockquote.pullquote{break-inside:avoid}
+}
+
+
+/* =========================================================================
+   OPTIONAL BRAND SECTION, St. Clair AI documents only.
+
+   Include this markup and the classes below ONLY when the document itself
+   is a St. Clair AI deliverable (a client-facing work product, or a page
+   that will live on the St. Clair AI site or its sales materials). Every
+   other document, briefs, research reports, personal planning docs,
+   proposals for other names, omits this section entirely. See
+   docs/document-style-guide.md, "The brand layer."
+
+   Mark source: projects/agent_storefront/brand/logo/ (mark.svg or lockup.svg).
+   ========================================================================= */
+
+/*
+  The logo is a FILE, never rebuilt. Inline lockup.svg on white or
+  lockup_on_ink.svg on a dark ground, both from
+  projects/agent_storefront/brand/logo/. PNGs at every size and colorway are in
+  png/ beside them, browsable via DELIVERY.html.
+
+  Never set the mark beside live wordmark text, and never redraw either. The
+  lockup file already carries the correct proportions: mark height equal to the
+  wordmark cap height, baseline aligned, correct gap. Hand-assembling it gets
+  those wrong, which is why the file exists.
+
+  Full rules, including the Do Not list, are in
+  projects/agent_storefront/brand/BRAND_KIT.md.
+*/
+.mark{display:flex; align-items:center}
+/*
+  Lockup height is not chosen by eye. BRAND_KIT.md: the lockup's height is
+  0.9288 em of the wordmark font size it replaces, which puts the letters at the
+  same cap height they had as live text. The masthead wordmark was 19px, so
+  0.9288 x 19 = 17.6px. If a surface uses a different wordmark size, recompute
+  rather than guessing; too tall and the logo fights the document title.
+*/
+.mark svg{height:17.6px; width:auto; display:block}   /* px: 0.9288 em of the 19px wordmark it replaces, see above */
+
+/*
+  lahe-markdown.css
+  LAHE's own layer over the St. Clair AI document system. Written for this repo,
+  not copied from the personal repo: system-tokens.css and document.css beside
+  it are the copies, and they are never edited here.
+
+  Why this file is short. document.css now styles BARE elements: a class-free
+  ul gets the sage dot, a class-free ol gets the drawn numeral, and the
+  headings, tables, blockquotes and images all have a house look with no class
+  needed. marked emits exactly those bare elements, so a rendered .md already
+  looks like a St. Clair AI document. Restating any of it here is the drift the
+  style rebuild ended, so this file only carries what the base cannot know
+  about:
+
+  - the three @font-face rules, pointing at the vendored woff2 files
+  - color-scheme: light, so the browser's own controls stay on a light ground
+  - ligatures off in code, because an arrow drawn as one glyph is wrong in a
+    document about code
+  - the Mermaid block: a diagram is emitted as pre.mermaid, so it has to be
+    told not to look like a code block
+  - LAHE's own furniture: .frontmatter, .lahe-readonly-note, .lahe-local-link
+  - the GFM task-list opt-out: a checkbox item already carries its own marker,
+    so it drops the base's dot and its inset
+  - the tighter paragraph gap inside a list item, which the base has no
+    list-scoped rule for
+  - the top margin on a list nested inside a list item
+
+  The page column is not here, and must not be. main is a body child, so the
+  base's one column rule gives it the 1080px column and the gutter, and the
+  hero and the sections sit inside that. No width, no font size, no heading
+  margin in this file.
+
+  Two look changes are decisions, not fallout. A table is now the base's naked
+  ruled table, its default, rather than the boxed cobalt-header table this
+  layer used to draw. A blockquote is now the base's quiet hairline quote
+  rather than a sage tint. Both are the guide's own defaults, which is the
+  point of taking the base whole.
+
+  House rules this file obeys: no em dashes, no pills, no gradients, no
+  shadows, no all caps, no single-side coloured borders.
+*/
+
+/* ---------- the vendored faces ----------
+   Google serves one variable woff2 per family covering the weight range we
+   asked for, so there are three files rather than eight. Each @font-face
+   declares the range rather than a single weight. The served basenames match
+   what the helper falls back to: .lahe-fonts/<file>.woff2 resolves from any
+   directory, and the Markdown renderer also copies the files beside a written
+   artifact so a page saved to disk keeps its type. */
+
+@font-face {
+  font-family: "Schibsted Grotesk";
+  font-style: normal;
+  font-weight: 500 700;
+  font-display: swap;
+  src: url("./.lahe-fonts/schibsted-grotesk-variable.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Hanken Grotesk";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("./.lahe-fonts/hanken-grotesk-variable.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url("./.lahe-fonts/jetbrains-mono-variable.woff2") format("woff2");
+}
+
+/* Light only, by decision. The guide is a light system, so nothing in this
+   bundle asks the browser which scheme it prefers. */
+:root { color-scheme: light }
+
+/* ---------- lists ----------
+   The base draws the dot and the numeral. These three rules are the gaps it
+   leaves, because it has no rule scoped inside a list item.
+
+   A GFM task list already carries its own marker, so it drops the dot and the
+   inset the dot hangs in. The selector has to name the class-free list the way
+   the base does, or the base's ::before wins on specificity.
+
+   Two shapes, because marked renders a task list two ways. A tight list puts
+   the checkbox straight in the item; a loose one (blank lines between items)
+   puts it inside a paragraph. Measured on 2026-09-16: only naming the tight
+   shape left a loose task item wearing a dot and a checkbox at once, which is
+   the exact thing this opt-out exists to prevent. */
+
+main ul:not([class]) li:has(> input[type="checkbox"]),
+main ul:not([class]) li:has(> p > input[type="checkbox"]) { padding-left: 0 }
+main ul:not([class]) li:has(> input[type="checkbox"])::before,
+main ul:not([class]) li:has(> p > input[type="checkbox"])::before { content: none }
+main li > input[type="checkbox"],
+main li > p > input[type="checkbox"] {
+  accent-color: var(--sage);
+  margin-right: var(--s2);
+}
+
+/* A list item holding more than one paragraph: the base's paragraph gap is the
+   gap between blocks of prose, which is too much inside a bullet. */
+main li > p { margin-bottom: var(--s2) }
+main li > p:last-child { margin-bottom: 0 }
+main li ul, main li ol { margin: var(--s3) 0 0 }
+
+/* ---------- code ----------
+   document.css already puts JetBrains Mono on a tint. The one thing added here
+   is turning the face's ligatures off. */
+
+main code, main pre { font-variant-ligatures: none }
+
+/* ---------- Mermaid ----------
+   A diagram is emitted as pre.mermaid, so it would otherwise inherit the code
+   block's tint and padding. It gets neither. */
+
+main .mermaid {
+  background: none;
+  padding: var(--s5) 0;
+  overflow: visible;
+  text-align: center;
+  font-family: var(--font-body);
+}
+main .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* ---------- LAHE's own furniture ----------
+   These three class names are load-bearing: the renderer writes them, the
+   layer and the tests look for them. Styled on tokens, not renamed.
+
+   The read-only note and the frontmatter sit above the hero, outside any
+   section. They take their column from main, like everything else on the page,
+   so all they need here is the room above them. */
+
+main > .lahe-readonly-note,
+main > .frontmatter { margin-block: var(--s6) 0 }
+
+main .frontmatter { color: var(--on-surface-faint) }
+main .frontmatter summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: var(--w-display);
+}
+main .frontmatter pre { margin: var(--s3) 0 0 }
+
+main .lahe-readonly-note {
+  /* The box's own inner padding, not a page column: without it the sentence
+     would sit flush against the border. */
+  padding: var(--s3) var(--s4);
+  border: var(--line);
+  border-radius: var(--r);
+  color: var(--on-surface-faint);
+}
+main .lahe-readonly-note code {
+  background: none;
+  padding: 0;
+}
+
+main .lahe-local-link {
+  color: var(--on-surface-faint);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+</style>
+
+<style>
+  /* What the house style does not have, and nothing else: the header of the
+     merged review history, and the jump target for a finding link. Every value
+     is a style token, so a restyle reaches these too. */
+  hr.reviews-divider{
+    border:0;
+    border-top:var(--divider);
+    margin:var(--section-gap) 0 var(--s1);
+  }
+  .reviews-banner{
+    border-top:var(--line-ink);
+    padding-top:var(--s4);
+    margin-bottom:var(--s5);
+    font-size:var(--text-small);
+    line-height:1.55;
+    color:var(--on-surface-soft);
+  }
+  .finding-anchor{display:inline-block;scroll-margin-top:var(--gutter)}
+</style>
+</head>
+<body>
+<main data-container="Feature document">
+<div class="hero">
+<h1>Linked folder scope</h1>
+<p class="lede"><strong>Status:</strong> built and verified on branch
+<code>linked-folder-scope</code>; going to a pull request. Results are
+under "Verification results" below. Board row
+<code>LAHE-linked-folder-scope</code> (serve only the files a site's
+pages link to, plus their images, then drop the folder cap).</p>
+</div>
+<nav class="toplinks" aria-label="Documents"><span class="toplinks-label">Docs</span><span aria-current="page">Spec</span></nav>
+<details class="fold contents" open><summary class="fold-head"><span class="fold-arrow" aria-hidden="true"></span><h2>Contents</h2></summary><div class="fold-body"><nav id="TOC" class="contents-list">
+<ul>
+<li><a href="#decided" id="toc-decided">Decided</a></li>
+<li><a href="#problem-user-and-context"
+id="toc-problem-user-and-context">Problem, user, and context</a>
+<ul>
+<li><a href="#what-a-mount-serves-today"
+id="toc-what-a-mount-serves-today">What a mount serves today</a></li>
+<li><a href="#how-the-chain-of-links-works-today"
+id="toc-how-the-chain-of-links-works-today">How the chain of links works
+today</a></li>
+<li><a href="#two-spellings-of-one-file"
+id="toc-two-spellings-of-one-file">Two spellings of one file</a></li>
+<li><a href="#measured-on-kens-two-runbook-sites"
+id="toc-measured-on-kens-two-runbook-sites">Measured on Ken's two
+runbook sites</a></li>
+</ul></li>
+<li><a href="#requirements" id="toc-requirements">Requirements</a></li>
+<li><a href="#approach" id="toc-approach">Approach</a>
+<ul>
+<li><a href="#where-the-check-runs" id="toc-where-the-check-runs">Where
+the check runs</a></li>
+<li><a href="#the-secret-list" id="toc-the-secret-list">The secret
+list</a></li>
+<li><a href="#how-the-list-is-filled-read-the-finished-page"
+id="toc-how-the-list-is-filled-read-the-finished-page">How the list is
+filled: read the finished page</a></li>
+<li><a href="#one-spelling-for-every-path"
+id="toc-one-spelling-for-every-path">One spelling for every
+path</a></li>
+<li><a href="#where-the-list-lives" id="toc-where-the-list-lives">Where
+the list lives</a></li>
+<li><a href="#the-folder-cap-goes-a-file-limit-replaces-it"
+id="toc-the-folder-cap-goes-a-file-limit-replaces-it">The folder cap
+goes; a file limit replaces it</a></li>
+<li><a href="#rebuilding-a-sites-list"
+id="toc-rebuilding-a-sites-list">Rebuilding a site's list</a></li>
+<li><a href="#reviews-on-a-mounted-page"
+id="toc-reviews-on-a-mounted-page">Reviews on a mounted page</a></li>
+<li><a href="#alternatives-considered"
+id="toc-alternatives-considered">Alternatives considered</a></li>
+</ul></li>
+<li><a href="#tasks" id="toc-tasks">Tasks</a></li>
+<li><a href="#acceptance-criteria"
+id="toc-acceptance-criteria">Acceptance criteria</a></li>
+<li><a href="#verification-results"
+id="toc-verification-results">Verification results</a></li>
+<li><a href="#open-questions" id="toc-open-questions">Open
+questions</a></li>
+<li><a href="#review" id="toc-review">Review</a></li>
+</ul>
+</nav></div></details>
+<section class="sheet">
+<div class="sheet-head"><h2 id="decided">Decided</h2><span class="n">Section 1</span></div>
+<ul>
+<li><strong>A linked HTML page that loads files with a script gets 404
+for them.</strong> The server can see the files a page names in its HTML
+and CSS: stylesheets, images, scripts, fonts. It cannot see a file a
+script asks for while it runs, such as a dashboard fetching
+<code>data.json</code>. Those requests would answer 404.
+<strong>Decided: accept that.</strong> On your two runbook sites, the
+two linked HTML pages name no file in their folders at all, so nothing
+you use today breaks. A page that needs its whole folder can still be
+opened at its own address with <code>lahe review &lt;page&gt;</code>.
+That serves its folder the way it does now, except the secret folders
+listed under requirement 13, which this change refuses everywhere. The
+other choice is to serve a linked HTML page's whole folder tree. That
+brings back today's problem for that folder: an HTML file sitting in
+your home folder would expose all of home again.</li>
+</ul>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="problem-user-and-context">Problem, user, and context</h2><span class="n">Section 2</span></div>
+<p>A Markdown page Lahe renders can link to a file in another folder. To
+make that link work, Lahe mounts the target's folder on the page's site
+at <code>/.lahe-source/&lt;hash&gt;/</code>. Today a mount serves
+everything under that folder, subfolders included. So one link to
+<code>~/todo.md</code> mounts the home folder, and the page server then
+answers <code>~/.ssh/id_ed25519</code> with status 200. The premise
+check in <a
+href="../20261019.01_link_folder_cap/01_spec_link_folder_cap.md">the
+link folder cap spec</a> proved this.</p>
+<p>Other websites can't read these files: the cross-origin header and
+the missing CORS headers stop them. Local programs could read the files
+directly anyway. The gap is a script running on a reviewed page's own
+address. It can ask for any file under any mount.</p>
+<p>A site's own root has the same shape.
+<code>lahe review ~/todo.md</code> makes a site rooted at the file's
+folder (<code>planSite</code>,
+<code>src/cli/commands/review.js:486</code>), here the home folder.
+<code>rootProblem</code> refuses only the filesystem root and the state
+folder (<code>src/service/sites.js:122-134</code>), so that site serves
+all of home, <code>~/.ssh</code> included. None of Ken's 83 sites is
+rooted at home today, and none mounts home, but nothing stops it.</p>
+<p>The folder cap (<code>MOUNT_CAP</code>, now 64 per page) was meant to
+keep a page from quietly serving a whole tree. It never did: one mount
+is a whole tree. And the cap is what Ken kept hitting, because his skill
+repos (pstack, feature-forge) link into many folders.</p>
+<p>Ken decided: a mounted folder serves only the files the site's pages
+link to, plus their images. Then the cap goes.</p>
+<p><strong>What the list protects against, and what it does
+not.</strong> The list stops a script from reading files that no page
+names. It does not stop a hostile document. A cloned repo's README can
+link <code>../../.ssh/id_ed25519</code> and carry its own
+<code>&lt;script&gt;</code>: the Markdown renderer passes raw HTML
+through (no <code>renderer.html</code> override in
+<code>src/service/markdown.js</code>), and served pages carry no script
+policy, only <code>frame-ancestors 'self'</code>
+(<code>src/service/page_routes.js:1815-1829</code>). That document
+writes the list itself. So this change also refuses a short list of
+secret paths everywhere (requirement 13), which covers the worst files
+for that case. Whether rendered Markdown should run raw HTML and scripts
+at all is board row <code>LAHE-markdown-raw-html</code>.</p>
+<p>The user is Ken, reading his runbooks and skill docs as one connected
+set of pages. He follows a link, then a link on that page, and so on.
+That chain has to keep working.</p>
+<h3 id="what-a-mount-serves-today">What a mount serves today</h3>
+<p>From the code on <code>origin/main</code>:</p>
+<ul>
+<li><strong>Every file in the folder tree.</strong> <code>locate</code>
+turns <code>/.lahe-source/&lt;prefix&gt;/&lt;rest&gt;</code> into the
+mount's folder and the rest of the path, and checks only that the folder
+is under home (<code>src/service/page_routes.js:484-501</code>).
+<code>handle</code> then serves whatever file is there, after a
+real-path check that it stays inside the folder
+(<code>page_routes.js:2185-2199</code>). A folder address serves its
+<code>index.html</code> (<code>candidateOf</code>,
+<code>page_routes.js:504-510</code>). A test pins that a dotfile under a
+mount answers 200 (<code>test/unit/sites_pages.test.js:107-127</code>),
+and another pins that an HTML file no page linked to is served
+(<code>test/unit/sites_linked_docs.test.js:75-80</code>).</li>
+<li><strong>Markdown is rendered.</strong> A <code>.md</code> file under
+a mount goes to <code>serveMarkdown</code>
+(<code>page_routes.js:2209-2210</code>). It gets the rail of the newest
+review that linked to it, or renders read-only (<code>pickReview</code>,
+rule 3, <code>page_routes.js:366</code>).</li>
+<li><strong>HTML is served as a page.</strong> It goes to
+<code>serveHtmlPage</code> with <code>mounted</code> set
+(<code>page_routes.js:1917-1928</code>, <code>2212</code>).</li>
+<li><strong>Anything else is streamed as bytes.</strong> Images, JSON,
+scripts, any type (<code>page_routes.js:2213</code>).</li>
+<li><strong>A page with its own review is sent to its own
+address.</strong> A top-level load redirects; anything else gets the
+page read-only (<code>ownReviewOf</code> and
+<code>serveElsewhere</code>, <code>page_routes.js:1996-1999</code>,
+<code>2074-2084</code>, <code>2204-2208</code>).</li>
+</ul>
+<h3 id="how-the-chain-of-links-works-today">How the chain of links works
+today</h3>
+<p>When a mounted Markdown page renders, its own links are translated
+the same way the first page's were. <code>serveMarkdown</code> renders
+with the site's mounts plus the site root
+(<code>page_routes.js:1944-1950</code>). Each link goes through
+<code>classify</code>
+(<code>src/service/markdown_links.js:197-241</code>), which reuses a
+mount that already holds the target or makes a new one. New mounts are
+saved on the site (<code>page_routes.js:1955-1959</code>). When a review
+answers on the page, the linked pages are also recorded against that
+review in <code>linked_files</code> (<code>page_routes.js:1962</code>),
+which is how the next page gets the same rail. Pandoc output takes the
+same path: <code>finishPandoc</code> sends each link to the same
+<code>writeLink</code>
+(<code>src/service/markdown.js:548-551</code>).</p>
+<p>Images and links that stay inside the page's own folder never go
+through <code>classify</code>. They keep their relative address and get
+the page's folder prefix in one pass over the finished HTML
+(<code>rewriteRelativeUrls</code>, <code>markdown.js:170-174</code>,
+called at <code>markdown.js:590</code>). So a linked page's image is
+served only because the mount serves the page's whole folder.</p>
+<p>The test <code>test/unit/markdown_linked_docs.test.js:104-184</code>
+walks this chain three pages deep and fetches a non-Markdown file on the
+way.</p>
+<h3 id="two-spellings-of-one-file">Two spellings of one file</h3>
+<p><code>classify</code> takes real paths with plain
+<code>fs.realpathSync</code> (<code>markdown_links.js:181</code>,
+<code>183</code>, <code>219</code>). <code>handle</code> takes them with
+<code>fs.realpathSync.native</code> (<code>realOrNull</code>,
+<code>page_routes.js:67-71</code>). On a case-insensitive disk these
+differ. Checked on this Mac: a file <code>todo.md</code> reached as
+<code>Todo.md</code> comes back as <code>Todo.md</code> from the plain
+call and <code>todo.md</code> from <code>.native</code>.
+<code>linked_files</code> keys come from <code>classify</code>, so they
+carry the link's spelling, while <code>handle</code> asks with the
+disk's spelling. A list built the same way would refuse a file whose
+link is spelled differently from the disk.</p>
+<h3 id="measured-on-kens-two-runbook-sites">Measured on Ken's two
+runbook sites</h3>
+<p>Script: <a
+href="scripts/measure_site.js">scripts/measure_site.js</a>. It renders
+every Markdown page under the site's root the way the helper does,
+follows every address under a mount, renders each linked Markdown page
+in turn, reads each linked HTML page and its stylesheets, and writes one
+row per address. Counts come from that script and from <a
+href="scripts/summarize.py">scripts/summarize.py</a>, <a
+href="scripts/html_detail.py">scripts/html_detail.py</a> and <a
+href="scripts/log_growth.py">scripts/log_growth.py</a>. The row files
+are in <code>~/Documents/lahe-linked-folder-scope/</code> (outside the
+repo, since they name real files).</p>
+<div class="scrollx"><table>
+<thead>
+<tr>
+<th>What</th>
+<th><code>feature-forge-runbooks</code> (repo root)</th>
+<th><code>docs/features/runbooks</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Markdown pages under the site root</td>
+<td>293</td>
+<td>219</td>
+</tr>
+<tr>
+<td>Folders the site mounts in <code>sites.json</code></td>
+<td>16</td>
+<td>28</td>
+</tr>
+<tr>
+<td>Links past the cap today</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Pages that link into a mount</td>
+<td>104</td>
+<td>99</td>
+</tr>
+<tr>
+<td>Distinct files those pages link to or show under mounts</td>
+<td>313</td>
+<td>459</td>
+</tr>
+<tr>
+<td>Most such files linked from one page</td>
+<td>85</td>
+<td>171</td>
+</tr>
+<tr>
+<td>Images shown inline (<code>src</code>) under a mount</td>
+<td>0</td>
+<td>12 addresses (6 distinct images, each reached through two
+mounts)</td>
+</tr>
+<tr>
+<td>Linked HTML pages under a mount</td>
+<td>1</td>
+<td>2</td>
+</tr>
+<tr>
+<td>Files those HTML pages name under a mount</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Links that point into a path on the secret list</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Links under a mount that already fail today (a folder with no
+<code>index.html</code>, or a missing file)</td>
+<td>5</td>
+<td>23</td>
+</tr>
+<tr>
+<td>Files in the mounted folders the links use (nested mounts counted
+twice)</td>
+<td>405</td>
+<td>963</td>
+</tr>
+<tr>
+<td>Size of the list as one flat list of real paths</td>
+<td>36,805 bytes</td>
+<td>60,168 bytes</td>
+</tr>
+<tr>
+<td>Size if the list were kept per linking page</td>
+<td>97,960 bytes</td>
+<td>141,436 bytes</td>
+</tr>
+</tbody>
+</table></div>
+<p>The secret-list row comes from a search of the row files for the
+paths in requirement 13. On these two sites the mounts are mostly made
+of linked files already. The large win is the case the premise check
+found: a mount of home, or of any big folder, where one linked file
+exposed everything else.</p>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="requirements">Requirements</h2><span class="n">Section 3</span></div>
+<ol type="1">
+<li><strong>A mount serves only listed files.</strong> A file under a
+mount is served only when a page on the same site links to it or shows
+it. Any other file under a mount answers 404, even though its folder is
+mounted.</li>
+<li><strong>What counts as linking.</strong> Every address a rendered
+page carries in an <code>href</code>, <code>src</code> or
+<code>srcset</code> attribute that lands under one of the site's mounts.
+That covers translated links, a linked page's relative links and images,
+and raw HTML inside Markdown, from both marked and pandoc.</li>
+<li><strong>The chain keeps working.</strong> When a linked Markdown
+page renders, its own links and images are listed before the response is
+sent. So the next page in the chain, and its pictures, are served.</li>
+<li><strong>A linked HTML page brings what it names, from its own folder
+only.</strong> When an HTML page under a mount is served, the files it
+names in <code>href</code>, <code>src</code>, <code>srcset</code> and
+CSS <code>url()</code> are listed, including <code>url()</code> inside
+stylesheets it links. Only files under the page's own mount prefix and
+inside the page's own folder count. A name that points at another mount,
+or above the page's folder, is not listed.</li>
+<li><strong>Pages a review linked keep working with no
+migration.</strong> A file in the site's <code>linked_files</code> table
+is served. So existing sites, the Library's Open, and stored comments on
+linked pages keep working the moment the new code runs.</li>
+<li><strong>The list is kept on the site and survives a
+restart.</strong> It lives in the site's entry in
+<code>sites.json</code>, beside <code>mounts</code>. Mount addresses
+(<code>/.lahe-source/&lt;hash&gt;/</code>) do not change.</li>
+<li><strong>The list only grows, until it is rebuilt.</strong> A link
+removed from a page leaves its file on the list, the same way a mount
+stays. Rebuilding a site's list from a fresh walk of its pages is a
+separate board row (task 7).</li>
+<li><strong>The folder cap goes.</strong> <code>MOUNT_CAP</code>, the
+<code>cap</code> reason for a plain-text link, and the
+<code>lahe review</code> line about links past the cap are removed. A
+file limit per page replaces it (requirement 14). A notes page, which
+follows no links today, still follows none.</li>
+<li><strong>Reviews do not change.</strong> Which review answers on a
+mounted page, the redirect to a file's own address, and the read-only
+"has its own review" page work as now. The helpers that map an address
+back to a file (<code>fileForPage</code>,
+<code>linkedFileForPage</code>, the Library) do not read the list.</li>
+<li><strong>A refused file leaves a trace.</strong> A 404 because a file
+is not on the list, or is on the secret list, writes one helper-log line
+naming the file and the site, once per file.</li>
+<li><strong>Docs say the new rule.</strong>
+<code>docs/ongoing/STATIC_SITE_FOLDER.md</code> ("Linked documents"),
+the link-translation paragraph in <code>docs/CONTRACTS.md</code> (it
+still says 16 folders), <code>docs/INSTALL.md</code>, and the board
+row.</li>
+<li><strong>Ken's real sites lose nothing.</strong> On
+<code>feature-forge-runbooks</code> and
+<code>docs/features/runbooks</code>, no link turns into plain text, and
+no linked page or image that answers 200 today answers 404 after the
+change.</li>
+<li><strong>Secret paths are refused everywhere.</strong> These paths
+under home, and everything inside them, are never listed and never
+served, from a mount or from a site's own root: <code>~/.ssh</code>,
+<code>~/.aws</code>, <code>~/.gnupg</code>, <code>~/.config/gh</code>,
+<code>~/.config/gcloud</code>, <code>~/.netrc</code>,
+<code>~/.git-credentials</code>, <code>~/.npmrc</code>,
+<code>~/.kube</code>, <code>~/.docker</code>,
+<code>~/Library/Keychains</code>. A link to one renders as plain text
+naming the file, like any link Lahe cannot serve. A request for one
+answers 404.</li>
+<li><strong>One page may name at most 256 files under mounts.</strong>
+The limit counts every distinct file a render names under a mount,
+listed already or not, so a page past it stays past it on every reload.
+Links past it render as plain text with a title saying the page links
+too many files, and the helper log gets one line naming the page.</li>
+<li><strong>The log carries only new paths.</strong>
+<code>sites.log</code> gets a short line holding only the paths a render
+added, never the whole list. The whole list lives in
+<code>sites.json</code>.</li>
+<li><strong>One spelling for every path.</strong> Every real path the
+list stores or compares is taken with
+<code>fs.realpathSync.native</code>, the call <code>handle</code>
+already uses. <code>linked_files</code> keys are compared after the same
+call, so a key written in a link's spelling still matches.</li>
+</ol>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="approach">Approach</h2><span class="n">Section 4</span></div>
+<h3 id="where-the-check-runs">Where the check runs</h3>
+<p>The check sits in <code>handle</code>, after the real path is known
+and before the own-review redirect. Two tests run there, in this
+order:</p>
+<ol type="1">
+<li>Any request, from a mount or the site's own root, whose real path is
+on the secret list gets 404 (requirement 13, secret paths are refused
+everywhere).</li>
+<li>A mounted request whose real file is not on the list gets 404
+(requirement 1, a mount serves only listed files).</li>
+</ol>
+<p>The check does not go in <code>locate</code>. <code>locate</code>
+also backs the helpers that map a stored comment's address back to its
+file (<code>fileForPageIn</code>, <code>page_routes.js:592-612</code>,
+and <code>linkedFileIn</code>, <code>page_routes.js:622-640</code>).
+Those must keep working for old comments even when a file is not on the
+list yet (requirement 9, reviews do not change).</p>
+<p>Both tests use the real path, after the existing real-path checks. So
+a symlink inside a mount that points elsewhere is still refused as
+before, a symlink that points into <code>~/.ssh</code> is refused by the
+secret test, and a file reached through two different mounts needs one
+entry.</p>
+<h3 id="the-secret-list">The secret list</h3>
+<p>One function, <code>isSecretPath(real)</code>, sits in
+<code>markdown_links.js</code> beside <code>mountableDir</code>, the
+module that already owns the home boundary. It resolves each listed path
+against the home root with <code>.native</code> and answers whether
+<code>real</code> is that path or inside it. Three places call it:</p>
+<ul>
+<li><code>classify</code>, so a link to a secret file renders as plain
+text and never makes a mount;</li>
+<li>the listing function, so nothing secret is ever listed, whatever a
+page names;</li>
+<li><code>handle</code>, for every request, which is what covers a site
+rooted at home.</li>
+</ul>
+<p>The list is short on purpose. It names the files whose theft does the
+most harm: SSH, GPG and cloud keys, git and package-registry tokens,
+container and Kubernetes credentials, and the macOS keychains. Six of
+them exist on Ken's machine today: <code>.ssh</code>,
+<code>.config/gh</code>, <code>.config/gcloud</code>,
+<code>.npmrc</code>, <code>.docker</code> and
+<code>Library/Keychains</code>. None of his runbook links point into any
+of them (table above). A site's own root still serves the rest of its
+tree: the list is a floor under every site, not a scope for root
+sites.</p>
+<h3 id="how-the-list-is-filled-read-the-finished-page">How the list is
+filled: read the finished page</h3>
+<p>After a page renders, one function reads its finished HTML and lists
+every address under a mount. It lives in <code>page_routes.js</code>
+beside <code>locate</code>, as
+<code>filesUnderMounts(html, urlDir, mounts)</code>. For each
+<code>href</code>, <code>src</code> and <code>srcset</code> value, it
+decodes HTML entities and resolves the value against the page's own
+address, as the browser will. It keeps paths under
+<code>/.lahe-source/</code>. Each one then takes the same steps a
+request takes: <code>decodePath</code>, <code>locate</code>,
+<code>candidateOf</code>, real path with <code>.native</code>, inside
+the mount's folder, is a file, and not on the secret list. It collects
+the real paths.</p>
+<p>Why read the finished page rather than hook <code>classify</code>:
+images and links inside the page's own folder never pass through
+<code>classify</code> (they are prefixed in one pass at
+<code>markdown.js:590</code>). Raw HTML in Markdown doesn't either. The
+finished HTML is exactly what the browser will ask for, from both
+engines, including the reuse addresses <code>createRegistry.add</code>
+builds (<code>markdown_links.js:112-138</code>). The attribute pattern
+is the same one <code>rewriteRelativeUrls</code> uses, so what gets
+prefixed is what gets listed.</p>
+<p>Who calls it:</p>
+<ul>
+<li><code>renderMarkdown</code> returns the list as <code>files</code>,
+next to <code>added</code> and <code>linked</code>, and the render cache
+keeps it with them (<code>page_routes.js:1394-1418</code>).</li>
+<li><code>serveMarkdown</code> saves it on the site right after it saves
+new mounts (<code>page_routes.js:1955-1959</code>). That runs for every
+Markdown page, with a rail or read-only, including the "has its own
+review" page, and before the response goes out (requirement 3, the chain
+keeps working).</li>
+<li><code>renderSitePage</code> does the same for rebuild and the
+handled check (<code>page_routes.js:1431-1445</code>).</li>
+<li><code>serveHtmlPage</code> and <code>serveElsewhere</code>, for an
+HTML page under a mount, run the same function over the HTML with one
+more limit: only files under the page's own mount prefix and inside the
+page's own folder are kept. They also read <code>url()</code> in
+stylesheets the page links in that folder, one level deep (requirement
+4). Without that limit, a linked HTML file could name files under any
+other mount on the site and get them listed.</li>
+</ul>
+<h3 id="one-spelling-for-every-path">One spelling for every path</h3>
+<p><code>classify</code> and <code>noteRelative</code> switch from
+<code>fs.realpathSync</code> to <code>fs.realpathSync.native</code>
+(<code>markdown_links.js:181</code>, <code>183</code>,
+<code>219</code>), and so does <code>homeRoot</code>
+(<code>markdown_links.js:52</code>). Then new <code>linked_files</code>
+keys, <code>mount_files</code> entries and the request's real path all
+carry the disk's spelling (requirement 16, one spelling for every path).
+Old <code>linked_files</code> keys may carry a link's spelling, so the
+check passes each key through <code>.native</code> once and keeps the
+result per site, rebuilt when the entry changes. One side effect:
+<code>pickReview</code> rule 3 looks up <code>linked_files</code> by the
+request's <code>.native</code> path
+(<code>page_routes.js:323-325</code>), so a page linked in a different
+case from the disk starts getting its linking review's rail for new
+links. That is the rule working as written, not a change to it.</p>
+<h3 id="where-the-list-lives">Where the list lives</h3>
+<p>A new field on the site entry: <code>mount_files</code>, an array of
+real paths. <code>sites.js</code> cleans it on load (absolute path
+strings only, no repeats), and a new
+<code>addMountFiles(name, files)</code> merges it. A file is allowed
+when it is in <code>mount_files</code> or is a key of
+<code>linked_files</code> after <code>.native</code>.</p>
+<p>How it reaches the log (requirement 15, the log carries only new
+paths). Today every change appends the whole site entry to
+<code>sites.log</code> (<code>record</code>,
+<code>sites.js:353-358</code>), and no code shortens that log. A list of
+hundreds of paths in every such line would grow the log fast. So:</p>
+<ul>
+<li><code>addMountFiles</code> appends a short line,
+<code>{event: "mount-files", name, add: [the new paths]}</code>, then
+writes <code>sites.json</code> whole.</li>
+<li>Whole-entry lines leave <code>mount_files</code> out.</li>
+<li>Reading the log rebuilds a site's list by joining every
+<code>mount-files</code> line for that name. <code>replayLog</code>
+compares entries with <code>mount_files</code> set aside, then joins the
+lists (<code>sites.js:331-342</code>).</li>
+<li>An older helper skips the new lines, since <code>readLog</code>
+keeps only lines whose <code>site</code> is a full entry
+(<code>sites.js:279</code>).</li>
+</ul>
+<p>Other properties:</p>
+<ul>
+<li><strong>No migration step.</strong> Old entries have no
+<code>mount_files</code>. Pages a review linked are already in
+<code>linked_files</code> (requirement 5). Everything else is listed the
+next time the page that links it renders. A link is clickable only on a
+rendered page, so the only gap is a tab the old helper rendered: a link
+in it to a non-page file, or a link from a page with no review, answers
+404 until the tab is reloaded.</li>
+<li><strong>Downgrade is safe.</strong> An older helper keeps the
+unknown field (<code>isEntry</code> checks only <code>root</code> and
+<code>mode</code>, <code>sites.js:249-252</code>) and serves mounts as
+before.</li>
+<li><strong>Addresses stay put.</strong> Mount prefixes and
+<code>mounts</code> in <code>sites.json</code> are untouched, so open
+pages and stored comments keep their addresses (requirement 6).</li>
+</ul>
+<p>Why in <code>sites.json</code> rather than memory: the helper
+restarts on every Lahe update. In memory, every image and data file in
+open tabs would 404 after a restart until each linking page
+re-rendered.</p>
+<p>Why one flat list rather than a list per linking page. A list per
+page would let a removed link stop serving its file. Measured on a full
+walk of each site: the per-page list is 98 to 141 KB, and each of the
+104 or 99 linking pages would rewrite part of it. The flat list is 37 to
+60 KB, and only 28 or 29 renders add to it. With the short log lines,
+the log grows by the new paths only: at most the flat list's size per
+site on a full walk. Forgetting is handled by a rebuild instead
+(requirement 7).</p>
+<h3 id="the-folder-cap-goes-a-file-limit-replaces-it">The folder cap
+goes; a file limit replaces it</h3>
+<p>With a mount serving only listed files, the number of mounts no
+longer changes what is exposed. The folder cap is removed (requirement
+8).</p>
+<p>What still needs a bound is the list itself. A generated page with
+thousands of links would add thousands of paths in one render. So one
+render may name at most 256 files under mounts (requirement 14). The
+most any real page names is 171 (table above), so 256 leaves half again
+as much room. The limit is counted in the render registry, so links past
+it render as plain text at render time, with the title
+<code>this page links more than 256 files; open it on disk: &lt;path&gt;</code>.
+It counts every file the page names, already listed or not. The cap's
+own code review found why: counting only new entries lets a page creep
+past the limit a little more on each reload. Images, which never pass
+through <code>classify</code>, count toward the same limit in
+<code>filesUnderMounts</code>. An image past it is not listed and shows
+broken; the same log line names the page.</p>
+<p>One thing still uses the old cap: a notes page renders with
+<code>cap: 0</code> so it follows no links
+(<code>page_routes.js:1408</code>). That becomes an explicit
+<code>follow: false</code> option on <code>createRegistry</code>, and
+<code>classify</code> returns the link as plain text with reason
+<code>no-follow</code>. Also removed: <code>linkMountsSkipped</code> in
+<code>writeArtifact</code> (<code>markdown.js:695</code>) and its line
+in <code>lahe review</code>
+(<code>src/cli/commands/review.js:428-431</code>).
+<code>lahe review</code> prints the file-limit count instead, when a
+page passes it.</p>
+<h3 id="rebuilding-a-sites-list">Rebuilding a site's list</h3>
+<p>A list that only grows keeps serving a file after its link is
+removed. Rebuilding it means walking every page of the site and every
+page it links, as <code>scripts/measure_site.js</code> does, then
+replacing <code>mount_files</code> with what the walk found. That needs
+a trigger (a command or a helper route with the CLI secret), a full
+render of the site, and its own tests. It is more than a small task, so
+it is a separate board row, <code>LAHE-linked-files-rebuild</code> (task
+7). Meanwhile the secret list (requirement 13) covers the worst case: a
+stale entry can never be a key or credential file.</p>
+<h3 id="reviews-on-a-mounted-page">Reviews on a mounted page</h3>
+<p>Nothing changes in how reviews answer (requirement 9). The list check
+happens first: a file that is not listed gets 404 before
+<code>ownReviewOf</code> is asked. A listed file follows today's path.
+<code>pickReview</code> with <code>mounted</code> still applies only
+rule 3, the newest review that linked to this file
+(<code>page_routes.js:335</code>, <code>357</code>, <code>362</code>,
+<code>366</code>). The list and <code>linked_files</code> stay separate
+on purpose. <code>linked_files</code> is written only when a review
+answered on the linking page (<code>page_routes.js:1962</code>), and it
+decides which rail a page carries and which origins a review accepts
+(<code>reviewAnswersOnSite</code>, <code>page_routes.js:449-452</code>).
+The list is written on every render and decides only what is served.
+Folding them together would let a read-only render change which review
+answers.</p>
+<h3 id="alternatives-considered">Alternatives considered</h3>
+<ul>
+<li><strong>Serve a linked HTML page's whole folder tree.</strong>
+Rejected: it brings back the whole-tree problem for any HTML file's
+folder, home included. See "Needs your decision".</li>
+<li><strong>Refuse everything a linked HTML page names.</strong>
+Rejected: a linked HTML page with its own stylesheet would show
+unstyled. It would not break Ken's two sites today (their linked HTML
+pages name nothing), but it would break the next built page with images
+beside it.</li>
+<li><strong>Check the Referer header</strong> (serve a file when the
+page in the Referer links to it). Rejected: the Library and bookmarks
+send no page Referer, and <code>fetch()</code> lets a page script name
+any same-origin Referer. A stored list is simpler and covers both.</li>
+<li><strong>Refuse known secret folders and keep whole-tree
+mounts.</strong> Rejected as the whole fix: it closes a few folders and
+leaves the rest of home open. Kept as a floor under the list
+(requirement 13), because the list alone does not stop a hostile
+document.</li>
+<li><strong>Keep the folder cap.</strong> Rejected: it counted folders,
+not files, and Ken's pages link into up to 34 folders. A file limit
+bounds the list directly.</li>
+<li><strong>Keep the list in a separate file outside the log.</strong>
+Rejected: it adds a second store with its own load and loss rules, and
+<code>replayLog</code> would overwrite a field written to
+<code>sites.json</code> alone. Short log lines give the same saving
+inside the one store.</li>
+</ul>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="tasks">Tasks</h2><span class="n">Section 5</span></div>
+<p>The rule for this change: no <code>rm</code>, no
+<code>git clean</code>. Anything to remove goes on a "To delete at
+cleanup" list.</p>
+<ol type="1">
+<li><strong>Tests first, red.</strong> Write the tests in the table
+below before any code. The new unit tests go in
+<code>test/unit/mount_files.test.js</code>, apart from the chain test,
+which extends the existing hop-to-hop test.</li>
+<li><strong>List the files the hand-built tests reach.</strong> Tests
+that bind a site with hand-made <code>mounts</code> and then fetch a
+file directly must list that file with <code>addMountFiles</code> first:
+<code>sites_pages.test.js</code> (V14),
+<code>hidden_files_served.test.js</code> (two tests),
+<code>page_routes_carried.test.js</code> (two tests),
+<code>sites_styles.test.js</code>. One test changes its expectation on
+purpose: <code>sites_linked_docs.test.js</code> "an HTML file in a
+mounted folder that no page linked to is served with no rail" becomes a
+404 test. The two cap tests in <code>sites_pages.test.js</code> and the
+cap tests in <code>markdown_links.test.js</code> and
+<code>markdown_linked_docs.test.js</code> become the file-limit test and
+the notes-page test.</li>
+<li><strong>Build.</strong> In this order: <code>isSecretPath</code> and
+the <code>.native</code> switch in <code>markdown_links.js</code>;
+<code>filesUnderMounts</code> in <code>page_routes.js</code>;
+<code>mount_files</code>, its cleaning, <code>addMountFiles</code> and
+the short log lines in <code>sites.js</code>;
+<code>renderMarkdown</code> returns <code>files</code>; the callers save
+them; the HTML path with its own-folder limit; the two checks and the
+log line in <code>handle</code>; the folder cap removed, the file limit
+and <code>follow: false</code> added in <code>markdown_links.js</code>;
+<code>writeArtifact</code> and <code>lahe review</code> report the file
+limit instead of the cap.</li>
+<li><strong>Docs.</strong>
+<code>docs/ongoing/STATIC_SITE_FOLDER.md</code> "Linked documents",
+<code>docs/CONTRACTS.md</code> (the link-translation paragraph),
+<code>docs/INSTALL.md</code>, and the board row. Each names the secret
+list and the file limit.</li>
+<li><strong>Real-site check.</strong> Copy Ken's <code>sites.json</code>
+into a temp state folder, with every pid in it set to one that is not
+running. Start a helper from the branch on that folder and free ports.
+Crawl both runbook sites over HTTP: every Markdown page under the root,
+then every address under a mount, page after page. Do the same from
+<code>main</code>. Write one row per address with both status codes, and
+fail on any address that answers 200 on <code>main</code> and 404 on the
+branch. Stop both helpers afterwards by the pids in their own state
+folders. Never touch the real helper (port 7817,
+<code>~/.local/state/lahe</code>). Keep the crawl script under
+<code>scripts/</code> beside this spec.</li>
+<li><strong>Gate and review.</strong> <code>npm run gate:unit</code>
+while building, then <code>npm run gate</code> on the integrated branch.
+The change is about what the page server hands out, so a security review
+reads the diff.</li>
+<li><strong>Add board row
+<code>LAHE-linked-files-rebuild</code>.</strong> Rebuild a site's
+<code>mount_files</code> from a fresh walk of its pages, so a removed
+link stops serving its file. Not part of this change.</li>
+</ol>
+<div class="scrollx"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Behavior</th>
+<th>Proof test</th>
+<th>What failure looks like</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>V1</td>
+<td><code>filesUnderMounts</code> lists a translated link, a relative
+link inside a linked page, an inline image, a <code>srcset</code> entry,
+raw HTML <code>&lt;img&gt;</code>, and a folder link as its
+<code>index.html</code></td>
+<td><code>mount_files.test.js</code>, one case per kind</td>
+<td>a linked page renders but its image or next link answers 404</td>
+</tr>
+<tr>
+<td>V2</td>
+<td><code>filesUnderMounts</code> lists nothing for an outside URL,
+Lahe's own files (fonts, doc style, mermaid), a <code>..</code> or
+symlink that leaves the mount, a missing file, or a prefix the site does
+not mount</td>
+<td><code>mount_files.test.js</code></td>
+<td>a file outside the linked set gets listed and served</td>
+</tr>
+<tr>
+<td>V3</td>
+<td>One link to <code>~/todo.md</code> serves <code>todo.md</code>;
+<code>~/.ssh/id_ed25519</code> and
+<code>~/Documents/taxes/2025.txt</code> under the same home mount answer
+404</td>
+<td><code>mount_files.test.js</code>, the premise probe turned into a
+test</td>
+<td>the hole the premise check found is still open</td>
+</tr>
+<tr>
+<td>V4</td>
+<td>The chain: hub, then a page in another folder, then a third page,
+each 200 with the hub's rail; hop one's inline image 200; a file in hop
+one's folder that nothing links answers 404</td>
+<td>extend <code>markdown_linked_docs.test.js</code> "local links serve
+rendered documents with its rail, hop to hop"</td>
+<td>Ken's runbook navigation breaks partway, or a whole folder is still
+served</td>
+</tr>
+<tr>
+<td>V5</td>
+<td>A linked HTML page's stylesheet, its image, a <code>url()</code>
+inside the stylesheet, and its script all answer 200; a sibling file it
+does not name answers 404</td>
+<td><code>mount_files.test.js</code></td>
+<td>linked HTML pages show unstyled, or their folder is served
+whole</td>
+</tr>
+<tr>
+<td>V6</td>
+<td>A site entry with <code>linked_files</code> and no
+<code>mount_files</code> (an old <code>sites.json</code>) serves its
+linked pages with no render first</td>
+<td><code>mount_files.test.js</code></td>
+<td>existing sites and the Library's Open break after the upgrade</td>
+</tr>
+<tr>
+<td>V7</td>
+<td>A listed image is served by a new helper started on the same state
+folder, with no re-render</td>
+<td><code>mount_files.test.js</code></td>
+<td>images in open tabs break after each Lahe update</td>
+</tr>
+<tr>
+<td>V8</td>
+<td><code>mount_files</code> is cleaned on load, merges without repeats,
+and is rebuilt from the <code>mount-files</code> log lines when
+<code>sites.json</code> is lost</td>
+<td><code>sites_binding.test.js</code> or
+<code>mount_files.test.js</code></td>
+<td>a bad entry is served, or the list is lost on a rebuild</td>
+</tr>
+<tr>
+<td>V9</td>
+<td>A notes page still follows no links</td>
+<td><code>sites_pages.test.js</code> (replaces a cap test)</td>
+<td>notes pages start following links</td>
+</tr>
+<tr>
+<td>V10</td>
+<td>A refused file writes one helper-log line naming it and the site,
+once</td>
+<td><code>mount_files.test.js</code></td>
+<td>dead links with no trace, or one log line per request</td>
+</tr>
+<tr>
+<td>V11</td>
+<td>Reviews on mounted pages behave as before: rule 3, the redirect, the
+read-only own-review page, comments through a link</td>
+<td>existing <code>sites_linked_docs.test.js</code>,
+<code>each_page_comments.test.js</code>,
+<code>test/browser/linked_docs_rail.spec.js</code>, unchanged except the
+one flipped test in task 2</td>
+<td>comments land in the wrong review, or a linked page loses its
+rail</td>
+</tr>
+<tr>
+<td>V12</td>
+<td>On both runbook sites, no link is plain text and no address that
+answers 200 on <code>main</code> answers 404 on the branch</td>
+<td>the real-site crawl in task 5, its row file and a zero count</td>
+<td>a link or image Ken uses goes dead</td>
+</tr>
+<tr>
+<td>V13</td>
+<td>Nothing else moves</td>
+<td><code>npm run gate</code>, 0 failed</td>
+<td>anything else</td>
+</tr>
+<tr>
+<td>V14</td>
+<td>A hostile README in a linked folder links
+<code>../../.ssh/id_ed25519</code> and <code>~/.aws/credentials</code>
+by absolute path, and raw HTML <code>&lt;img src&gt;</code> to a file in
+<code>~/.gnupg</code>: both links render as plain text, nothing is
+listed, and a direct request for each answers 404. A symlink in a linked
+folder pointing into <code>~/.ssh</code> answers 404</td>
+<td><code>mount_files.test.js</code></td>
+<td>a document that names a key gets it served</td>
+</tr>
+<tr>
+<td>V15</td>
+<td>A site rooted at home (<code>lahe review ~/todo.md</code>):
+<code>todo.md</code> and <code>~/notes/other.md</code> answer 200, while
+<code>~/.ssh/id_ed25519</code>, <code>~/.config/gh/hosts.yml</code> and
+<code>~/Library/Keychains/login.keychain-db</code> answer 404</td>
+<td><code>mount_files.test.js</code></td>
+<td>a root site still serves every secret under it</td>
+</tr>
+<tr>
+<td>V16</td>
+<td>A page naming 260 files under mounts: 256 work, 4 render as plain
+text with the limit title, one log line; the same on three reloads</td>
+<td><code>sites_pages.test.js</code> (replaces the other cap test)</td>
+<td>no bound on the list, or a page creeps past the limit on reload</td>
+</tr>
+<tr>
+<td>V17</td>
+<td>Each render that adds files appends one <code>mount-files</code>
+line holding only the new paths; no whole-entry line carries
+<code>mount_files</code>; an older reader of the log ignores the new
+lines</td>
+<td><code>mount_files.test.js</code> reading <code>sites.log</code></td>
+<td>the log grows by the whole list on every change</td>
+</tr>
+<tr>
+<td>V18</td>
+<td>On a case-insensitive disk, a link spelled <code>Todo.md</code> to
+the file <code>todo.md</code> is listed as <code>todo.md</code> and
+answers 200, and an old <code>linked_files</code> key spelled
+<code>Todo.md</code> still lets the page be served. The test skips
+itself on a case-sensitive disk and says so</td>
+<td><code>mount_files.test.js</code></td>
+<td>a link answers 404 only because of its spelling</td>
+</tr>
+<tr>
+<td>V19</td>
+<td>A linked HTML page names a file under another mount and a file in
+its parent folder: neither is listed and both answer 404; its own
+folder's stylesheet answers 200</td>
+<td><code>mount_files.test.js</code></td>
+<td>a linked HTML file reaches files under other mounts</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="acceptance-criteria">Acceptance criteria</h2><span class="n">Section 6</span></div>
+<ul>
+<li>V1 to V11 and V14 to V19 pass, and <code>npm run gate</code> reads 0
+failed (V13).</li>
+<li>The real-site crawl (V12) reports zero addresses that answer 200 on
+<code>main</code> and 404 on the branch, and zero links rendered as
+plain text, on both runbook sites. Its row file and script are named on
+the progress page.</li>
+<li>The security review of the diff finds no way to reach an unlisted
+file under a mount, or any file on the secret list from any site.</li>
+<li>The four docs in requirement 11 say the new rule, and none still
+mentions the folder cap.</li>
+<li>Board row <code>LAHE-linked-files-rebuild</code> exists (task
+7).</li>
+<li>No analytics: Lahe has none. No flag: the old behavior is two checks
+in <code>handle</code>, and the decision was to remove it.</li>
+</ul>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="verification-results">Verification results</h2><span class="n">Section 7</span></div>
+<ul>
+<li><p><strong>Full gate (<code>npm run gate:all</code>, run alone, kept
+awake):</strong> unit 3126 passed, 0 failed (5 skipped); browsers 2728
+passed, 0 failed, none flaky (Chromium, Firefox, WebKit). No helper left
+running.</p></li>
+<li><p><strong>Your two real sites, main against this branch (V12,
+<code>scripts/crawl_compare.js</code> on a copy of your helper's site
+records):</strong></p>
+<div class="scrollx"><table>
+<thead>
+<tr>
+<th>Site</th>
+<th>Addresses</th>
+<th>Lost (200 on main, 404 here)</th>
+<th>Links turned to plain text</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>docs.features.runbooks</code></td>
+<td>15,632</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>documents.workspace.feature-forge-runbooks</code></td>
+<td>8,201</td>
+<td>0</td>
+<td>0</td>
+</tr>
+</tbody>
+</table></div>
+<p>The crawl reads addresses more widely than the code does (unquoted
+values, <code>poster</code>, <code>data</code>, <code>@import</code>,
+inline style <code>url()</code>), so it can catch a file the code fails
+to list.</p></li>
+<li><p><strong>Code review:</strong> no way found to reach an unlisted
+or secret file. Five findings, all fixed with tests: the order of the
+checks is now pinned; the scanner reads unquoted values,
+<code>poster</code>, <code>data</code>, <code>@import</code> and inline
+styles; the 256-file limit is counted one way, so a link past it is
+plain text and never a dead link; the secret folders are resolved once
+per home folder; the refusal log has its own cap.</p></li>
+<li><p><strong>One test fixed along the way:</strong> the Firefox style
+switcher test opened a comment box while Firefox was still undoing a
+scroll, so the box landed 40px off. It failed on <code>main</code> too.
+The test now waits until the page stops moving, the way a reviewer opens
+a box. No check was loosened.</p></li>
+</ul>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="open-questions">Open questions</h2><span class="n">Section 8</span></div>
+<ul>
+<li><strong>Files a linked HTML page's script loads.</strong> See "Needs
+your decision". If Ken accepts the 404, the helper-log line (requirement
+10) is how a broken page gets noticed.</li>
+<li><strong>Should the secret list grow?</strong> It is short on
+purpose, and each entry is a path where credentials live by default.
+Adding a path is a one-line change with a test.</li>
+</ul>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="review">Review</h2><span class="n">Section 9</span></div>
+<p>Accepted all six security findings: the secret list for mounts and
+site roots (requirement 13), the HTML own-folder limit (requirement 4),
+the 256-file limit per page (requirement 14), log lines with only new
+paths (requirement 15), one <code>.native</code> spelling for every path
+(requirement 16), and a rebuild as its own board row with the secret
+list covering stale entries meanwhile (requirement 7, task 7). Rejected:
+nothing. Whether rendered Markdown should run raw HTML stays with board
+row <code>LAHE-markdown-raw-html</code> rather than becoming a new
+decision here.</p>
+</section>
+
+</main>
+
+
+
+</body>
+</html>

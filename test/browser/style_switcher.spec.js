@@ -444,6 +444,29 @@ function boxAndPassage(page, id) {
   }, id);
 }
 
+/**
+ * Wait until the page has stopped moving: the scroll position is the same for
+ * 300 ms of animation frames. Firefox can undo a scrollBy issued right after a
+ * scrollIntoView a few frames later (a bare page with no Lahe on it does it
+ * too), so a box opened straight away is placed against a page that then jumps
+ * 40px under it. A reviewer opens a comment box on a page that is at rest, and
+ * boxes are placed once, when they open (comments.js positionAt), so the test
+ * waits for the same condition and reads where the page came to rest.
+ */
+function pageAtRest(page) {
+  return page.evaluate(() => new Promise((resolve) => {
+    let last = window.scrollY;
+    let since = performance.now();
+    const look = () => {
+      const now = performance.now();
+      if (window.scrollY !== last) { last = window.scrollY; since = now; }
+      if (now - since >= 300) resolve(last);
+      else requestAnimationFrame(look);
+    };
+    requestAnimationFrame(look);
+  }));
+}
+
 /** Where a block sits from the top of the window. */
 function topOf(page, selector) {
   return page.evaluate((sel) => document.querySelector(sel).getBoundingClientRect().top, selector);
@@ -482,6 +505,7 @@ test.describe("one click restyles the page and leaves the reviewer's work alone 
     // The reader is part way down the page.
     await page.evaluate(() => document.querySelector("#s2p5").scrollIntoView({ block: "start", behavior: "instant" }));
     await page.evaluate(() => window.scrollBy({ top: -40, behavior: "instant" }));
+    await pageAtRest(page);
     // A comment box open on a passage, with words typed in it.
     const boxId = await openCommentBox(page, "#s2p6", "Say how long a layoff this is for.");
     const reading = await readingBlock(page);

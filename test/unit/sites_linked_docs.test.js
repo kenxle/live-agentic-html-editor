@@ -72,10 +72,10 @@ test("a linked HTML document with no review of its own carries the linking page'
   assert.equal(reviewIn((await getPage(w, w.name, w.mount + "far.html")).text), w.review.id);
 });
 
-test("an HTML file in a mounted folder that no page linked to is served with no rail", async (t) => {
+test("an HTML file in a mounted folder that no page linked to is not served", async (t) => {
   const w = await hubWorld(t);
   const res = await getPage(w, w.name, w.mount + "unlinked.html");
-  assert.equal(res.status, 200);
+  assert.equal(res.status, 404);
   assert.equal(reviewIn(res.text), null);
 });
 

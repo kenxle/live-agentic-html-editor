@@ -483,7 +483,10 @@ function renderPage(source, options) {
     if (decision.kind === "inert") {
       // Not a 404 and not a custom protocol: a plain span that says where the
       // file is, so the reviewer knows the link is local rather than broken.
-      return "<span class=\"lahe-local-link\" title=\"local file, open it on disk: " +
+      var because = decision.reason === "too-many"
+        ? "this page links more than " + links.FILE_LIMIT + " files; open it on disk: "
+        : "local file, open it on disk: ";
+      return "<span class=\"lahe-local-link\" title=\"" + because +
         escapeHtml(decision.target) + "\">" + text + "</span>";
     }
     if (decision.kind === "blocked") {
@@ -692,7 +695,7 @@ function writeArtifact(dir, sessionId, source, options) {
     assetRoot: path.dirname(path.resolve(source)),
     linkMounts: registry.added.slice(),
     linked: registry.linked.slice(),
-    linkMountsSkipped: registry.skipped
+    linkFilesPast: registry.past
   };
 }
 
@@ -708,7 +711,7 @@ module.exports = {
   FONT_ASSET_DIR: FONT_ASSET_DIR,
   FONT_SOURCE_DIR: FONT_SOURCE_DIR,
   FONT_ASSETS: FONT_ASSETS,
-  MOUNT_CAP: links.MOUNT_CAP,
+  FILE_LIMIT: links.FILE_LIMIT,
   styleSheet: styleSheet,
   copyFonts: copyFonts,
   isMarkdown: isMarkdown,
