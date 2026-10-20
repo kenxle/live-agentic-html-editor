@@ -1,0 +1,86 @@
+{
+  "booted": true,
+  "version": "0.4.0+5a08787aefbe",
+  "review": "r9bcec61e9605",
+  "collapsed": false,
+  "tab": "active",
+  "status": "stored",
+  "failures": [],
+  "editing": false,
+  "cards": [
+    "itm_306be0f54aa36ac56ab3d823"
+  ],
+  "items": [
+    {
+      "id": "itm_306be0f54aa36ac56ab3d823",
+      "kind": "comment",
+      "state": "ready",
+      "rev": 1,
+      "text": "Which side is north?"
+    }
+  ],
+  "controls": [
+    {
+      "label": "Document style"
+    },
+    {
+      "label": "Ask the agent for a PDF"
+    },
+    {
+      "label": "More actions"
+    },
+    {
+      "label": "Collapse the chat bar"
+    },
+    {
+      "label": "Active1",
+      "data-tab": "active",
+      "aria-selected": "true"
+    },
+    {
+      "label": "Done0",
+      "data-tab": "done",
+      "aria-selected": "false"
+    },
+    {
+      "label": "Filter: show all, comments, or edits",
+      "data-lahe-filter-toggle": "active",
+      "data-lahe-filtering": "false"
+    },
+    {
+      "label": "Send",
+      "data-lahe-act": "send",
+      "data-lahe": "chrome",
+      "data-lahe-label": "Send",
+      "data-lahe-send": "",
+      "data-lahe-tip": "Cmd-Enter"
+    },
+    {
+      "label": "Collapse this thread"
+    },
+    {
+      "label": "Open: thread actions",
+      "data-state": "ready",
+      "data-lahe-no-jump": ""
+    },
+    {
+      "label": "Delete this comment",
+      "data-lahe": "chrome",
+      "data-lahe-act": "delete"
+    },
+    {
+      "label": "Send",
+      "data-lahe": "chrome",
+      "data-lahe-label": "Send",
+      "data-lahe-send": "",
+      "data-lahe-tip": "Cmd-Enter"
+    },
+    {
+      "label": "Hold sending messages",
+      "aria-pressed": "false"
+    },
+    {
+      "label": "End this review, close it and show your hand edits"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+$ lv agent reply itm_306be0f54aa36ac56ab3d823 1 question --text Is north the road side?
+{"item":"itm_306be0f54aa36ac56ab3d823","status":"question"}
+exit 0
+$ lv page wait (window.__lahe.items()[0].reply||{}).status === 'question'
+true: (window.__lahe.items()[0].reply||{}).status === 'question'
+exit 0
+$ lv page shot reply
+/home/user/live-agentic-html-editor/verification-evidence/cloud-proof-20261020-2/002-reply.png
+exit 0
+$ lv page click rail:textarea[aria-label='Follow up']
+click rail:textarea[aria-label='Follow up']
+exit 0
+$ lv page type Yes, the road side.
+typed "Yes, the road side."
+exit 0
+$ lv page key ControlOrMeta+Enter
+pressed ControlOrMeta+Enter
+exit 0
+$ lv agent wait Yes, the road side
+{"review":"r9bcec61e9605","page":{"path":"/sample.md","quote":"roof leaks","context":{"prefix":"Notes Section 3","heading":"Notes"},"region":{"stamp":"evus3cw3s","where":"main > section.sheet > p","ordinal":{"index":1,"of":1},"text_unique":true}},"id":"itm_306be0f54aa36ac56ab3d823","rev":2,"kind":"comment","state":"ready","note":"Yes, the road side.","thread":[{"rev":1,"reviewer":{"note":"Which si
+exit 0
+$ lv page shot followup
+/home/user/live-agentic-html-editor/verification-evidence/cloud-proof-20261020-2/003-followup.png
+exit 0
+$ lv doctor
+ok    dist/lahe-layer.js matches src (npm run check:layer)
+ok    keeper alive and owned by this run  (pid 650)
+ok    Chromium running with this run's profile  (1 processes)
+ok    page is this run's review  (http://lahe-verify.cloud-proof.work.lahe.localhost:46379/sample.md)
+ok    review layer booted  (layer 0.4.0+5a08787aefbe)
+ok    layer version matches checkout 0.4.0  (0.4.0+5a08787aefbe)
+ok    page holds this run's review  (r9bcec61e9605)
+ok    rail shows no failures  ([])
+exit 0
+$ lv down
+session close: exit 0
+helpers stopped: 643
+keeper 650 and its browser stopped
+left running: nothing
+evidence kept: /home/user/live-agentic-html-editor/verification-evidence/cloud-proof-20261020-2 (5 files)
+exit 0

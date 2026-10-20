@@ -1,0 +1,22 @@
+run       cloud-proof
+open      http://lahe-verify.cloud-proof.work.lahe.localhost:46379/sample.md
+source    /tmp/lahe-verify/cloud-proof/work/sample.md
+session   s_c6aad03df19517bf
+review    r9bcec61e9605
+evidence  /home/user/live-agentic-html-editor/verification-evidence/cloud-proof-20261020-2
+next      skills/verify-lahe/bin/lahe-verify doctor --run cloud-proof
+exit 0
+$ lv doctor
+ok    run is not torn down
+ok    helper recorded in this run's state dir  (pid 643 port 38597)
+ok    helper pid alive and owned by this run  (/opt/node22/bin/node /home/user/live-agentic-html-editor/bin/lahe.js serve --port 38597 --state-dir /tmp/lahe-verify/cloud-proof/state)
+ok    helper answers health  ({"ok":true,"version":"0.4.0","api":"v1","service_contract":17,"started_at":"2026-10-20T01:09:47.386Z","catalog_seen_at":null,"always_on":false,"state_id":"d16ca)
+ok    dist/lahe-layer.js matches src (npm run check:layer)
+ok    keeper alive and owned by this run  (pid 650)
+ok    Chromium running with this run's profile  (1 processes)
+ok    page is this run's review  (http://lahe-verify.cloud-proof.work.lahe.localhost:46379/sample.md)
+ok    review layer booted  (layer 0.4.0+5a08787aefbe)
+ok    layer version matches checkout 0.4.0  (0.4.0+5a08787aefbe)
+ok    page holds this run's review  (r9bcec61e9605)
+ok    rail shows no failures  ([])
+exit 0

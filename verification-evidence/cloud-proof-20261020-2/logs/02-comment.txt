@@ -1,0 +1,35 @@
+$ lv page select text=The shed roof leaks --text roof leaks
+{
+  "selected": "roof leaks",
+  "collapsed": false
+}
+exit 0
+$ lv page key ControlOrMeta+Shift+KeyC
+pressed ControlOrMeta+Shift+KeyC
+exit 0
+$ lv page type Which side is north?
+typed "Which side is north?"
+exit 0
+$ lv page key ControlOrMeta+Enter
+pressed ControlOrMeta+Enter
+exit 0
+$ lv page rail before-reply
+      "data-lahe-send": "",
+      "data-lahe-tip": "Cmd-Enter"
+    },
+    {
+      "label": "Hold sending messages",
+      "aria-pressed": "false"
+    },
+    {
+      "label": "End this review, close it and show your hand edits"
+    }
+  ]
+}
+exit 0
+$ lv agent wait Which side is north
+{"review":"r9bcec61e9605","page":{"path":"/sample.md","quote":"roof leaks","context":{"prefix":"Notes Section 3","heading":"Notes"},"region":{"stamp":"evus3cw3s","where":"main > section.sheet > p","ordinal":{"index":1,"of":1},"text_unique":true}},"id":"itm_306be0f54aa36ac56ab3d823","rev":1,"kind":"comment","state":"ready","note":"Which side is north?","reviewer_last_changed_at":"2026-10-20T01:09:5
+exit 0
+$ lv agent drain
+{"review":"r9bcec61e9605","page":{"path":"/sample.md","quote":"roof leaks","context":{"prefix":"Notes Section 3","heading":"Notes"},"region":{"stamp":"evus3cw3s","where":"main > section.sheet > p","ordinal":{"index":1,"of":1},"text_unique":true}},"id":"itm_306be0f54aa36ac56ab3d823","rev":1,"kind":"comment","state":"ready","note":"Which side is north?","reviewer_last_changed_at":"2026-10-20T01:09:5
+exit 0
