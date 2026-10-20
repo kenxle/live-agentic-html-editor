@@ -425,10 +425,10 @@ async function run(argv, mode) {
           ? "  links     " + rendered.linkMounts.length + " linked folder" +
             (rendered.linkMounts.length === 1 ? "" : "s") + " served read-only at this address\n"
           : "") +
-        (rendered.linkMountsSkipped && !notesMode
-          ? "  links     " + rendered.linkMountsSkipped + " local link" +
-            (rendered.linkMountsSkipped === 1 ? "" : "s") + " past the " + markdown.MOUNT_CAP +
-            "-folder cap render as inert text\n"
+        (rendered.linkFilesPast && !notesMode
+          ? "  links     " + rendered.linkFilesPast + " local link" +
+            (rendered.linkFilesPast === 1 ? "" : "s") + " past the " + markdown.FILE_LIMIT +
+            "-file limit render as inert text\n"
           : "")
       );
     }

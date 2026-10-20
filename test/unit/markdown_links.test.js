@@ -122,33 +122,48 @@ test("a link to a hidden location is translated like any other", () => {
   });
 });
 
-test("the per-render mount cap is honored, counted, and does not fail the render", () => {
+test("a render may name at most 256 files under mounts: links past it are inert, counted, and do not fail the render", () => {
   withHome((home) => {
     const source = path.join(home, "docs");
     write(path.join(source, "index.md"), "# Index\n");
     const registry = links.createRegistry({});
     const results = [];
-    for (let i = 0; i < links.MOUNT_CAP + 3; i += 1) {
-      write(path.join(home, "folder-" + i, "doc.md"), "# Doc " + i + "\n");
-      results.push(links.classify("../folder-" + i + "/doc.md", source, registry));
+    for (let i = 0; i < links.FILE_LIMIT + 3; i += 1) {
+      write(path.join(home, "folder", "doc-" + i + ".md"), "# Doc " + i + "\n");
+      results.push(links.classify("../folder/doc-" + i + ".md", source, registry));
     }
-    assert.equal(registry.added.length, links.MOUNT_CAP);
-    assert.equal(registry.skipped, 3);
-    assert.equal(results[links.MOUNT_CAP].kind, "inert");
-    assert.equal(results[links.MOUNT_CAP].reason, "cap");
+    assert.equal(links.FILE_LIMIT, 256);
+    assert.equal(registry.added.length, 1, "one folder, one mount, however many files");
+    assert.equal(registry.past, 3);
+    assert.equal(results[links.FILE_LIMIT].kind, "inert");
+    assert.equal(results[links.FILE_LIMIT].reason, "too-many");
     assert.equal(results[0].kind, "translate");
+    assert.equal(links.classify("../folder/doc-0.md", source, registry).kind, "translate", "a file already named does not count twice");
   });
 });
 
-test("links reuse an already served parent folder after the mount cap is reached", () => {
+test("the number of folders a page links into is no longer limited", () => {
+  withHome((home) => {
+    const source = path.join(home, "docs");
+    write(path.join(source, "index.md"), "# Index\n");
+    const registry = links.createRegistry({});
+    for (let i = 0; i < 100; i += 1) {
+      write(path.join(home, "folder-" + i, "doc.md"), "# Doc " + i + "\n");
+      assert.equal(links.classify("../folder-" + i + "/doc.md", source, registry).kind, "translate");
+    }
+    assert.equal(registry.added.length, 100);
+  });
+});
+
+test("a registry that does not follow links reuses the served root and refuses every other folder", () => {
   withHome((home) => {
     const project = path.join(home, "project");
     const source = path.join(project, "docs");
     write(path.join(source, "index.md"), "# Index\n");
     const registry = links.createRegistry({
-      mounts: { "/": project }, cap: 0
+      mounts: { "/": project }, follow: false
     });
-    for (let i = 0; i < links.MOUNT_CAP + 3; i += 1) {
+    for (let i = 0; i < 5; i += 1) {
       const target = write(path.join(project, "skills", "skill " + i, "SKILL.md"), "# Skill\n");
       const result = links.classify("../skills/skill " + i + "/SKILL.md#details", source, registry);
       assert.equal(result.kind, "translate");
@@ -156,9 +171,11 @@ test("links reuse an already served parent folder after the mount cap is reached
       assert.ok(registry.linked.includes(target));
     }
     assert.equal(registry.added.length, 0);
-    assert.equal(registry.skipped, 0);
     write(path.join(home, "project-other", "SECRET.md"), "# Outside this site\n");
-    assert.equal(links.classify("../../project-other/SECRET.md", source, registry).reason, "cap");
+    const refused = links.classify("../../project-other/SECRET.md", source, registry);
+    assert.equal(refused.kind, "inert");
+    assert.equal(refused.reason, "no-follow");
+    assert.equal(registry.added.length, 0);
   });
 });
 
