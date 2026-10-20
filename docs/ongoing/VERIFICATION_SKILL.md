@@ -1,6 +1,17 @@
 # Verification skill for Lahe
 
-Updated: 2026-10-19T10:08-04:00
+Updated: 2026-10-19T20:15-04:00
+
+## Latest
+
+- **[PR #84 (verification skill)](https://github.com/kenxle/live-agentic-html-editor/pull/84)
+  is ready to merge.** GitHub's check passed, and it still merges cleanly
+  even though main has moved ahead by 39 commits since. Nobody has merged it yet.
+- **Both cloud runs are waiting on you.** They need a cloud environment to run
+  in (see "Needs your call" below). No routine has been created yet.
+- **Nothing else changed** on this branch since this morning.
+
+## What it is
 
 **[PR #84 (verification skill)](https://github.com/kenxle/live-agentic-html-editor/pull/84) is open.**
 An agent can now start a
