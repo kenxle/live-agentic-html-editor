@@ -132,25 +132,40 @@ function walkMarkdown(root) {
   return out.sort();
 }
 
+// Deliberately wider than the scanner in src/service/page_routes.js
+// (filesUnderMounts), so the crawl can catch an address the code misses: ANY
+// attribute with a quoted or unquoted value, srcset lists, url() and @import
+// in the page and in stylesheets, all read after HTML entities are decoded, and
+// finally any mount address written anywhere in the text.
+function decodeEntities(text) {
+  return String(text)
+    .replace(/&#[xX]([0-9a-fA-F]+);/g, (w, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (w, d) => String.fromCodePoint(parseInt(d, 10)))
+    .replace(/&quot;/g, "\"").replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+}
+
 function addressesIn(text, type, pageUrl) {
   const out = new Set();
   const consider = (value) => {
     if (!value) return;
     let url;
-    try { url = new URL(value.replace(/&amp;/g, "&"), "http://site.test" + pageUrl); } catch (err) { return; }
+    try { url = new URL(value.trim(), "http://site.test" + pageUrl); } catch (err) { return; }
     if (url.host !== "site.test") return;
     if (!url.pathname.startsWith("/.lahe-source/")) return;
     out.add(url.pathname);
   };
-  const attr = /\b(href|src|srcset)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+  const decoded = decodeEntities(text);
+  const attr = /\b([a-zA-Z][a-zA-Z0-9:_-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g;
   let m;
-  while ((m = attr.exec(text))) {
-    const value = m[2] !== undefined ? m[2] : m[3];
+  while ((m = attr.exec(decoded))) {
+    const value = m[2] !== undefined ? m[2] : m[3] !== undefined ? m[3] : m[4];
     if (m[1].toLowerCase() === "srcset") value.split(",").forEach((part) => consider(part.trim().split(/\s+/)[0]));
     else consider(value);
   }
-  const css = /url\(\s*['"]?([^'")]+)['"]?\s*\)/g;
-  while ((m = css.exec(text))) consider(m[1]);
+  const css = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)\s"']+))\s*\)|@import\s+(?:"([^"]*)"|'([^']*)')/g;
+  while ((m = css.exec(decoded))) consider(m[1] || m[2] || m[3] || m[4] || m[5]);
+  const literal = /\/\.lahe-source\/[a-f0-9]+\/[^\s"'<>()]*/g;
+  while ((m = literal.exec(decoded))) consider(m[0]);
   return out;
 }
 
