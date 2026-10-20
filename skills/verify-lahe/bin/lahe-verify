@@ -1,0 +1,731 @@
+#!/usr/bin/env node
+// lahe-verify: drive a disposable Lahe review the way a reviewer and an agent
+// would, one command at a time, and keep a record of every step.
+//
+// One run owns three things, all named in <run>/run.json:
+//   - a helper started by `node <checkout>/bin/lahe.js review` with its own
+//     LAHE_STATE_DIR under the OS temp folder (never Ken's helper on 7817)
+//   - a Chromium started from Playwright's install with its own profile and a
+//     DevTools port, so each `page` command reconnects to the same tab
+//   - an evidence folder: commands.jsonl plus every screenshot and snapshot
+//
+// `down` stops only those processes, checked by their command lines, and
+// leaves the evidence where it is. Usage is in the verify-lahe skill.
+
+"use strict";
+
+const fs = require("node:fs");
+const os = require("node:os");
+const net = require("node:net");
+const path = require("node:path");
+const { spawn, execFileSync } = require("node:child_process");
+
+const SKILL_DIR = path.join(__dirname, "..");
+const REPO_ROOT = process.env.LAHE_REPO || path.join(SKILL_DIR, "..", "..");
+const CLI = path.join(REPO_ROOT, "bin", "lahe.js");
+const RUNS_ROOT = path.join(os.tmpdir(), "lahe-verify");
+const SAMPLE = path.join(SKILL_DIR, "fixtures", "sample.md");
+
+// ---------------------------------------------------------------- arguments
+
+function parse(argv) {
+  const out = { _: [], flags: {} };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--") {
+      out.rest = argv.slice(i + 1);
+      break;
+    }
+    if (a.startsWith("--")) {
+      const key = a.slice(2);
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith("--")) out.flags[key] = true;
+      else {
+        out.flags[key] = next;
+        i++;
+      }
+    } else out._.push(a);
+  }
+  return out;
+}
+
+function fail(message, code) {
+  process.stderr.write("lahe-verify: " + message + "\n");
+  process.exit(code || 1);
+}
+
+// ---------------------------------------------------------------- run state
+
+function runDir(id) {
+  return path.join(RUNS_ROOT, id);
+}
+
+function loadRun(args) {
+  const id = args.flags.run || process.env.LAHE_VERIFY_RUN;
+  if (!id) fail("pass --run <id> (printed by `up`)");
+  const file = path.join(runDir(id), "run.json");
+  if (!fs.existsSync(file)) fail("no run " + id + " at " + file);
+  return JSON.parse(fs.readFileSync(file, "utf8"));
+}
+
+function saveRun(run) {
+  fs.writeFileSync(path.join(run.dir, "run.json"), JSON.stringify(run, null, 2) + "\n");
+}
+
+function log(run, entry) {
+  const line = Object.assign({ at: new Date().toISOString() }, entry);
+  fs.appendFileSync(path.join(run.evidence, "commands.jsonl"), JSON.stringify(line) + "\n");
+}
+
+function nextSeq(run) {
+  const file = path.join(run.dir, "seq");
+  const n = fs.existsSync(file) ? Number(fs.readFileSync(file, "utf8")) + 1 : 1;
+  fs.writeFileSync(file, String(n));
+  return String(n).padStart(3, "0");
+}
+
+function evidencePath(run, name, ext) {
+  const safe = String(name).replace(/[^a-zA-Z0-9._-]+/g, "-");
+  return path.join(run.evidence, nextSeq(run) + "-" + safe + ext);
+}
+
+// ---------------------------------------------------------------- processes
+
+function freePort() {
+  return new Promise(function (resolve, reject) {
+    const server = net.createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", function () {
+      const port = server.address().port;
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+function alive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+function commandOf(pid) {
+  try {
+    return execFileSync("ps", ["-p", String(pid), "-ww", "-o", "command="], { encoding: "utf8" }).trim();
+  } catch (err) {
+    return "";
+  }
+}
+
+function cliEnv(run) {
+  const env = Object.assign({}, process.env, { LAHE_STATE_DIR: run.stateDir, LAHE_DIRECT_LAUNCH: "off" });
+  if (env.LAHE_PAGES_PORT === undefined) env.LAHE_PAGES_PORT = "0";
+  delete env.XDG_STATE_HOME;
+  return env;
+}
+
+function cli(run, args) {
+  try {
+    const stdout = execFileSync(process.execPath, [CLI].concat(args), {
+      cwd: REPO_ROOT,
+      env: cliEnv(run),
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+      input: run.stdin || ""
+    });
+    return { code: 0, stdout: stdout, stderr: "" };
+  } catch (err) {
+    return { code: err.status == null ? 1 : err.status, stdout: String(err.stdout || ""), stderr: String(err.stderr || err.message) };
+  }
+}
+
+function labelled(output, label) {
+  const match = new RegExp("^\\s*" + label + "\\s+(\\S+)", "m").exec(output);
+  return match ? match[1] : null;
+}
+
+function playwright() {
+  try {
+    return require(require.resolve("@playwright/test", { paths: [REPO_ROOT] }));
+  } catch (err) {
+    fail("Playwright is not installed for " + REPO_ROOT + ". Run `npm ci` there, then `npx playwright install chromium`.");
+  }
+}
+
+async function pollFor(fn, timeoutMs, what) {
+  const until = Date.now() + timeoutMs;
+  let last;
+  while (Date.now() < until) {
+    try {
+      last = await fn();
+      if (last) return last;
+    } catch (err) {
+      last = err;
+    }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  throw new Error("timed out waiting for " + what + (last instanceof Error ? ": " + last.message : ""));
+}
+
+// ---------------------------------------------------------------- browser
+
+// Every page action goes through the keeper, the one process holding the
+// browser. A second DevTools client would make the page lose focus each time
+// it disconnects, and losing focus ends an open edit.
+async function ask(run, body) {
+  const ready = keeperInfo(run);
+  if (!ready) throw new Error("no keeper for run " + run.id + "; run `doctor`, then `down` and `up` again");
+  const res = await fetch("http://127.0.0.1:" + ready.port + "/do", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-verify-token": ready.token },
+    body: JSON.stringify(body)
+  });
+  const answer = await res.json();
+  if (!answer.ok) throw new Error(answer.error);
+  return answer.result;
+}
+
+function keeperInfo(run) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(run.dir, "keeper.json"), "utf8"));
+  } catch (err) {
+    return null;
+  }
+}
+
+/** Pids of every process whose command line names this run's browser profile. */
+function browserPids(run) {
+  let out = "";
+  try {
+    out = execFileSync("ps", ["-axww", "-o", "pid=,command="], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  } catch (err) {
+    return [];
+  }
+  return out
+    .split("\n")
+    .map((line) => /^\s*(\d+)\s+(.*)$/.exec(line))
+    .filter((m) => m && m[2].includes(run.profile))
+    .map((m) => Number(m[1]));
+}
+
+// Find an element. `rail:<css>` looks inside the rail's closed shadow root;
+// `rail-text:<words>` finds the rail control whose label holds those words.
+// Anything else is a Playwright selector on the page (css, text=, role=).
+async function handleFor(page, target) {
+  if (target.startsWith("rail:") || target.startsWith("rail-text:")) {
+    const handle = await page.evaluateHandle(function (t) {
+      const rail = window.__lahe && window.__lahe.rail;
+      if (!rail) return null;
+      const root = rail.tabBody(rail.currentTab()).getRootNode();
+      if (t.startsWith("rail:")) {
+        const found = Array.from(root.querySelectorAll(t.slice(5)));
+        return found.find((el) => el.getClientRects().length > 0) || found[0] || null;
+      }
+      const want = t.slice(10).trim().toLowerCase();
+      const all = Array.from(root.querySelectorAll("button, [role=button], [role=menuitem], [role=menuitemradio], [role=tab], [role=radio], [role=option], [tabindex], label, a, input, textarea"));
+      const label = (el) => [el.getAttribute("aria-label"), el.getAttribute("title"), el.textContent].filter(Boolean).join(" ").replace(/\s+/g, " ").toLowerCase();
+      const visible = all.filter((el) => el.getClientRects().length > 0);
+      return visible.find((el) => label(el).trim() === want) || visible.find((el) => label(el).includes(want)) || null;
+    }, target);
+    const el = handle.asElement();
+    if (!el) throw new Error("nothing in the rail matches " + target);
+    return el;
+  }
+  const locator = page.locator(target).first();
+  await locator.waitFor({ state: "attached", timeout: 10000 });
+  return locator.elementHandle();
+}
+
+// Screen points for a phrase inside an element: where a drag starts and ends.
+async function phrasePoints(page, handle, phrase, atEnd) {
+  return page.evaluate(
+    function ([el, phrase, atEnd]) {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      const nodes = [];
+      let text = "";
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        nodes.push({ node: n, start: text.length });
+        text += n.nodeValue;
+      }
+      let from = phrase ? text.indexOf(phrase) : atEnd ? text.length : 0;
+      if (from === -1) return { error: "phrase not found in element text: " + JSON.stringify(phrase) };
+      const to = phrase ? from + phrase.length : from;
+      function at(offset) {
+        for (let i = nodes.length - 1; i >= 0; i--) if (offset >= nodes[i].start) return { node: nodes[i].node, offset: offset - nodes[i].start };
+        return null;
+      }
+      const range = document.createRange();
+      const a = at(from), b = at(to);
+      if (!a || !b) return { error: "element has no text" };
+      range.setStart(a.node, a.offset);
+      range.setEnd(b.node, b.offset);
+      const rects = Array.from(range.getClientRects());
+      if (!rects.length) {
+        const r = el.getBoundingClientRect();
+        return { start: { x: r.right - 2, y: r.top + r.height / 2 }, end: { x: r.right - 2, y: r.top + r.height / 2 } };
+      }
+      const first = rects[0], last = rects[rects.length - 1];
+      return {
+        start: { x: first.left + 1, y: first.top + first.height / 2 },
+        end: { x: last.right - (phrase ? 1 : 0), y: last.top + last.height / 2 }
+      };
+    },
+    [handle, phrase, atEnd]
+  );
+}
+
+async function railDump(page) {
+  return page.evaluate(function () {
+    const lahe = window.__lahe;
+    if (!lahe || !lahe.booted) return { booted: false };
+    const rail = lahe.rail;
+    const root = rail.tabBody(rail.currentTab()).getRootNode();
+    const label = (el) => [el.getAttribute("aria-label"), el.getAttribute("title"), (el.textContent || "").trim()].filter(Boolean)[0] || "";
+    const controls = Array.from(root.querySelectorAll("button, [role=button], [role=tab], [role=menuitem]"))
+      .filter((el) => el.getClientRects().length > 0)
+      .map((el) => {
+        const attrs = {};
+        for (const a of el.attributes) if (a.name.startsWith("data-") || a.name === "aria-pressed" || a.name === "aria-selected") attrs[a.name] = a.value;
+        return Object.assign({ label: label(el).replace(/\s+/g, " ").slice(0, 60) }, attrs);
+      });
+    const items = (lahe.items() || []).map((it) => ({
+      id: it.id,
+      kind: it.kind,
+      state: it.state,
+      rev: it.rev,
+      text: String(it.note || it.after || (it.choice ? JSON.stringify(it.choice) : "")).slice(0, 80),
+      reply: it.reply ? { status: it.reply.status, text: String(it.reply.text || it.reply.reason || "").slice(0, 80) } : undefined
+    }));
+    return {
+      booted: true,
+      version: lahe.version,
+      review: lahe.review,
+      collapsed: rail.isCollapsed ? rail.isCollapsed() : undefined,
+      tab: rail.currentTab(),
+      status: lahe.status(),
+      failures: lahe.failures(),
+      editing: lahe.isEditing(),
+      cards: lahe.cardIds(),
+      items: items,
+      controls: controls
+    };
+  });
+}
+
+// ---------------------------------------------------------------- commands
+
+async function up(args) {
+  const id = args.flags.run || new Date().toISOString().replace(/[-:]/g, "").replace(/\..*$/, "").replace("T", "-") + "-" + process.pid;
+  const dir = runDir(id);
+  if (fs.existsSync(path.join(dir, "run.json"))) fail("run " + id + " already exists");
+  const evidence = args.flags.evidence ? path.resolve(String(args.flags.evidence)) : path.join(dir, "evidence");
+  const run = {
+    id: id,
+    dir: dir,
+    stateDir: path.join(dir, "state"),
+    work: path.join(dir, "work"),
+    profile: path.join(dir, "profile"),
+    evidence: evidence,
+    checkout: REPO_ROOT,
+    created: new Date().toISOString()
+  };
+  for (const d of [run.stateDir, run.work, run.profile, run.evidence]) fs.mkdirSync(d, { recursive: true });
+
+  const docSource = args.flags.doc ? path.resolve(String(args.flags.doc)) : SAMPLE;
+  const command = args.flags.write ? "write" : "review";
+  run.source = path.join(run.work, path.basename(docSource));
+  if (command === "review" || fs.existsSync(docSource)) {
+    if (!fs.existsSync(docSource)) fail("no document at " + docSource);
+    fs.copyFileSync(docSource, run.source);
+  }
+  try {
+    run.commit = execFileSync("git", ["-C", REPO_ROOT, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    run.dirty = execFileSync("git", ["-C", REPO_ROOT, "status", "--porcelain"], { encoding: "utf8" }).trim().split("\n").filter(Boolean).length;
+  } catch (err) {
+    run.commit = "unknown";
+  }
+  run.node = process.version;
+  run.platform = process.platform + " " + os.release();
+  saveRun(run);
+
+  const port = await freePort();
+  const out = cli(run, [command, run.source, "--port", String(port)]);
+  log(run, { cmd: "lahe " + command, args: [run.source, "--port", String(port)], code: out.code, stdout: out.stdout, stderr: out.stderr });
+  if (out.code !== 0) fail("`lahe " + command + "` failed (" + out.code + "):\n" + out.stderr + out.stdout);
+  run.helperPort = port;
+  run.session = labelled(out.stdout, "session");
+  run.review = labelled(out.stdout, "review");
+  run.open = labelled(out.stdout, "open");
+  run.reviewDir = path.join(run.stateDir, "reviews", run.review || "");
+  if (!run.open) fail("`lahe " + command + "` printed no open URL:\n" + out.stdout);
+  saveRun(run);
+
+  const keeperLog = fs.openSync(path.join(run.dir, "keeper.log"), "a");
+  const child = spawn(process.execPath, [__filename, "_keeper", "--run", run.id], { detached: true, stdio: ["ignore", keeperLog, keeperLog] });
+  child.unref();
+  run.keeperPid = child.pid;
+  saveRun(run);
+  try {
+    await pollFor(() => keeperInfo(run) || !alive(run.keeperPid), 30000, "the keeper to start the browser");
+  } catch (err) {
+    fail(err.message + "; see " + path.join(run.dir, "keeper.log"));
+  }
+  if (!keeperInfo(run)) fail("the keeper exited; see " + path.join(run.dir, "keeper.log"));
+  await ask(run, { action: "goto", rest: [run.open], flags: {} });
+  log(run, { cmd: "up", open: run.open, session: run.session, review: run.review });
+
+  process.stdout.write(
+    [
+      "run       " + run.id,
+      "open      " + run.open,
+      "source    " + run.source,
+      "session   " + run.session,
+      "review    " + run.review,
+      "evidence  " + run.evidence,
+      "next      " + path.relative(process.cwd(), __filename) + " doctor --run " + run.id
+    ].join("\n") + "\n"
+  );
+}
+
+async function keeper(args) {
+  const http = require("node:http");
+  const crypto = require("node:crypto");
+  const run = loadRun(args);
+  const { chromium } = playwright();
+  const context = await chromium.launchPersistentContext(run.profile, {
+    headless: !process.env.LAHE_VERIFY_HEADED,
+    viewport: { width: 1440, height: 960 }
+  });
+  const page = context.pages()[0] || (await context.newPage());
+  const token = crypto.randomBytes(16).toString("hex");
+  let queue = Promise.resolve();
+  const stop = async () => {
+    await context.close().catch(() => {});
+    process.exit(0);
+  };
+  const server = http.createServer((req, res) => {
+    const reply = (code, body) => {
+      res.writeHead(code, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    };
+    if (req.method !== "POST" || req.headers["x-verify-token"] !== token) return reply(403, { ok: false, error: "forbidden" });
+    let raw = "";
+    req.on("data", (c) => (raw += c));
+    req.on("end", () => {
+      if (req.url === "/shutdown") {
+        reply(200, { ok: true, result: "stopping" });
+        return setImmediate(stop);
+      }
+      // One action at a time, in the order they arrive.
+      queue = queue.then(async () => {
+        try {
+          const body = JSON.parse(raw);
+          reply(200, { ok: true, result: await doAction(run, page, body.action, body.rest || [], body.flags || {}) });
+        } catch (err) {
+          reply(200, { ok: false, error: String(err.message || err).split("\n")[0] });
+        }
+      });
+    });
+  });
+  server.listen(0, "127.0.0.1", () => {
+    fs.writeFileSync(path.join(run.dir, "keeper.json"), JSON.stringify({ pid: process.pid, port: server.address().port, token: token }));
+  });
+  process.on("SIGTERM", stop);
+  context.on("close", () => process.exit(0));
+}
+
+async function doctor(args) {
+  const run = loadRun(args);
+  const checks = [];
+  const add = (name, ok, detail) => checks.push({ name, ok: !!ok, detail: detail || "" });
+
+  add("run is not torn down", !run.down, run.down ? "down at " + run.down : "");
+
+  let service = null;
+  try {
+    service = JSON.parse(fs.readFileSync(path.join(run.stateDir, "service.json"), "utf8"));
+  } catch (err) {}
+  add("helper recorded in this run's state dir", !!service, service ? "pid " + service.pid + " port " + service.port : "no service.json");
+  if (service) {
+    const cmd = commandOf(service.pid);
+    add("helper pid alive and owned by this run", alive(service.pid) && cmd.includes(run.stateDir), cmd.slice(0, 160));
+    let health = null;
+    try {
+      const res = await fetch("http://127.0.0.1:" + service.port + "/lahe/v1/health");
+      health = res.ok ? await res.json() : null;
+    } catch (err) {}
+    add("helper answers health", !!health, health ? JSON.stringify(health).slice(0, 160) : "");
+  }
+
+  const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf8"));
+  let bundleFresh = true;
+  let bundleDetail = "";
+  try {
+    execFileSync(process.execPath, [path.join(REPO_ROOT, "scripts", "build-layer.js"), "--check"], { cwd: REPO_ROOT, encoding: "utf8", stdio: "pipe" });
+  } catch (err) {
+    bundleFresh = false;
+    bundleDetail = String(err.stdout || err.stderr || err.message).trim().split("\n")[0];
+  }
+  add("dist/lahe-layer.js matches src (npm run check:layer)", bundleFresh, bundleDetail);
+
+  add("keeper alive and owned by this run", alive(run.keeperPid) && commandOf(run.keeperPid).includes("_keeper --run " + run.id), "pid " + run.keeperPid);
+  add("Chromium running with this run's profile", browserPids(run).length > 0, browserPids(run).length + " processes");
+
+  try {
+    const { url, state } = await ask(run, { action: "_state", rest: [], flags: {} });
+    add("page is this run's review", new URL(url).host === new URL(run.open).host, url);
+    add("review layer booted", state && state.booted, state ? "layer " + state.version : "no window.__lahe");
+    add("layer version matches checkout " + pkg.version, state && String(state.version).split("+")[0] === pkg.version, state ? state.version : "");
+    add("page holds this run's review", state && state.review === run.review, state ? String(state.review) : "");
+    add("rail shows no failures", state && state.failures.length === 0, state ? JSON.stringify(state.failures).slice(0, 200) : "");
+  } catch (err) {
+    add("keeper answers", false, err.message.split("\n")[0]);
+  }
+
+  for (const c of checks) process.stdout.write((c.ok ? "ok    " : "FAIL  ") + c.name + (c.detail ? "  (" + c.detail + ")" : "") + "\n");
+  const bad = checks.filter((c) => !c.ok).length;
+  log(run, { cmd: "doctor", ok: bad === 0, checks: checks });
+  process.exit(bad ? 2 : 0);
+}
+
+async function pageCmd(args) {
+  const run = loadRun(args);
+  const [, action, ...rest] = args._;
+  let result;
+  try {
+    result = await ask(run, { action: action, rest: rest, flags: args.flags });
+  } catch (err) {
+    log(run, { cmd: "page " + action, args: rest, ok: false, error: err.message });
+    fail(err.message);
+  }
+  log(run, { cmd: "page " + action, args: rest, ok: true, result: result });
+  process.stdout.write((typeof result === "string" ? result : JSON.stringify(result, null, 2)) + "\n");
+}
+
+async function doAction(run, page, action, rest, flags) {
+  const target = rest[0];
+  const args = { flags: flags };
+  let result;
+  switch (action) {
+    case "_state":
+      return {
+        url: page.url(),
+        state: await page.evaluate(() => (window.__lahe ? { booted: !!window.__lahe.booted, version: window.__lahe.version, review: window.__lahe.review, failures: window.__lahe.failures() } : null))
+      };
+    case "goto":
+      await page.goto(target || run.open);
+      // Only the run's own review page carries the rail; the Library does not.
+      if (new URL(page.url()).host === new URL(run.open).host) {
+        await page.waitForFunction(() => !!(window.__lahe && window.__lahe.booted), null, { timeout: 20000 });
+      }
+      result = page.url();
+      break;
+    case "reload":
+      await page.reload();
+      await page.waitForFunction(() => !!(window.__lahe && window.__lahe.booted), null, { timeout: 20000 });
+      result = page.url();
+      break;
+    case "click":
+    case "dblclick":
+    case "hover": {
+      const el = await handleFor(page, target);
+      await el[action]({ timeout: 10000 });
+      result = action + " " + target;
+      break;
+    }
+    case "type":
+      await page.keyboard.type(rest.join(" "));
+      result = "typed " + JSON.stringify(rest.join(" "));
+      break;
+    case "key":
+      for (const k of rest) await page.keyboard.press(k);
+      result = "pressed " + rest.join(" ");
+      break;
+    case "caret":
+    case "select": {
+      const el = await handleFor(page, target);
+      await el.scrollIntoViewIfNeeded();
+      const phrase = action === "select" ? String(args.flags.text || "") : args.flags.text ? String(args.flags.text) : "";
+      if (action === "select" && !phrase) throw new Error("select needs --text <phrase>");
+      const pts = await phrasePoints(page, el, phrase, action === "caret" && !args.flags.start);
+      if (pts.error) throw new Error(pts.error);
+      if (action === "caret") {
+        const p = phrase && !args.flags.start ? pts.end : phrase ? pts.start : pts.end;
+        await page.mouse.click(p.x, p.y);
+      } else {
+        await page.mouse.move(pts.start.x, pts.start.y);
+        await page.mouse.down();
+        await page.mouse.move(pts.end.x, pts.end.y, { steps: 8 });
+        await page.mouse.up();
+      }
+      result = await page.evaluate(() => {
+        const s = window.getSelection();
+        return { selected: s ? s.toString() : "", collapsed: s ? s.isCollapsed : true };
+      });
+      break;
+    }
+    case "text": {
+      const el = await handleFor(page, target);
+      result = await el.evaluate((n) => n.innerText || n.textContent);
+      break;
+    }
+    case "html": {
+      const el = await handleFor(page, target);
+      result = await el.evaluate((n) => n.outerHTML);
+      break;
+    }
+    case "shot": {
+      const file = evidencePath(run, target || "page", ".png");
+      await page.screenshot({ path: file, fullPage: !!args.flags.full });
+      result = file;
+      break;
+    }
+    case "aria": {
+      const file = evidencePath(run, target || "page", ".aria.yml");
+      fs.writeFileSync(file, await page.locator("body").ariaSnapshot());
+      result = file;
+      break;
+    }
+    case "rail": {
+      result = await railDump(page);
+      if (target) {
+        const file = evidencePath(run, target, ".rail.json");
+        fs.writeFileSync(file, JSON.stringify(result, null, 2) + "\n");
+        result = Object.assign({ saved: file }, result);
+      }
+      break;
+    }
+    case "eval":
+      result = await page.evaluate(rest.join(" "));
+      break;
+    case "wait": {
+      const ms = Number(args.flags.timeout || 20000);
+      await page.waitForFunction(rest.join(" "), null, { timeout: ms });
+      result = "true: " + rest.join(" ");
+      break;
+    }
+    default:
+      throw new Error("unknown page action " + action + ". See the skill's Drive section.");
+  }
+  return result;
+}
+
+async function agentCmd(args) {
+  const run = loadRun(args);
+  const action = args._[1];
+  let out;
+  if (action === "wait") {
+    // A choice press and some drafts wait out a short quiet spell in the page
+    // before they reach the helper, so poll the drain rather than the page.
+    const want = args._.slice(2).join(" ");
+    if (!want) fail("agent wait <text the drain line must contain> [--timeout ms]");
+    try {
+      out = await pollFor(() => {
+        const o = cli(run, ["status", "--session", run.session, "--json", "--quiet"]);
+        return o.code === 0 && o.stdout.split("\n").some((l) => l.includes(want)) ? o : null;
+      }, Number(args.flags.timeout || 20000), "a drain line containing " + JSON.stringify(want));
+    } catch (err) {
+      log(run, { cmd: "agent wait", args: [want], ok: false, error: err.message });
+      fail(err.message);
+    }
+  } else if (action === "drain") out = cli(run, ["status", "--session", run.session, "--json", "--quiet"]);
+  else if (action === "status") out = cli(run, ["status", "--session", run.session, "--json"]);
+  else if (action === "reply") {
+    const [, , item, rev, status] = args._;
+    if (!item || !rev || !status) fail("agent reply <item> <rev> <handled|not_handled|question> [--text ...] [--reason ...]");
+    const extra = [];
+    if (args.flags.text) extra.push("--text", String(args.flags.text));
+    if (args.flags.reason) extra.push("--reason", String(args.flags.reason));
+    if (status === "handled") extra.push("--file", run.source);
+    out = cli(run, ["reply", "--review", run.review, "--item", item, "--rev", String(rev), "--status", status, "--agent", "verify"].concat(extra));
+  } else fail("agent drain | agent status | agent reply <item> <rev> <status>");
+  log(run, { cmd: "agent " + action, args: args._.slice(2), code: out.code, stdout: out.stdout, stderr: out.stderr });
+  process.stdout.write(out.stdout);
+  process.stderr.write(out.stderr);
+  process.exit(out.code);
+}
+
+function cliCmd(args) {
+  const run = loadRun(args);
+  const rest = args.rest || [];
+  if (args.flags.stdin) run.stdin = fs.readFileSync(String(args.flags.stdin), "utf8");
+  const out = cli(run, rest);
+  log(run, { cmd: "lahe " + rest.join(" "), code: out.code, stdout: out.stdout, stderr: out.stderr });
+  process.stdout.write(out.stdout);
+  process.stderr.write(out.stderr);
+  process.exit(out.code);
+}
+
+function info(args) {
+  process.stdout.write(JSON.stringify(loadRun(args), null, 2) + "\n");
+}
+
+function list() {
+  if (!fs.existsSync(RUNS_ROOT)) return;
+  for (const id of fs.readdirSync(RUNS_ROOT).sort()) {
+    const file = path.join(RUNS_ROOT, id, "run.json");
+    if (!fs.existsSync(file)) continue;
+    const run = JSON.parse(fs.readFileSync(file, "utf8"));
+    process.stdout.write(id + "  " + (run.down ? "down" : "up  ") + "  " + run.checkout + "\n");
+  }
+}
+
+async function down(args) {
+  const run = loadRun(args);
+  const notes = [];
+  if (run.session) {
+    const out = cli(run, ["session", "close", run.session]);
+    notes.push("session close: exit " + out.code);
+  }
+  const { stopTempHelpers, helperPidsFor } = require(path.join(REPO_ROOT, "test", "helpers", "temp_helpers.js"));
+  const stopped = await stopTempHelpers(run.stateDir);
+  notes.push("helpers stopped: " + (stopped.length ? stopped.join(", ") : "none running"));
+  if (run.keeperPid && alive(run.keeperPid) && commandOf(run.keeperPid).includes("_keeper --run " + run.id)) {
+    process.kill(run.keeperPid, "SIGTERM");
+    await pollFor(() => !alive(run.keeperPid) && browserPids(run).length === 0, 10000, "the keeper and its browser to exit").catch(() => {});
+    notes.push("keeper " + run.keeperPid + " and its browser stopped");
+  } else notes.push("keeper not running");
+  for (const pid of browserPids(run)) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch (err) {}
+  }
+  const left = helperPidsFor(run.stateDir).concat(browserPids(run), alive(run.keeperPid) ? [run.keeperPid] : []);
+  notes.push("left running: " + (left.length ? left.join(", ") : "nothing"));
+  run.down = new Date().toISOString();
+  saveRun(run);
+  log(run, { cmd: "down", notes: notes });
+  const files = fs.existsSync(run.evidence) ? fs.readdirSync(run.evidence) : [];
+  notes.push("evidence kept: " + run.evidence + " (" + files.length + " files)");
+  process.stdout.write(notes.join("\n") + "\n");
+  if (left.length) process.exit(3);
+}
+
+const USAGE = [
+  "lahe-verify up [--doc <file>] [--write] [--run <id>] [--evidence <dir>]",
+  "lahe-verify doctor --run <id>",
+  "lahe-verify page <goto|reload|click|dblclick|hover|type|key|caret|select|text|html|shot|aria|rail|eval|wait> ... --run <id>",
+  "lahe-verify agent <drain|wait <text>|status|reply <item> <rev> <status>> --run <id>",
+  "lahe-verify cli --run <id> -- <lahe args>",
+  "lahe-verify info --run <id> | list | down --run <id>"
+].join("\n");
+
+async function main() {
+  const args = parse(process.argv.slice(2));
+  const cmd = args._[0];
+  if (cmd === "up") return up(args);
+  if (cmd === "doctor") return doctor(args);
+  if (cmd === "_keeper") return keeper(args);
+  if (cmd === "page") return pageCmd(args);
+  if (cmd === "agent") return agentCmd(args);
+  if (cmd === "cli") return cliCmd(args);
+  if (cmd === "info") return info(args);
+  if (cmd === "list") return list();
+  if (cmd === "down") return down(args);
+  process.stdout.write(USAGE + "\n");
+  process.exit(cmd ? 1 : 0);
+}
+
+main().catch((err) => fail(err.stack || err.message));
