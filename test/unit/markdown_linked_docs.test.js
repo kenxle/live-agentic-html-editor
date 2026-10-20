@@ -11,7 +11,6 @@ const path = require("node:path");
 const reviewCommand = require("../../src/cli/commands/review.js");
 const sessionCommand = require("../../src/cli/commands/session.js");
 const scriptLine = require("../../src/shared/script_line.js");
-const markdownLinks = require("../../src/service/markdown_links.js");
 
 function tempDir(prefix) {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
@@ -72,7 +71,7 @@ test("a nested index links every sibling document already inside its review site
   const root = write(path.join(project, "README.md"), "# Review\n\n[Index](docs/index.md)\n");
   const targets = [];
   const lines = ["# Index", ""];
-  for (let i = 0; i < markdownLinks.MOUNT_CAP + 3; i += 1) {
+  for (let i = 0; i < 67; i += 1) {
     const relative = "skills/skill-" + i + "/SKILL.md";
     targets.push(relative);
     write(path.join(project, relative), "# Skill " + i + "\n");
@@ -127,9 +126,13 @@ test("a reviewed Markdown document's local links serve rendered documents with i
     "",
     "- [Sub-template](../templates/SUB.md)",
     "- [Picture](picture.txt)",
+    "",
+    "![Figure](figure.png)",
     ""
   ].join("\n"));
   write(path.join(skills, "crucible", "picture.txt"), "raw asset bytes");
+  write(path.join(skills, "crucible", "figure.png"), "FIGURE BYTES");
+  write(path.join(skills, "crucible", "unlinked.txt"), "NO PAGE NAMES THIS");
   write(path.join(skills, "templates", "SUB.md"), "# Sub\n\nThe third hop.\n");
 
   const port = await freePort();
@@ -181,4 +184,13 @@ test("a reviewed Markdown document's local links serve rendered documents with i
   const picture = await request(new URL(pictureHref[1] || pictureHref[2], open).href);
   assert.equal(picture.status, 200);
   assert.equal(picture.body, "raw asset bytes", "a non-Markdown file still serves its bytes");
+
+  // V4: hop one's inline image is listed by the render that carried it, and a
+  // file in hop one's folder that nothing links is not served.
+  const crucibleMount = crucibleHref.replace(/SKILL\.md$/, "");
+  const figure = await request(new URL(crucibleMount + "figure.png", open).href);
+  assert.equal(figure.status, 200, "hop one's inline image is served");
+  assert.equal(figure.body, "FIGURE BYTES");
+  const unlinked = await request(new URL(crucibleMount + "unlinked.txt", open).href);
+  assert.equal(unlinked.status, 404, "a file in hop one's folder that nothing links is not served");
 });

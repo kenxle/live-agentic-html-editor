@@ -15,7 +15,7 @@ const path = require("node:path");
 
 const pageRoutes = require("../../src/service/page_routes.js");
 const sites = require("../../src/service/sites.js");
-const links = require("../../src/service/markdown_links.js");
+const stateDir = require("../../src/service/state_dir.js");
 const { sitesWorld, raw, writeFile, getPage, siteHost } = require("../helpers/sites_world.js");
 
 const PAGE = "<!doctype html><html><head><title>t</title></head><body><p id=x>hello page</p></body></html>";
@@ -113,6 +113,7 @@ test("V14: a mount refuses dot segments and an encoded mount prefix, and serves 
   writeFile(other, ".secret", "the dotfile");
   const prefix = "/.lahe-source/0123456789abcdef/";
   const bound = w.helper.sites.bind({ root: folder, mode: "folder", entry: "doc.html", mounts: { [prefix]: other } });
+  w.helper.sites.addMountFiles(bound.name, [fs.realpathSync(path.join(other, "linked.html")), fs.realpathSync(path.join(other, ".secret"))]);
   assert.equal((await getPage(w, bound.name, prefix + "linked.html")).status, 200);
   for (const p of [prefix + ".secret", prefix + "%2esecret"]) {
     const res = await getPage(w, bound.name, p);
@@ -182,40 +183,43 @@ test("V13 (unit half): a Markdown page renders from source, its images stay on t
   assert.ok(outside);
 });
 
-test("the folder cap counts one page's links, not every folder the site already serves", async (t) => {
+test("V9: a notes page still follows no links: a link out of its folder is plain text and makes no mount", async (t) => {
   const w = await sitesWorld(t);
-  const folder = path.join(w.home, "ws", "repo", "notes");
-  const mounts = {};
-  for (let i = 0; i < 16; i += 1) {
-    const dir = path.join(w.home, "ws", "earlier-" + i);
-    writeFile(dir, "doc.md", "# Earlier " + i + "\n");
-    mounts["/.lahe-source/" + String(i).padStart(16, "0") + "/"] = dir;
-  }
+  const folder = path.join(w.home, "ws", "notes");
   writeFile(w.home, "ws/fresh/far.md", "# Far\n\nfar away\n");
-  writeFile(folder, "doc.md", "# Doc\n\n[far](../../fresh/far.md)\n");
-  const bound = w.helper.sites.bind({ root: folder, mode: "folder", entry: "doc.md", mounts: mounts });
-  const res = await getPage(w, bound.name, "/doc.md");
+  writeFile(folder, "sibling.md", "# Sibling\n");
+  const notes = writeFile(folder, "today.md", "# Today\n\n[far](../fresh/far.md) and [sibling](sibling.md)\n");
+  const bound = w.helper.sites.bind({ root: fs.realpathSync(notes), mode: "page-only", entry: "today.md" });
+  const res = await getPage(w, bound.name, "/today.md");
   assert.equal(res.status, 200);
-  const link = /href="(\/\.lahe-source\/[a-f0-9]+\/far\.md)"/.exec(res.text);
-  assert.ok(link, "the new folder was mounted, though the site already serves 16");
-  assert.match((await getPage(w, bound.name, link[1])).text, /far away/);
+  assert.match(res.text, /<span class="lahe-local-link" title="local file, open it on disk: [^"]*far\.md">far<\/span>/);
+  assert.doesNotMatch(res.text, /href="\/\.lahe-source\//);
+  assert.deepEqual(Object.keys(w.helper.sites.get(bound.name).mounts || {}), []);
 });
 
-test("a page past the folder cap stays past it on every reload", async (t) => {
+test("V16: a page naming 260 files under mounts: 256 work, 4 render as plain text with the limit title, one log line, the same on every reload", async (t) => {
   const w = await sitesWorld(t);
   const folder = path.join(w.home, "ws", "repo", "notes");
   const lines = ["# Doc", ""];
-  for (let i = 0; i < links.MOUNT_CAP + 3; i += 1) {
-    writeFile(w.home, "ws/far-" + i + "/doc.md", "# Far " + i + "\n");
-    lines.push("[far " + i + "](../../far-" + i + "/doc.md)", "");
+  for (let i = 0; i < 260; i += 1) {
+    writeFile(w.home, "ws/many/file-" + String(i).padStart(3, "0") + ".md", "# File " + i + "\n");
+    lines.push("[file " + i + "](../../many/file-" + String(i).padStart(3, "0") + ".md)", "");
   }
   writeFile(folder, "doc.md", lines.join("\n"));
-  const bound = w.helper.sites.bind({ root: folder, mode: "folder", entry: "doc.md" });
+  const bound = w.helper.sites.bind({ root: fs.realpathSync(folder), mode: "folder", entry: "doc.md" });
+  let prefix = null;
   for (let load = 0; load < 3; load += 1) {
     const res = await getPage(w, bound.name, "/doc.md");
-    assert.equal((res.text.match(/class="lahe-local-link"/g) || []).length, 3, "load " + load);
+    assert.equal((res.text.match(/class="lahe-local-link"/g) || []).length, 4, "load " + load);
+    assert.equal((res.text.match(/links more than 256 files/g) || []).length, 4, "the title says why, load " + load);
+    prefix = /href="(\/\.lahe-source\/[a-f0-9]+\/)file-000\.md"/.exec(res.text)[1];
   }
-  assert.equal(Object.keys(w.helper.sites.get(bound.name).mounts).length, links.MOUNT_CAP);
+  assert.equal((await getPage(w, bound.name, prefix + "file-255.md")).status, 200);
+  assert.equal((await getPage(w, bound.name, prefix + "file-256.md")).status, 404);
+  assert.equal(w.helper.sites.get(bound.name).mount_files.length, 256);
+  assert.equal(Object.keys(w.helper.sites.get(bound.name).mounts).length, 1);
+  const log = fs.readFileSync(stateDir.helperLogPath(w.state), "utf8");
+  assert.equal(log.split("names more than 256 files").length - 1, 1, log);
 });
 
 // --- V17: CORP ----------------------------------------------------------------

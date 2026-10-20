@@ -510,6 +510,127 @@ function candidateOf(where, decoded) {
 }
 
 // ---------------------------------------------------------------------------
+// The files a finished page names under mounts
+// ---------------------------------------------------------------------------
+//
+// A mount serves only the files a page of the site names (sites.js, mount_files).
+// After a page is rendered, this reads its finished HTML: what the browser will
+// ask for is what gets listed, from marked and from pandoc, and including the
+// images and raw HTML that never pass through the link translator.
+
+var ATTRIBUTE = /\b(href|src|srcset)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+var CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)\s"']+))\s*\)/gi;
+var STYLESHEET_BYTES = 512 * 1024;
+
+// A made-up origin to resolve against, so a value is resolved the way a
+// browser resolves it and anything on another origin falls out.
+var BASE_ORIGIN = "http://lahe.invalid";
+
+function addressesIn(html, css) {
+  var out = [];
+  String(html).replace(ATTRIBUTE, function (whole, attr, double, single) {
+    var value = markdown.decodeEntities(double !== undefined ? double : single);
+    if (attr.toLowerCase() === "srcset") {
+      value.split(",").forEach(function (candidate) {
+        var url = candidate.trim().split(/\s+/)[0];
+        if (url) out.push(url);
+      });
+    } else {
+      out.push(value.trim());
+    }
+    return whole;
+  });
+  if (css) out.push.apply(out, cssAddressesIn(html, false));
+  return out;
+}
+
+function cssAddressesIn(text, decode) {
+  var out = [];
+  String(text).replace(CSS_URL, function (whole, double, single, bare) {
+    var value = double !== undefined ? double : single !== undefined ? single : bare;
+    out.push((decode ? markdown.decodeEntities(value) : value).trim());
+    return whole;
+  });
+  return out;
+}
+
+/**
+ * The file one address names under a mount, or null: the address is resolved
+ * against `baseDir` (a URL folder), and then takes the steps a request takes.
+ * Null for another origin, a path outside every mount, a missing file, a path
+ * that leaves its mount by real path, a folder with no index, and a secret path.
+ */
+function mountedFileOf(value, baseDir, mounts) {
+  if (!value || value.charAt(0) === "#") return null;
+  var url;
+  try { url = new URL(value, BASE_ORIGIN + baseDir); } catch (err) { return null; }
+  if (url.origin !== BASE_ORIGIN) return null;
+  var rawPath = url.pathname;
+  if (rawPath.indexOf(MOUNT_ROOT) !== 0) return null;
+  var decoded = decodePath(rawPath);
+  if (decoded === null) return null;
+  var where = locate({ mode: "folder", mounts: mounts }, decoded, rawPath);
+  if (!where) return null;
+  var candidate = candidateOf(where, decoded);
+  if (!candidate) return null;
+  var file = realOrNull(candidate);
+  var base = realOrNull(where.base);
+  if (!file || !base || !within(file, base)) return null;
+  var stat;
+  try { stat = fs.statSync(file); } catch (err) { return null; }
+  if (!stat.isFile() || markdownLinks.isSecretPath(file)) return null;
+  return { real: file, path: rawPath, prefix: where.prefix };
+}
+
+/**
+ * Every file under a mount that a finished page names in an `href`, `src` or
+ * `srcset`, as real paths in the order the page names them, at most `limit`
+ * of them (default markdownLinks.FILE_LIMIT). `over` counts the distinct files
+ * past the limit, which are not listed.
+ *
+ * @param {string} html the finished page
+ * @param {string} urlDir the URL folder the page is served from, ending in "/"
+ * @param {object} mounts prefix to folder, as a site holds them
+ * @param {{limit?: number, within?: {prefix: string, dir: string}, css?: boolean}} [options]
+ *   `within` keeps only files under one mount prefix and inside one real
+ *   folder: a linked HTML page brings what it names from its own folder only.
+ *   `css` also reads `url()` in the page and in the stylesheets it names, one
+ *   level deep.
+ * @returns {{files: string[], over: number}}
+ */
+function filesUnderMounts(html, urlDir, mounts, options) {
+  var opts = options || {};
+  var limit = typeof opts.limit === "number" ? opts.limit : markdownLinks.FILE_LIMIT;
+  var files = [];
+  var seen = Object.create(null);
+  var over = 0;
+  var sheets = [];
+  function take(hit, fromSheet) {
+    if (!hit || seen[hit.real]) return;
+    if (opts.within && (hit.prefix !== opts.within.prefix || !within(hit.real, opts.within.dir))) return;
+    seen[hit.real] = true;
+    if (files.length >= limit) { over += 1; return; }
+    files.push(hit.real);
+    if (opts.css && !fromSheet && path.extname(hit.real).toLowerCase() === ".css") sheets.push(hit);
+  }
+  addressesIn(html, opts.css).forEach(function (value) {
+    take(mountedFileOf(value, urlDir, mounts), false);
+  });
+  sheets.forEach(function (sheet) {
+    var text;
+    try {
+      if (fs.statSync(sheet.real).size > STYLESHEET_BYTES) return;
+      text = fs.readFileSync(sheet.real, "utf8");
+    } catch (err) { return; }
+    var sheetDir = sheet.path.slice(0, sheet.path.lastIndexOf("/") + 1);
+    cssAddressesIn(text, false).forEach(function (value) {
+      take(mountedFileOf(value, sheetDir, mounts), true);
+    });
+  });
+  return { files: files, over: over };
+}
+
+// ---------------------------------------------------------------------------
 // The registry, for the helper modules that map a page to a file
 // ---------------------------------------------------------------------------
 //
@@ -1388,8 +1509,12 @@ var renderCache = new Map();
  * @param {string} file the Markdown source
  * @param {{assetPrefix: string, mounts: object, siteRoot?: string|null, noFollow: boolean, note: string|null}} options
  *   `note` null is the read-only note; "" is none (a page under review)
- * @returns {{html: string, note: string|null, added: object[], linked: string[]}}
- *   `note` is the helper-log line when pandoc did not render a page that needed it
+ * @returns {{html: string, note: string|null, added: object[], linked: string[], files: string[], over: number}}
+ *   `note` is the helper-log line when pandoc did not render a page that needed it.
+ *   `files` are the real paths under mounts the finished page names, and `over`
+ *   how many more it names than a page may (markdownLinks.FILE_LIMIT). The
+ *   cache keeps the page and its links; the files are read off the page again
+ *   on every call, since a file it names may appear after the page was cached.
  */
 function renderMarkdown(file, options) {
   var stat = fs.statSync(file);
@@ -1401,20 +1526,30 @@ function renderMarkdown(file, options) {
   if (hit) {
     renderCache.delete(key);
     renderCache.set(key, hit);
-    return hit;
+  } else {
+    var registry = markdownLinks.createRegistry({
+      mounts: mounts,
+      follow: !options.noFollow
+    });
+    var renderOptions = { assetPrefix: options.assetPrefix, links: registry, noFollow: !!options.noFollow };
+    if (options.note === null) renderOptions.readOnlyNote = true;
+    else renderOptions.note = options.note;
+    var page = markdown.renderPage(file, renderOptions);
+    hit = { html: page.html, note: page.note, added: registry.added.slice(), linked: registry.linked.slice(), past: registry.past };
+    renderCache.set(key, hit);
+    if (renderCache.size > RENDER_CACHE_MAX) renderCache.delete(renderCache.keys().next().value);
   }
-  var registry = markdownLinks.createRegistry({
-    mounts: mounts,
-    cap: options.noFollow ? 0 : undefined
-  });
-  var renderOptions = { assetPrefix: options.assetPrefix, links: registry, noFollow: !!options.noFollow };
-  if (options.note === null) renderOptions.readOnlyNote = true;
-  else renderOptions.note = options.note;
-  var page = markdown.renderPage(file, renderOptions);
-  var out = { html: page.html, note: page.note, added: registry.added.slice(), linked: registry.linked.slice() };
-  renderCache.set(key, out);
-  if (renderCache.size > RENDER_CACHE_MAX) renderCache.delete(renderCache.keys().next().value);
-  return out;
+  var served = Object.assign({}, mounts);
+  hit.added.forEach(function (entry) { served[entry.prefix] = entry.dir; });
+  var named = filesUnderMounts(hit.html, options.assetPrefix, served);
+  return {
+    html: hit.html,
+    note: hit.note,
+    added: hit.added,
+    linked: hit.linked,
+    files: named.files,
+    over: hit.past + named.over
+  };
 }
 
 /** The URL folder a file sits in under `base`, served at `prefix`. */
@@ -1441,6 +1576,7 @@ function renderSitePage(sites, name, site, file, base, prefix) {
     out.added.forEach(function (entry) { added[entry.prefix] = entry.dir; });
     sites.addMounts(name, added);
   }
+  if (out.files.length) sites.addMountFiles(name, out.files);
   return out;
 }
 
@@ -1914,9 +2050,33 @@ function createPageRoutes(options) {
     return real && real !== candidate ? [candidate, real] : [candidate];
   }
 
-  function serveHtmlPage(req, res, ctx, candidate, real, mounted) {
+  /**
+   * The files a linked HTML page names, listed on the site: the page's `href`,
+   * `src`, `srcset` and CSS `url()`, and the `url()` in its stylesheets, from
+   * its own folder and its own mount only. A file another mount holds, or one
+   * above the page's folder, is left to whatever lists it.
+   */
+  function listNamedBy(ctx, candidate, html, urlDir) {
+    var prefix = /^(\/\.lahe-source\/[a-f0-9]+\/)/.exec(urlDir);
+    var folder = realOrNull(path.dirname(candidate));
+    if (!prefix || !folder || !ctx.site.mounts) return;
+    var named = filesUnderMounts(html, urlDir, ctx.site.mounts, { within: { prefix: prefix[1], dir: folder }, css: true });
+    if (named.files.length) sites.addMountFiles(ctx.name, named.files);
+    sayOverLimit(candidate, named.over);
+  }
+
+  /** One helper-log line for a page that names more files than a page may. */
+  function sayOverLimit(file, over) {
+    if (over > 0) {
+      sayOnce("limit\u0000" + file, "pages: " + file + " names more than " + markdownLinks.FILE_LIMIT +
+        " files under mounts; the " + over + " past the limit are not listed and show broken");
+    }
+  }
+
+  function serveHtmlPage(req, res, ctx, candidate, real, mounted, urlDir) {
     var html;
     try { html = fs.readFileSync(candidate, "utf8"); } catch (err) { return notFound(req, res); }
+    if (mounted) listNamedBy(ctx, candidate, html, urlDir);
     var match = pickReview(dir, ctx.site, { filePaths: filePathsFor(candidate, real), realFile: real, mounted: mounted });
     if (match) {
       var htmlSpellings = oldSpellings(dir, ctx.site, real, match);
@@ -1957,6 +2117,8 @@ function createPageRoutes(options) {
       out.added.forEach(function (entry) { added[entry.prefix] = entry.dir; });
       sites.addMounts(ctx.name, added);
     }
+    if (out.files.length) sites.addMountFiles(ctx.name, out.files);
+    sayOverLimit(candidate, out.over);
     var html = out.html;
     if (match) {
       if (out.linked.length) sites.addLinked(ctx.name, match.review, out.linked);
@@ -2079,6 +2241,7 @@ function createPageRoutes(options) {
     }
     var html;
     try { html = fs.readFileSync(candidate, "utf8"); } catch (err) { return notFound(req, res); }
+    listNamedBy(ctx, candidate, html, urlDir);
     var stripped = scriptLine.removeScriptLine(html);
     sendHtml(req, res, 200, tabIcon.ensure(placeNote(stripped ? stripped.html : html, note)));
   }
@@ -2197,6 +2360,20 @@ function createPageRoutes(options) {
       if (leftAt) return redirectTo(res, leftAt);
       return notFound(req, res);
     }
+    // TWO REFUSALS, BY REAL PATH, before anything else is read or redirected.
+    // A secret file (markdownLinks.isSecretPath) is never served, from a mount
+    // or from a site's own root, whatever lists it. And a mount serves only the
+    // files a page of the site names (sites.listed). Not in locate: the helpers
+    // that map a stored comment's address to its file use locate and must keep
+    // working for a file nothing lists yet.
+    if (markdownLinks.isSecretPath(real)) {
+      sayOnce("secret\u0000" + name + "\u0000" + real, "pages: refused " + real + " on " + name + ": it is a secret path");
+      return notFound(req, res);
+    }
+    if (where.mounted && !sites.listed(name, real)) {
+      sayOnce("unlisted\u0000" + name + "\u0000" + real, "pages: refused " + real + " on " + name + ": no page on the site links to it");
+      return notFound(req, res);
+    }
     // A LINK ADDRESS TO A FILE WITH ITS OWN REVIEW (each page carries its own
     // comments, Part 2). A top-level page load goes to the file's own address;
     // anything else gets the page read-only with no rail, so a new comment is
@@ -2209,7 +2386,9 @@ function createPageRoutes(options) {
     if (markdown.isMarkdown(candidate)) {
       return serveMarkdown(req, res, ctx, candidate, real, urlDirOf(where.prefix, where.base, candidate), { mounted: where.mounted });
     }
-    if (heal.isStaticPage(candidate)) return serveHtmlPage(req, res, ctx, candidate, real, where.mounted);
+    if (heal.isStaticPage(candidate)) {
+      return serveHtmlPage(req, res, ctx, candidate, real, where.mounted, urlDirOf(where.prefix, where.base, candidate));
+    }
     streamFile(req, res, candidate, stat.size);
   }
 
@@ -2227,6 +2406,7 @@ module.exports = {
   servedFrom: servedFrom,
   newer: newer,
   pickReview: pickReview,
+  filesUnderMounts: filesUnderMounts,
   reviewAnswersOnSite: reviewAnswersOnSite,
   libraryAddress: libraryAddress,
   unknownNamePage: unknownNamePage,

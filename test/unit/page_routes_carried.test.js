@@ -115,6 +115,8 @@ test("a mount refuses a symlink that resolves outside it", async (t) => {
   fs.symlinkSync(path.join(w.home, "outside", "secret.html"), path.join(mounted, "link.html"));
   const prefix = "/.lahe-source/00aa11bb22cc33dd/";
   const bound = w.helper.sites.bind({ root: folder, mode: "folder", entry: "doc.html", mounts: { [prefix]: fs.realpathSync(mounted) } });
+  // The link's target is listed on purpose, so it is the real-path check that refuses it.
+  w.helper.sites.addMountFiles(bound.name, [path.join(fs.realpathSync(mounted), "ok.html"), path.join(fs.realpathSync(path.join(w.home, "outside")), "secret.html")]);
   assert.equal((await getPage(w, bound.name, prefix + "ok.html")).status, 200);
   const res = await getPage(w, bound.name, prefix + "link.html");
   assert.equal(res.status, 404);

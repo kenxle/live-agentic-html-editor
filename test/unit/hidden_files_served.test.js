@@ -79,6 +79,7 @@ test("a hidden file under the site root is served, and so is one under a mount",
   writeFile(other, ".notes.txt", "mounted hidden");
   const prefix = "/.lahe-source/0123456789abcdef/";
   const bound = w.helper.sites.bind({ root: fs.realpathSync.native(folder), mode: "folder", entry: "page.html", mounts: { [prefix]: fs.realpathSync.native(other) } });
+  w.helper.sites.addMountFiles(bound.name, [fs.realpathSync.native(path.join(other, ".notes.txt"))]);
   for (const [p, words] of [["/.env", /VISIBLE=1/], ["/%2Eenv", /VISIBLE=1/], ["/sub/.hidden.html", /hidden page/], [prefix + ".notes.txt", /mounted hidden/]]) {
     const res = await getPage(w, bound.name, p);
     assert.equal(res.status, 200, p);
@@ -128,6 +129,8 @@ test("a symlink out of a mount is still refused", async (t) => {
   fs.symlinkSync(path.join(outside, "secret.html"), path.join(other, ".escape.html"));
   const prefix = "/.lahe-source/0123456789abcdef/";
   const bound = w.helper.sites.bind({ root: fs.realpathSync.native(folder), mode: "folder", entry: "page.html", mounts: { [prefix]: fs.realpathSync.native(other) } });
+  // The link's target is listed on purpose, so it is the real-path check that refuses it.
+  w.helper.sites.addMountFiles(bound.name, [fs.realpathSync.native(path.join(other, "ok.html")), path.join(outside, "secret.html")]);
   assert.equal((await getPage(w, bound.name, prefix + "ok.html")).status, 200);
   const res = await getPage(w, bound.name, prefix + ".escape.html");
   assert.equal(res.status, 404);
