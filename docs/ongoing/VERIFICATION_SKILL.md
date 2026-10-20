@@ -1,9 +1,12 @@
 # Verification skill for Lahe
 
-Updated: 2026-10-19T21:10-04:00
+Updated: 2026-10-19T21:46-04:00
 
 ## Latest
 
+- **[PR #84 (verification skill)](https://github.com/kenxle/live-agentic-html-editor/pull/84) is merged** into main as `41c25211`. On the merged main,
+  `npm run gate:unit` passed: 3126 passed, 0 failed, no helper left running.
+  The full browser suite was not run, since nothing under `src/` changed.
 - **The cloud proof passed.** After you allowed `cdn.playwright.dev`, the
   second run did the whole comment journey on a fresh cloud Linux machine: a
   comment, the agent's question back, and the reviewer's follow-up in the same thread.
@@ -17,17 +20,12 @@ Updated: 2026-10-19T21:10-04:00
 - **The weekly map check is set up.**
   - [The routine](https://claude.ai/code/routines/trig_01258YbvbKURmHoiNX7DGZzh)
     first runs Monday at 04:00 UTC (12am Eastern on October 26, then 11pm
-    Sunday from November 1). Until PR #84 merges, it stops at once and says it
-    is blocked.
+    Sunday from November 1). It reads the skill from main, which now has it.
   - It runs on Sonnet with no connectors attached (no Gmail, Drive or
     Calendar), in the Lahe environment the proof just passed in.
-- **[PR #84 (verification skill)](https://github.com/kenxle/live-agentic-html-editor/pull/84)
-  is ready to merge.** GitHub's check passed, and it still merges cleanly
-  even though main has moved ahead by 39 commits since. Nobody has merged it yet.
 
 ## What it is
 
-**[PR #84 (verification skill)](https://github.com/kenxle/live-agentic-html-editor/pull/84) is open.**
 An agent can now start a
 throwaway Lahe review, use it the way you do (select, comment, edit, press
 choices, use the rail and the Library), answer as the agent through the real
@@ -39,9 +37,7 @@ merge: 3087 passed, 0 failed, and no helper left running.
 
 ## Needs your call
 
-- **Merge PR #84?** The weekly check reads the skill from `main`, so it does
-  nothing useful until this merges. GitHub's check is green and it merges
-  cleanly. Say the word and I will merge it, then run the unit gate on main.
+Nothing right now.
 
 ## What changed since the first draft
 
@@ -115,7 +111,7 @@ hand-off and `lahe session takeover` also still need a live run.
   PR only for proven fixes to the map, never merges, and never claims board
   rows. Routine times are set in UTC, so it will be `0 4 * * 1` (Monday 04:00
   UTC). That is 11pm from November 1, when clocks change, and midnight on
-  October 25. Created; it needs PR #84 merged so the skill is on `main`.
+  October 25. Created, and the skill is on `main` now.
 - **Pilot a board task** with this as the proof step, stopping at a PR.
 
 ## Source
