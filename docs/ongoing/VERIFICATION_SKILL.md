@@ -1,15 +1,22 @@
 # Verification skill for Lahe
 
-Updated: 2026-10-19T20:15-04:00
+Updated: 2026-10-19T20:19-04:00
 
 ## Latest
 
+- **Both cloud runs are created** in your new Lahe environment.
+  - [The one-time proof run](https://claude.ai/code/routines/trig_01MiiCApAdisxTsWjk4mc2Ww)
+    starts at 8:22pm tonight. It pushes its evidence and a report to the
+    branch `claude/verify-cloud-proof-20261020`. I will post the result here.
+  - [The weekly map check](https://claude.ai/code/routines/trig_01258YbvbKURmHoiNX7DGZzh)
+    first runs Monday at 04:00 UTC (12am Eastern on October 26, then 11pm
+    Sunday from November 1). Until PR #84 merges, it stops at once and says it
+    is blocked.
+  - Both run on Sonnet with no connectors attached (no Gmail, Drive or
+    Calendar).
 - **[PR #84 (verification skill)](https://github.com/kenxle/live-agentic-html-editor/pull/84)
   is ready to merge.** GitHub's check passed, and it still merges cleanly
   even though main has moved ahead by 39 commits since. Nobody has merged it yet.
-- **Both cloud runs are waiting on you.** They need a cloud environment to run
-  in (see "Needs your call" below). No routine has been created yet.
-- **Nothing else changed** on this branch since this morning.
 
 ## What it is
 
@@ -25,16 +32,9 @@ merge: 3087 passed, 0 failed, and no helper left running.
 
 ## Needs your call
 
-- **Which cloud environment should the two cloud runs use?** Both cloud steps
-  below are ready to create as Claude Code routines, but every routine needs an
-  environment, and the four you have belong to other projects (Steady Thread,
-  Columbia, Morsel, Text Affirmations). Using one of them would hand that
-  project's settings and secrets to a run of this public repo. My
-  recommendation: make a new environment named **LAHE** at
-  [claude.ai/code](https://claude.ai/code) with no secrets, network access on
-  (it downloads npm packages and Chromium), and this setup script:
-  `npm ci && npx playwright install --with-deps chromium`. Tell me when it
-  exists and I will create both routines.
+- **Merge PR #84?** The weekly check reads the skill from `main`, so it does
+  nothing useful until this merges. GitHub's check is green and it merges
+  cleanly. Say the word and I will merge it, then run the unit gate on main.
 
 ## What changed since the first draft
 
@@ -101,15 +101,14 @@ hand-off and `lahe session takeover` also still need a live run.
   Approved. Planned as a one-time routine on the `docs/verification-skill`
   branch: `up`, `doctor`, the comment recipe, `down`, then push the evidence
   folder to its own `claude/` branch (a cloud run has no other place to keep
-  files). Waiting on the environment above.
+  files). Created; it starts at 8:22pm on October 19.
 - **Keep the map current.** Run [maintain-verification-skill](../../skills/maintain-verification-skill/SKILL.md)
   after user-facing changes, and turn the "not yet mapped" list into recipes.
   Approved as a weekly routine, Sunday at 11pm Eastern, on `main`. It opens a
   PR only for proven fixes to the map, never merges, and never claims board
   rows. Routine times are set in UTC, so it will be `0 4 * * 1` (Monday 04:00
   UTC). That is 11pm from November 1, when clocks change, and midnight on
-  October 25. Waiting on the environment above, and on PR #84 merging so the
-  skill is on `main`.
+  October 25. Created; it needs PR #84 merged so the skill is on `main`.
 - **Pilot a board task** with this as the proof step, stopping at a PR.
 
 ## Source
