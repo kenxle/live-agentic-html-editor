@@ -2607,16 +2607,18 @@ instead: read <code>gh pr checks</code> as pass, then
 the machine slept mid-run. Wrapping it in <code>caffeinate -i</code>
 fixed that.</li>
 <li><strong>The forge build that whetstone uses lost the house
-style.</strong> At 02:01 today, uncommitted changes in
-<code>~/.claude</code> replaced
-<code>feature-forge/scripts/build_feature_docs.py</code> with a short
-version that uses pandoc's plain default stylesheet. The same changes
-removed <code>feature_pandoc_header.html</code>. Built with it, this
-page had no Lahe style, components or style switcher. This page is now
-built with the last committed version of the script, run from a scratch
-copy. The changes in <code>~/.claude</code> are another session's work
-in progress and were left alone. Whoever owns that work should restore
-the style before the next spec gets built.</li>
+style.</strong> At 02:01 today, the Codex session working on the
+feature-forge runbooks MVP installed the new feature-forge, brief,
+architecture, plan and whetstone skills over the old ones, at Ken's
+request ("so i'm using the new version when i do dev"). It backed the
+old copies up to
+<code>~/.local/state/feature-forge/skill-backups/20261019T060158880592Z</code>.
+The MVP's <code>build_feature_docs.py</code> renders with pandoc's plain
+default stylesheet and no longer reads the Lahe doc style, though the
+whetstone skill still says the built page carries it. Built with it,
+this page had no Lahe style, components or style switcher. This page is
+now built with the last committed version of the script, run from a
+scratch copy. The fix belongs in the feature-forge repo.</li>
 <li><strong>Not covered by the skill:</strong> another session changing
 the same code mid-run. The fix was to rebase on its commit and ship both
 together. A line about checking <code>git log origin/main..main</code>
