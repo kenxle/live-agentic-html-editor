@@ -2184,16 +2184,14 @@ main .lahe-local-link {
 <main data-container="Feature document">
 <div class="hero">
 <h1>Linked folder scope</h1>
-<p class="lede"><strong>Status:</strong> spec, security review folded in, waiting for
-Ken. Nothing is built. Board row <code>LAHE-linked-folder-scope</code>
-(serve only the files a site's pages link to, plus their images, then
-drop the folder cap).</p>
+<p class="lede"><strong>Status:</strong> spec approved by Ken; building. Board row
+<code>LAHE-linked-folder-scope</code> (serve only the files a site's
+pages link to, plus their images, then drop the folder cap).</p>
 </div>
 <nav class="toplinks" aria-label="Documents"><span class="toplinks-label">Docs</span><span aria-current="page">Spec</span></nav>
 <details class="fold contents" open><summary class="fold-head"><span class="fold-arrow" aria-hidden="true"></span><h2>Contents</h2></summary><div class="fold-body"><nav id="TOC" class="contents-list">
 <ul>
-<li><a href="#needs-your-decision" id="toc-needs-your-decision">Needs
-your decision</a></li>
+<li><a href="#decided" id="toc-decided">Decided</a></li>
 <li><a href="#problem-user-and-context"
 id="toc-problem-user-and-context">Problem, user, and context</a>
 <ul>
@@ -2242,23 +2240,22 @@ questions</a></li>
 </ul>
 </nav></div></details>
 <section class="sheet">
-<div class="sheet-head"><h2 id="needs-your-decision">Needs your decision</h2><span class="n">Section 1</span></div>
+<div class="sheet-head"><h2 id="decided">Decided</h2><span class="n">Section 1</span></div>
 <ul>
 <li><strong>A linked HTML page that loads files with a script gets 404
 for them.</strong> The server can see the files a page names in its HTML
 and CSS: stylesheets, images, scripts, fonts. It cannot see a file a
 script asks for while it runs, such as a dashboard fetching
 <code>data.json</code>. Those requests would answer 404.
-<strong>Recommendation: accept that.</strong> On your two runbook sites,
-the two linked HTML pages name no file in their folders at all, so
-nothing you use today breaks. A page that needs its whole folder can
-still be opened at its own address with
-<code>lahe review &lt;page&gt;</code>. That serves its folder the way it
-does now, except the secret folders listed under requirement 13, which
-this change refuses everywhere. The other choice is to serve a linked
-HTML page's whole folder tree. That brings back today's problem for that
-folder: an HTML file sitting in your home folder would expose all of
-home again.</li>
+<strong>Decided: accept that.</strong> On your two runbook sites, the
+two linked HTML pages name no file in their folders at all, so nothing
+you use today breaks. A page that needs its whole folder can still be
+opened at its own address with <code>lahe review &lt;page&gt;</code>.
+That serves its folder the way it does now, except the secret folders
+listed under requirement 13, which this change refuses everywhere. The
+other choice is to serve a linked HTML page's whole folder tree. That
+brings back today's problem for that folder: an HTML file sitting in
+your home folder would expose all of home again.</li>
 </ul>
 </section>
 <section class="sheet">

@@ -1,10 +1,10 @@
 # Linked folder scope
 
-**Status:** spec, security review folded in, waiting for Ken. Nothing is built. Board row `LAHE-linked-folder-scope` (serve only the files a site's pages link to, plus their images, then drop the folder cap).
+**Status:** spec approved by Ken; building. Board row `LAHE-linked-folder-scope` (serve only the files a site's pages link to, plus their images, then drop the folder cap).
 
-## Needs your decision
+## Decided
 
-- **A linked HTML page that loads files with a script gets 404 for them.** The server can see the files a page names in its HTML and CSS: stylesheets, images, scripts, fonts. It cannot see a file a script asks for while it runs, such as a dashboard fetching `data.json`. Those requests would answer 404. **Recommendation: accept that.** On your two runbook sites, the two linked HTML pages name no file in their folders at all, so nothing you use today breaks. A page that needs its whole folder can still be opened at its own address with `lahe review <page>`. That serves its folder the way it does now, except the secret folders listed under requirement 13, which this change refuses everywhere. The other choice is to serve a linked HTML page's whole folder tree. That brings back today's problem for that folder: an HTML file sitting in your home folder would expose all of home again.
+- **A linked HTML page that loads files with a script gets 404 for them.** The server can see the files a page names in its HTML and CSS: stylesheets, images, scripts, fonts. It cannot see a file a script asks for while it runs, such as a dashboard fetching `data.json`. Those requests would answer 404. **Decided: accept that.** On your two runbook sites, the two linked HTML pages name no file in their folders at all, so nothing you use today breaks. A page that needs its whole folder can still be opened at its own address with `lahe review <page>`. That serves its folder the way it does now, except the secret folders listed under requirement 13, which this change refuses everywhere. The other choice is to serve a linked HTML page's whole folder tree. That brings back today's problem for that folder: an HTML file sitting in your home folder would expose all of home again.
 
 ## Problem, user, and context
 
