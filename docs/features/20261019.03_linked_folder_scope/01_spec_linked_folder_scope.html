@@ -4,12 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Linked folder scope</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
-
-<!-- The International Style is inlined here at build time, read fresh from
-     LAHE's clone (vendor/stclair-doc-style/) by shared_assets.load_doc_style()
-     and placed in a style tag carrying the data-lahe-doc-style attribute,
-     which LAHE's style switcher looks for. Do not paste a copy of the style into this file. -->
 <style data-lahe-doc-style>
 /*
   System tokens, Ken St. Clair
@@ -2091,10 +2085,9 @@ main .lahe-local-link {
 </style>
 
 <style>
-  /* What the style system does not have, and nothing else: the header of the
-     merged reviews section, and the jump target for a finding link. Every
-     value is a style token, so a restyle reaches these too. */
-
+  /* What the house style does not have, and nothing else: the header of the
+     merged review history, and the jump target for a finding link. Every value
+     is a style token, so a restyle reaches these too. */
   hr.reviews-divider{
     border:0;
     border-top:var(--divider);
@@ -2108,83 +2101,16 @@ main .lahe-local-link {
     line-height:1.55;
     color:var(--on-surface-soft);
   }
-  .reviews-banner::before{
-    display:block;
-    content:"Reviews, full prose";
-    font-family:var(--font-heading);
-    font-weight:var(--w-heading);
-    font-size:var(--text-h2);
-    line-height:var(--lh-heading);
-    letter-spacing:var(--tracking-heading);
-    color:var(--on-surface);
-    margin-bottom:var(--s2);
-  }
-
   .finding-anchor{display:inline-block;scroll-margin-top:var(--gutter)}
 </style>
-
-<script type="module">
-  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
-
-  /* Mermaid in the house palette. Its theme is read by JavaScript before any
-     stylesheet applies, so the values are read from the inlined style tokens
-     at load time; this block holds no colour or font of its own. The mapping
-     is the one LAHE's Markdown renderer uses (MERMAID_THEME). */
-  const root = getComputedStyle(document.documentElement);
-  const t = (name) => root.getPropertyValue(name).trim();
-
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: "loose",
-    theme: "base",
-    themeVariables: {
-      fontFamily: t("--font-body"),
-      primaryColor: t("--accent-tint"), primaryBorderColor: t("--accent"), primaryTextColor: t("--on-surface"),
-      secondaryColor: t("--tint"), secondaryBorderColor: t("--mark"), secondaryTextColor: t("--on-surface"),
-      tertiaryColor: t("--emphasis-tint"), tertiaryBorderColor: t("--emphasis"), tertiaryTextColor: t("--on-surface"),
-      lineColor: t("--on-surface-soft"), textColor: t("--on-surface"),
-      noteBkgColor: t("--tint"), noteBorderColor: t("--mark"), noteTextColor: t("--on-surface"),
-      clusterBkg: t("--surface-raised"), clusterBorder: t("--border"),
-      edgeLabelBackground: t("--surface"),
-      actorBkg: t("--accent-tint"), actorBorder: t("--accent"), actorTextColor: t("--on-surface"),
-      signalColor: t("--on-surface-soft"), signalTextColor: t("--on-surface"),
-      labelBoxBkgColor: t("--accent-tint"), labelBoxBorderColor: t("--accent"),
-      loopTextColor: t("--on-surface"), activationBkgColor: t("--emphasis-tint"), activationBorderColor: t("--emphasis")
-    }
-  });
-
-  /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>...</code></pre>
-     with the source entity-encoded. Mermaid 10 reads innerHTML and throws on the
-     <code> tag and the entities, so each block is flattened to one decoded text
-     node first. */
-  function renderMermaid() {
-    document.querySelectorAll("pre.mermaid").forEach(function (el) {
-      if (!el.dataset.mflattened) {
-        el.textContent = el.textContent;
-        el.dataset.mflattened = "1";
-      }
-    });
-    mermaid.run({ querySelector: "pre.mermaid" });
-  }
-  if (document.readyState === "loading") {
-    window.addEventListener("DOMContentLoaded", renderMermaid);
-  } else {
-    renderMermaid();
-  }
-</script>
-
-<!-- The shared document fixes go here, from
-     ~/.claude/skills/shared-assets/doc_fixes.css via
-     shared_assets.resolve_header(). The forge build currently passes
-     fixes=False: their table rule breaks header words mid-letter under the
-     International Style. Do not paste a copy into this file. -->
-
 </head>
 <body>
 <main data-container="Feature document">
 <div class="hero">
 <h1>Linked folder scope</h1>
-<p class="lede"><strong>Status:</strong> spec approved by Ken; building. Board row
+<p class="lede"><strong>Status:</strong> built and verified on branch
+<code>linked-folder-scope</code>; going to a pull request. Results are
+under "Verification results" below. Board row
 <code>LAHE-linked-folder-scope</code> (serve only the files a site's
 pages link to, plus their images, then drop the folder cap).</p>
 </div>
@@ -2234,6 +2160,8 @@ id="toc-alternatives-considered">Alternatives considered</a></li>
 <li><a href="#tasks" id="toc-tasks">Tasks</a></li>
 <li><a href="#acceptance-criteria"
 id="toc-acceptance-criteria">Acceptance criteria</a></li>
+<li><a href="#verification-results"
+id="toc-verification-results">Verification results</a></li>
 <li><a href="#open-questions" id="toc-open-questions">Open
 questions</a></li>
 <li><a href="#review" id="toc-review">Review</a></li>
@@ -3056,7 +2984,59 @@ in <code>handle</code>, and the decision was to remove it.</li>
 </ul>
 </section>
 <section class="sheet">
-<div class="sheet-head"><h2 id="open-questions">Open questions</h2><span class="n">Section 7</span></div>
+<div class="sheet-head"><h2 id="verification-results">Verification results</h2><span class="n">Section 7</span></div>
+<ul>
+<li><p><strong>Full gate (<code>npm run gate:all</code>, run alone, kept
+awake):</strong> unit 3126 passed, 0 failed (5 skipped); browsers 2728
+passed, 0 failed, none flaky (Chromium, Firefox, WebKit). No helper left
+running.</p></li>
+<li><p><strong>Your two real sites, main against this branch (V12,
+<code>scripts/crawl_compare.js</code> on a copy of your helper's site
+records):</strong></p>
+<div class="scrollx"><table>
+<thead>
+<tr>
+<th>Site</th>
+<th>Addresses</th>
+<th>Lost (200 on main, 404 here)</th>
+<th>Links turned to plain text</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>docs.features.runbooks</code></td>
+<td>15,632</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>documents.workspace.feature-forge-runbooks</code></td>
+<td>8,201</td>
+<td>0</td>
+<td>0</td>
+</tr>
+</tbody>
+</table></div>
+<p>The crawl reads addresses more widely than the code does (unquoted
+values, <code>poster</code>, <code>data</code>, <code>@import</code>,
+inline style <code>url()</code>), so it can catch a file the code fails
+to list.</p></li>
+<li><p><strong>Code review:</strong> no way found to reach an unlisted
+or secret file. Five findings, all fixed with tests: the order of the
+checks is now pinned; the scanner reads unquoted values,
+<code>poster</code>, <code>data</code>, <code>@import</code> and inline
+styles; the 256-file limit is counted one way, so a link past it is
+plain text and never a dead link; the secret folders are resolved once
+per home folder; the refusal log has its own cap.</p></li>
+<li><p><strong>One test fixed along the way:</strong> the Firefox style
+switcher test opened a comment box while Firefox was still undoing a
+scroll, so the box landed 40px off. It failed on <code>main</code> too.
+The test now waits until the page stops moving, the way a reviewer opens
+a box. No check was loosened.</p></li>
+</ul>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="open-questions">Open questions</h2><span class="n">Section 8</span></div>
 <ul>
 <li><strong>Files a linked HTML page's script loads.</strong> See "Needs
 your decision". If Ken accepts the 404, the helper-log line (requirement
@@ -3067,7 +3047,7 @@ Adding a path is a one-line change with a test.</li>
 </ul>
 </section>
 <section class="sheet">
-<div class="sheet-head"><h2 id="review">Review</h2><span class="n">Section 8</span></div>
+<div class="sheet-head"><h2 id="review">Review</h2><span class="n">Section 9</span></div>
 <p>Accepted all six security findings: the secret list for mounts and
 site roots (requirement 13), the HTML own-folder limit (requirement 4),
 the 256-file limit per page (requirement 14), log lines with only new

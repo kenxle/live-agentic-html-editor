@@ -1,6 +1,6 @@
 # Linked folder scope
 
-**Status:** spec approved by Ken; building. Board row `LAHE-linked-folder-scope` (serve only the files a site's pages link to, plus their images, then drop the folder cap).
+**Status:** built and verified on branch `linked-folder-scope`; going to a pull request. Results are under "Verification results" below. Board row `LAHE-linked-folder-scope` (serve only the files a site's pages link to, plus their images, then drop the folder cap).
 
 ## Decided
 
@@ -214,6 +214,20 @@ The rule for this change: no `rm`, no `git clean`. Anything to remove goes on a 
 - The four docs in requirement 11 say the new rule, and none still mentions the folder cap.
 - Board row `LAHE-linked-files-rebuild` exists (task 7).
 - No analytics: Lahe has none. No flag: the old behavior is two checks in `handle`, and the decision was to remove it.
+
+## Verification results
+
+- **Full gate (`npm run gate:all`, run alone, kept awake):** unit 3126 passed, 0 failed (5 skipped); browsers 2728 passed, 0 failed, none flaky (Chromium, Firefox, WebKit). No helper left running.
+- **Your two real sites, main against this branch (V12, `scripts/crawl_compare.js` on a copy of your helper's site records):**
+
+  | Site | Addresses | Lost (200 on main, 404 here) | Links turned to plain text |
+  |---|---|---|---|
+  | `docs.features.runbooks` | 15,632 | 0 | 0 |
+  | `documents.workspace.feature-forge-runbooks` | 8,201 | 0 | 0 |
+
+  The crawl reads addresses more widely than the code does (unquoted values, `poster`, `data`, `@import`, inline style `url()`), so it can catch a file the code fails to list.
+- **Code review:** no way found to reach an unlisted or secret file. Five findings, all fixed with tests: the order of the checks is now pinned; the scanner reads unquoted values, `poster`, `data`, `@import` and inline styles; the 256-file limit is counted one way, so a link past it is plain text and never a dead link; the secret folders are resolved once per home folder; the refusal log has its own cap.
+- **One test fixed along the way:** the Firefox style switcher test opened a comment box while Firefox was still undoing a scroll, so the box landed 40px off. It failed on `main` too. The test now waits until the page stops moving, the way a reviewer opens a box. No check was loosened.
 
 ## Open questions
 
