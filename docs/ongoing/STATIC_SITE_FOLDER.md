@@ -57,26 +57,58 @@ folders, served under `/.lahe-source/<hash>/` mounts. Spec:
 - Only recorded link targets get the rail, never their neighbours. An `--only`
   review keeps its links read-only.
 - A notes page from `lahe write` is outside all of this. Its own address serves that page and nothing else, so no folder, link, or mount rule applies (`docs/ongoing/FREE_WRITING.md`).
-- Hidden (dot-prefixed) files and folders get no special handling: the served
-  folder and a linked folder serve them like any other file, and a link to one
-  translates like any other link. Worktrees usually live in hidden folders
+- Hidden (dot-prefixed) files and folders get no special handling beyond the
+  secret paths below: the served folder serves them like any other file, a mount
+  serves one once a page links to it, and a link to one translates like any
+  other link. Worktrees usually live in hidden folders
   (`repo/.claude/worktrees/<name>/`). What bounds a request is containment: a
   path, or a symlink, that resolves outside the served folder or the mount is
   refused, a mount must be under the home folder, and nothing inside the state
   folder is served. Lahe's reserved names are never read from the folder.
 - A link into the site's own folder, or into a folder the site already serves,
-  reuses it. Any other folder becomes a new mount, and one render may add at
-  most 64 (`MOUNT_CAP` in `src/service/markdown_links.js`). The cap counts per
-  page: each folder the page links into counts once, served already or not,
-  except the one the page sits inside. Folders served for other pages do not
-  count. A link past the cap renders
-  as plain text naming the file. Spec:
-  `docs/features/20261019.01_link_folder_cap/01_spec_link_folder_cap.md`.
-- A mounted folder serves its whole tree, subfolders included, read-only, not
-  only the files a page links to. The home folder itself can be a mount, so one
-  link to `~/notes.md` serves everything under home. The cap does not limit
-  that. Only the linked pages get the rail. Board row
-  `LAHE-linked-folder-scope` holds the question of narrowing it.
+  reuses it. Any other folder becomes a new mount, and the number of folders a
+  page links into is not limited. What a render is limited in is files: one
+  page may name at most 256 distinct files under mounts (`FILE_LIMIT` in
+  `src/service/markdown_links.js`), counted whether the site lists them already
+  or not, so a page past the limit stays past it on every reload. A link past
+  the limit renders as plain text with a title saying the page links too many
+  files, and the helper log names the page once. Specs:
+  `docs/features/20261019.01_link_folder_cap/01_spec_link_folder_cap.md` and
+  `docs/features/20261019.03_linked_folder_scope/01_spec_linked_folder_scope.md`.
+- A mount serves only the files the site's pages link to, plus the images and
+  other files those pages show, read-only. It does not serve the rest of its
+  folder or its subfolders, even when the folder is home: one link to
+  `~/todo.md` serves `~/todo.md` and nothing else under home. The list is
+  `mount_files` on the site's entry in `sites.json`, beside `mounts`. Every
+  rendered Markdown page, with a rail or read-only, saves what its finished HTML
+  names under a mount (`filesUnderMounts` in `src/service/page_routes.js`)
+  before the response goes out: links, images, `srcset`, raw HTML, from marked
+  and from pandoc. So a chain of linked pages keeps working, hop to hop, and a
+  linked page's own images are served. A `linked_files` key is served too, so
+  sites from before the list keep working with no migration.
+- A linked HTML page brings the files it names (`href`, `src`, `srcset`, CSS
+  `url()`, and `url()` inside its stylesheets, one level deep) from its own
+  folder and its own mount only. A name that points at another mount, or above
+  the page's folder, is not listed. A file a script loads while the page runs,
+  such as a dashboard fetching `data.json`, is not named in the page and answers
+  404. Open that page at its own address with `lahe review <page>`, which serves
+  its folder.
+- Secret paths are refused everywhere: `~/.ssh`, `~/.aws`, `~/.gnupg`,
+  `~/.config/gh`, `~/.config/gcloud`, `~/.netrc`, `~/.git-credentials`,
+  `~/.npmrc`, `~/.kube`, `~/.docker` and `~/Library/Keychains`, and everything
+  inside them (`isSecretPath` in `src/service/markdown_links.js`). A link to one
+  renders as plain text, the list never holds one, and a request for one answers
+  404 from a mount and from a site's own root, including a site rooted at home.
+  The list is short on purpose; adding a path is a one-line change.
+- The two refusals sit in `handle`, by real path, before the redirect to a
+  page's own review. They are not in `locate`, which the helpers that map a
+  comment's address back to its file also use. A refusal writes one helper-log
+  line naming the file and the site.
+- The list only grows: a link removed from a page leaves its file on the list,
+  the way a mount stays. Rebuilding a site's list from a fresh walk is board row
+  `LAHE-linked-files-rebuild`. `sites.log` carries only the paths each change
+  adds, on `mount-files` lines, never the whole list; a reader joins them.
+  Paths are real paths from `fs.realpathSync.native`, the call a request uses.
 - If no review answers for a page, the helper serves it without the rail. Nothing
   is created.
 - The helper, not the page, names the file an item was made on: review.json's

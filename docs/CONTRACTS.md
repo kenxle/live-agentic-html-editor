@@ -1709,10 +1709,26 @@ way, so chains of documents work.
 The path-safety rules on that translation: real paths decide, so a symlink
 pointing out of the home directory is refused even from inside it; nothing
 outside the home directory is ever mounted (`LAHE_HOME_DIR` moves that boundary
-for tests, the way `LAHE_STATE_DIR` moves the state directory); and one render
-may mount at most 16 distinct directories. Hidden (dot-prefixed) locations get
-no special handling: they translate and serve like any other file. A link failing any rule renders as a non-clickable span
-titled `local file, open it on disk: <path>` rather than a link to a 404. There
+for tests, the way `LAHE_STATE_DIR` moves the state directory); no link to a
+secret path (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gh`, `~/.config/gcloud`,
+`~/.netrc`, `~/.git-credentials`, `~/.npmrc`, `~/.kube`, `~/.docker`,
+`~/Library/Keychains`, and everything inside them) is ever made; and one render
+may name at most 256 distinct files under mounts, with no limit on how many
+folders they sit in. Hidden (dot-prefixed) locations get no special handling
+beyond the secret list: they translate and serve like any other file. A link
+failing any rule renders as a non-clickable span titled
+`local file, open it on disk: <path>` rather than a link to a 404; a link past
+the file limit says `this page links more than 256 files; open it on disk: <path>`.
+
+A mount names a folder but serves only the files the site's pages link to, plus
+the images, stylesheets and other files those pages show. The helper lists them
+on the site (`mount_files` in `sites.json`) every time it renders a page, from
+the finished HTML. Any other file under a mount answers 404, and so does any
+secret path, from a mount or from a site's own root. A linked HTML page brings
+the files it names (`href`, `src`, `srcset`, CSS `url()`) from its own folder and
+its own mount only; a file a script loads while the page runs is not named in
+the page and answers 404. The list only grows; a link removed from a page leaves
+its file on the list. There
 is no custom protocol handler. A link that leaves the documentation (an
 external URL, or a protocol-relative `//host` link) opens in a new tab; a link
 we render ourselves, an in-page anchor, and `mailto:`/`tel:` links stay as they

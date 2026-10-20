@@ -143,8 +143,9 @@ rewritten to make them work. What each link form does:
   that folder as it always was.
 - A link that leaves the folder, such as `../crucible/SKILL.md`, and an
   absolute path under your home directory, are both resolved against the source
-  file's directory. Lahe serves the target's folder read-only for the session
-  and points the rendered link at it.
+  file's directory. Lahe serves that one file read-only (and the images and other
+  files the pages you open show) and points the rendered link at it. Other
+  files in the same folder are not served.
 - A link to another `.md` or `.markdown` file opens as the same rendered
   reading view, marked read-only and not under review. Its own links are
   translated the same way, so a skill to a template to a sub-template chain
@@ -152,9 +153,11 @@ rewritten to make them work. What each link form does:
 - `#heading` links stay ordinary in-page anchors.
 - A link Lahe will not serve renders as plain text, not a broken link, with the
   full path in its tooltip so you can open it on disk. That covers a target
-  outside your home directory, a symlink pointing out of it, a hidden
-  (dot-prefixed) location, a missing file, and links past the 64-folder cap on
-  how many new folders one document may mount.
+  outside your home directory, a symlink pointing out of it, a missing file, a
+  secret location (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gh`,
+  `~/.config/gcloud`, `~/.netrc`, `~/.git-credentials`, `~/.npmrc`, `~/.kube`,
+  `~/.docker`, `~/Library/Keychains`), and links past the 256-file limit on how
+  many files one document may name under linked folders.
 
 That direct path is for a single Markdown file that is itself the document. If
 the deliverable is assembled from chapters, includes, templates, citations,
