@@ -1,6 +1,6 @@
 # Linked folder scope
 
-**Status:** built and verified on branch `linked-folder-scope`; going to a pull request. Results are under "Verification results" below. Board row `LAHE-linked-folder-scope` (serve only the files a site's pages link to, plus their images, then drop the folder cap).
+**Status:** shipped in [PR #89](https://github.com/kenxle/live-agentic-html-editor/pull/89). Your helper runs it now. Results are under "Verification results" below. Board row `LAHE-linked-folder-scope` (serve only the files a site's pages link to, plus their images, then drop the folder cap).
 
 ## Decided
 
