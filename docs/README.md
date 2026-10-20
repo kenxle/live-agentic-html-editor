@@ -15,6 +15,9 @@ The README is the short version. Everything longer lives here.
 ## For people working on the tool
 
 - [BULLETIN.md](BULLETIN.md): the task board. Append-only, newest first.
+- [ongoing/VERIFICATION_SKILL.md](ongoing/VERIFICATION_SKILL.md): the
+  verification skill (`skills/verify-lahe`), which drives a throwaway review as
+  reviewer and agent and keeps proof, its cloud run and the weekly map check.
 - [tests/index.html](tests/index.html): every test in the suite, what it claims,
   and the three gates. Regenerate it with `npm run docs:tests`.
 - [features/20260818.01_release_readiness/04_progress_release_readiness.md](features/20260818.01_release_readiness/04_progress_release_readiness.md):

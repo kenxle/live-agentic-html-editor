@@ -1,6 +1,10 @@
 # Verification skill for Lahe
 
-Updated: 2026-10-19T21:46-04:00
+Updated: 2026-10-19T21:52-04:00
+
+**Closed.** The skill is on main, the cloud proof passed, and the weekly
+check is scheduled. Nothing is waiting on you. Your comments and the replies
+are kept in the [review log](VERIFICATION_SKILL_review_log.md).
 
 ## Latest
 
@@ -37,7 +41,7 @@ merge: 3087 passed, 0 failed, and no helper left running.
 
 ## Needs your call
 
-Nothing right now.
+Nothing is waiting on you.
 
 ## What changed since the first draft
 
