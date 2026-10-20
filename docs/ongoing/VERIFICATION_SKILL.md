@@ -1,13 +1,17 @@
 # Verification skill for Lahe
 
-Updated: 2026-10-19T20:19-04:00
+Updated: 2026-10-19T20:25-04:00
 
 ## Latest
 
 - **Both cloud runs are created** in your new Lahe environment.
   - [The one-time proof run](https://claude.ai/code/routines/trig_01MiiCApAdisxTsWjk4mc2Ww)
-    starts at 8:22pm tonight. It pushes its evidence and a report to the
-    branch `claude/verify-cloud-proof-20261020`. I will post the result here.
+    ran at 8:22pm and was **blocked at setup**. The Lahe environment's network
+    rules refused `cdn.playwright.dev`, so Chromium could not be downloaded
+    and no browser started. Everything before that worked: Linux, Node 22,
+    `npm ci`, the system packages, and Lahe itself started a review. Cleanup
+    was clean: `left running: nothing`. The report is
+    [on the branch `claude/verify-cloud-proof-20261020`](https://github.com/kenxle/live-agentic-html-editor/blob/claude/verify-cloud-proof-20261020/verification-evidence/cloud-proof-20261020/REPORT.md).
   - [The weekly map check](https://claude.ai/code/routines/trig_01258YbvbKURmHoiNX7DGZzh)
     first runs Monday at 04:00 UTC (12am Eastern on October 26, then 11pm
     Sunday from November 1). Until PR #84 merges, it stops at once and says it
@@ -32,6 +36,15 @@ merge: 3087 passed, 0 failed, and no helper left running.
 
 ## Needs your call
 
+- **Allow `cdn.playwright.dev` in the Lahe environment?** The cloud runner
+  blocks it, and both cloud runs need it to download Chromium. The weekly check
+  would hit the same wall. My recommendation: add that host to the Lahe
+  environment's allowed network hosts at [claude.ai/code](https://claude.ai/code).
+  It is Playwright's own download server, nothing else. Tell me when it is in,
+  and I will run the proof again. The other route is to change `lahe-verify`
+  to use the older Chromium the runner already has. I do not recommend it:
+  that browser is a different version from the one the tests are written
+  against, so a pass there would prove less.
 - **Merge PR #84?** The weekly check reads the skill from `main`, so it does
   nothing useful until this merges. GitHub's check is green and it merges
   cleanly. Say the word and I will merge it, then run the unit gate on main.
