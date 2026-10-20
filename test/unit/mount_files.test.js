@@ -52,8 +52,8 @@ function mountOf(html, tail) {
 async function hubWorld(t, hubText, extra) {
   const w = await sitesWorld(t);
   const notes = path.join(w.home, "ws", "repo", "notes");
-  writeFile(notes, "hub.md", hubText);
   if (extra) extra(w);
+  writeFile(notes, "hub.md", typeof hubText === "function" ? hubText(w) : hubText);
   const bound = w.helper.sites.bind({ root: real(notes), mode: "folder", entry: "hub.md" });
   const hub = await getPage(w, bound.name, "/hub.md");
   assert.equal(hub.status, 200);
@@ -495,4 +495,151 @@ test("V18: a link spelled Todo.md to the file todo.md is listed as todo.md and a
   writeFile(path.join(w.home, "ws", "other"), "second.md", "# Second\n");
   w.helper.sites.addLinked(w.name, "r-old", [path.join(other, "Second.md")]);
   assert.equal((await getPage(w, w.name, prefix + "second.md")).status, 200, "an old key in a link's spelling matches");
+});
+
+// --- Fix round: the check order, the scanner, the limit, the secret cache, the log ---
+
+const agentSessions = require("../../src/service/agent_sessions.js");
+const NAVIGATE = { "sec-fetch-dest": "document", "sec-fetch-mode": "navigate" };
+
+test("the list check comes before the own-review branch: an unlisted file with its own review answers 404 to a page load and to a plain fetch", async (t) => {
+  const w = await hubWorld(t, "# Hub\n\n[far](../../other/far.md)\n", (x) => {
+    writeFile(path.join(x.home, "ws", "other"), "far.md", "# Far\n");
+    writeFile(path.join(x.home, "ws", "other"), "own.md", "# Own\n\nown words\n");
+  });
+  const prefix = mountOf(w.hub.text, "far.md");
+  const other = real(path.join(w.home, "ws", "other"));
+  const session = agentSessions.createStore({ dir: w.state }).create({ name: "Own agent" }).id;
+  w.helper.reviews.create({ target_path: path.join(other, "own.md"), agent_session_id: session, origins: ["null"] });
+  w.helper.sites.bind({ root: other, mode: "folder", entry: "own.md" });
+  const loaded = await getPage(w, w.name, prefix + "own.md", NAVIGATE);
+  assert.equal(loaded.status, 404, "a page load is not redirected to the file's own address");
+  assert.equal(loaded.headers.location, undefined);
+  const fetched = await getPage(w, w.name, prefix + "own.md");
+  assert.equal(fetched.status, 404, "a plain fetch is not shown read-only");
+  assert.doesNotMatch(fetched.text, /own words/);
+});
+
+test("scanner: an unquoted value, poster, an object's data, and @import with a string are all named", () => {
+  withList((x) => {
+    for (const name of ["unquoted.png", "poster.jpg", "movie.mp4", "chart.svg", "extra.css"]) writeFile(x.folder, name, "x");
+    const html = [
+      "<img src=unquoted.png>",
+      '<video poster="poster.jpg" src=movie.mp4></video>',
+      "<object data='chart.svg'></object>",
+      '<style>@import "extra.css";</style>'
+    ].join("\n");
+    const out = pageRoutes.filesUnderMounts(html, x.prefix, { [x.prefix]: x.folder }, { css: true });
+    assert.deepEqual(out.files.slice().sort(), ["chart.svg", "extra.css", "movie.mp4", "poster.jpg", "unquoted.png"].map((n) => path.join(x.folder, n)));
+  });
+});
+
+test("scanner: an entity-encoded url() in a style attribute is decoded before it is read", () => {
+  withList((x) => {
+    writeFile(x.folder, "bg.png", "x");
+    const html = '<div style="background:url(&quot;bg.png&quot;)"></div>';
+    const out = pageRoutes.filesUnderMounts(html, x.prefix, { [x.prefix]: x.folder }, { css: true });
+    assert.deepEqual(out.files, [path.join(x.folder, "bg.png")]);
+  });
+});
+
+test("scanner: a stylesheet a Markdown page links with a raw link tag has its url() and @import files served", async (t) => {
+  const w = await hubWorld(t,
+    (x) => {
+      const prefix = links.mountPrefix(real(path.join(x.home, "ws", "other")));
+      return "# Hub\n\n[far](../../other/far.md)\n\n<link rel=\"stylesheet\" href=\"" + prefix + "style.css\">\n";
+    },
+    (x) => {
+      const other = path.join(x.home, "ws", "other");
+      writeFile(other, "far.md", "# Far\n");
+      writeFile(other, "style.css", '@import "more.css"; body { background: url(back.png); }');
+      writeFile(other, "back.png", "BACK");
+      writeFile(other, "more.css", "p { color: red; }");
+      writeFile(other, "unnamed.png", "NOT NAMED");
+    });
+  const prefix = mountOf(w.hub.text, "far.md");
+  assert.equal((await getPage(w, w.name, prefix + "style.css")).status, 200);
+  assert.equal((await getPage(w, w.name, prefix + "back.png")).text, "BACK");
+  assert.equal((await getPage(w, w.name, prefix + "more.css")).status, 200);
+  assert.equal((await getPage(w, w.name, prefix + "unnamed.png")).status, 404);
+});
+
+test("limit: with 200 translated links and 100 same-folder links on a linked page, every link left clickable answers 200", async (t) => {
+  const w = await hubWorld(t, "# Hub\n\n[many](../../other/many.md)\n", (x) => {
+    const other = path.join(x.home, "ws", "other");
+    const lines = ["# Many", ""];
+    for (let i = 0; i < 200; i += 1) {
+      const id = String(i).padStart(3, "0");
+      writeFile(path.join(x.home, "ws", "third"), "t-" + id + ".md", "# T " + i + "\n");
+      lines.push("[third " + id + "](../third/t-" + id + ".md)", "");
+    }
+    for (let i = 0; i < 100; i += 1) {
+      const id = String(i).padStart(3, "0");
+      writeFile(other, "s-" + id + ".md", "# S " + i + "\n");
+      lines.push("[same " + id + "](s-" + id + ".md)", "");
+    }
+    for (let i = 0; i < 10; i += 1) {
+      writeFile(other, "pic-" + i + ".png", "PNG");
+      lines.push("![pic](pic-" + i + ".png)", "");
+    }
+    writeFile(other, "many.md", lines.join("\n"));
+  });
+  const prefix = mountOf(w.hub.text, "many.md");
+  const page = await getPage(w, w.name, prefix + "many.md");
+  assert.equal(page.status, 200);
+  const anchors = Array.from(page.text.matchAll(/<a href="(\/\.lahe-source\/[^"]+)"/g)).map((m) => m[1]);
+  assert.equal(anchors.length, 256, "the links past the limit are plain text");
+  assert.equal(count(page.text, 'class="lahe-local-link"'), 44);
+  assert.equal(count(page.text, "links more than 256 files"), 44);
+  for (const href of anchors) {
+    const res = await getPage(w, w.name, href);
+    assert.equal(res.status, 200, href);
+  }
+});
+
+test("secret roots are resolved once per home folder, and a secret folder created afterwards is still refused", () => {
+  const root = tempRoot("lahe-secret-cache-");
+  const prior = process.env.LAHE_HOME_DIR;
+  process.env.LAHE_HOME_DIR = root;
+  const original = fs.realpathSync.native;
+  let calls = 0;
+  try {
+    const home = real(root);
+    const probe = path.join(home, "Documents", "a.md");
+    fs.mkdirSync(path.join(home, ".ssh"), { recursive: true });
+    fs.mkdirSync(path.join(home, "keys-elsewhere"), { recursive: true });
+    fs.symlinkSync(path.join(home, "keys-elsewhere"), path.join(home, ".kube"));
+    fs.realpathSync.native = function () { calls += 1; return original.apply(fs, arguments); };
+    assert.equal(links.isSecretPath(probe), false);
+    const first = calls;
+    assert.ok(first >= links.SECRET_PATHS.length, "the first check resolves every secret path: " + first);
+    calls = 0;
+    assert.equal(links.isSecretPath(probe), false);
+    assert.ok(calls <= 1, "the second check resolves only the home folder: " + calls);
+    assert.equal(links.isSecretPath(path.join(home, "keys-elsewhere", "id")), true, "a secret path that is a symlink still names its target");
+    fs.mkdirSync(path.join(home, ".aws"), { recursive: true });
+    fs.mkdirSync(path.join(home, ".gnupg"), { recursive: true });
+    fs.mkdirSync(path.join(home, "Library", "Keychains"), { recursive: true });
+    for (const rel of [".aws/credentials", ".gnupg/key", "Library/Keychains/login"]) {
+      assert.equal(links.isSecretPath(path.join(home, rel)), true, rel + " created after the first check");
+    }
+  } finally {
+    fs.realpathSync.native = original;
+    if (prior === undefined) delete process.env.LAHE_HOME_DIR; else process.env.LAHE_HOME_DIR = prior;
+  }
+});
+
+test("refusal log lines have their own cap: past it one line says so, and other notes are still logged", async (t) => {
+  const w = await hubWorld(t, "# Hub\n\n[far](../../other/far.md)\n", (x) => {
+    writeFile(path.join(x.home, "ws", "other"), "far.md", "# Far\n");
+  });
+  const prefix = mountOf(w.hub.text, "far.md");
+  const many = pageRoutes.LOG_NOTE_CAP + 20;
+  for (let i = 0; i < many; i += 1) writeFile(path.join(w.home, "ws", "other"), "nope-" + i + ".txt", "x");
+  for (let i = 0; i < many; i += 1) assert.equal((await getPage(w, w.name, prefix + "nope-" + i + ".txt")).status, 404);
+  const log = helperLog(w);
+  assert.equal(count(log, "no page on the site links to it"), pageRoutes.LOG_NOTE_CAP);
+  assert.equal(count(log, "further refused files are not logged"), 1);
+  await getPage(w, "nobody-at-all", "/");
+  assert.match(helperLog(w), /no document by the name nobody-at-all/, "another kind of note is not starved by the refusals");
 });

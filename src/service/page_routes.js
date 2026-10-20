@@ -518,37 +518,47 @@ function candidateOf(where, decoded) {
 // ask for is what gets listed, from marked and from pandoc, and including the
 // images and raw HTML that never pass through the link translator.
 
-var ATTRIBUTE = /\b(href|src|srcset)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
-var CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)\s"']+))\s*\)/gi;
+// The attributes whose value is a file the browser asks for. `data` is an
+// object's file (not `data-*`, which has a dash before the equals sign).
+var ATTRIBUTE = /\b(href|src|srcset|poster|data)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gi;
+var CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)\s"']+))\s*\)|@import\s+(?:"([^"]*)"|'([^']*)')/gi;
 var STYLESHEET_BYTES = 512 * 1024;
 
 // A made-up origin to resolve against, so a value is resolved the way a
 // browser resolves it and anything on another origin falls out.
 var BASE_ORIGIN = "http://lahe.invalid";
 
+// Every address a page names, `href` first. A link past the file limit is
+// refused in document order by the link translator (markdown_links.js), and
+// this scan fills the same limit with links before anything else, so the links
+// it keeps are the ones the translator kept.
 function addressesIn(html, css) {
-  var out = [];
-  String(html).replace(ATTRIBUTE, function (whole, attr, double, single) {
-    var value = markdown.decodeEntities(double !== undefined ? double : single);
-    if (attr.toLowerCase() === "srcset") {
+  var links = [];
+  var others = [];
+  String(html).replace(ATTRIBUTE, function (whole, attr, double, single, bare) {
+    var value = markdown.decodeEntities(double !== undefined ? double : single !== undefined ? single : bare);
+    if (attr.toLowerCase() === "href") {
+      links.push(value.trim());
+    } else if (attr.toLowerCase() === "srcset") {
       value.split(",").forEach(function (candidate) {
         var url = candidate.trim().split(/\s+/)[0];
-        if (url) out.push(url);
+        if (url) others.push(url);
       });
     } else {
-      out.push(value.trim());
+      others.push(value.trim());
     }
     return whole;
   });
-  if (css) out.push.apply(out, cssAddressesIn(html, false));
-  return out;
+  // CSS in the page itself comes out of HTML, so its entities are decoded.
+  if (css) others.push.apply(others, cssAddressesIn(markdown.decodeEntities(html)));
+  return links.concat(others);
 }
 
-function cssAddressesIn(text, decode) {
+function cssAddressesIn(text) {
   var out = [];
-  String(text).replace(CSS_URL, function (whole, double, single, bare) {
-    var value = double !== undefined ? double : single !== undefined ? single : bare;
-    out.push((decode ? markdown.decodeEntities(value) : value).trim());
+  String(text).replace(CSS_URL, function (whole, double, single, bare, importDouble, importSingle) {
+    var value = [double, single, bare, importDouble, importSingle].filter(function (one) { return one !== undefined; })[0];
+    out.push(String(value).trim());
     return whole;
   });
   return out;
@@ -623,7 +633,7 @@ function filesUnderMounts(html, urlDir, mounts, options) {
       text = fs.readFileSync(sheet.real, "utf8");
     } catch (err) { return; }
     var sheetDir = sheet.path.slice(0, sheet.path.lastIndexOf("/") + 1);
-    cssAddressesIn(text, false).forEach(function (value) {
+    cssAddressesIn(text).forEach(function (value) {
       take(mountedFileOf(value, sheetDir, mounts), true);
     });
   });
@@ -1529,7 +1539,8 @@ function renderMarkdown(file, options) {
   } else {
     var registry = markdownLinks.createRegistry({
       mounts: mounts,
-      follow: !options.noFollow
+      follow: !options.noFollow,
+      inMount: String(options.assetPrefix).indexOf(MOUNT_ROOT) === 0
     });
     var renderOptions = { assetPrefix: options.assetPrefix, links: registry, noFollow: !!options.noFollow };
     if (options.note === null) renderOptions.readOnlyNote = true;
@@ -1541,7 +1552,7 @@ function renderMarkdown(file, options) {
   }
   var served = Object.assign({}, mounts);
   hit.added.forEach(function (entry) { served[entry.prefix] = entry.dir; });
-  var named = filesUnderMounts(hit.html, options.assetPrefix, served);
+  var named = filesUnderMounts(hit.html, options.assetPrefix, served, { css: true });
   return {
     html: hit.html,
     note: hit.note,
@@ -1947,6 +1958,11 @@ function createPageRoutes(options) {
   function sayOnce(key, line) {
     notes.say(key, line);
   }
+
+  // Refused files get a cap of their own, so a scan for files that are not
+  // there cannot use up the budget the other notes share, and the keys held in
+  // memory stay bounded.
+  var refusals = logModule.createNoteOnce(log, "pages: further refused files are not logged until the helper restarts");
 
   function headers(type, length) {
     var out = {
@@ -2367,11 +2383,11 @@ function createPageRoutes(options) {
     // that map a stored comment's address to its file use locate and must keep
     // working for a file nothing lists yet.
     if (markdownLinks.isSecretPath(real)) {
-      sayOnce("secret\u0000" + name + "\u0000" + real, "pages: refused " + real + " on " + name + ": it is a secret path");
+      refusals.say("secret\u0000" + name + "\u0000" + real, "pages: refused " + real + " on " + name + ": it is a secret path");
       return notFound(req, res);
     }
     if (where.mounted && !sites.listed(name, real)) {
-      sayOnce("unlisted\u0000" + name + "\u0000" + real, "pages: refused " + real + " on " + name + ": no page on the site links to it");
+      refusals.say("unlisted\u0000" + name + "\u0000" + real, "pages: refused " + real + " on " + name + ": no page on the site links to it");
       return notFound(req, res);
     }
     // A LINK ADDRESS TO A FILE WITH ITS OWN REVIEW (each page carries its own

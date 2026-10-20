@@ -102,13 +102,31 @@ function mountableDir(dir) {
 function isSecretPath(real) {
   if (typeof real !== "string" || !path.isAbsolute(real)) return false;
   var home = homeRoot();
-  return SECRET_PATHS.some(function (relative) {
-    var named = path.join(home, relative);
-    if (within(real, named)) return true;
-    var resolved;
-    try { resolved = fs.realpathSync.native(named); } catch (err) { return false; }
-    return within(real, resolved);
+  var resolved = secretRoots(home);
+  return SECRET_PATHS.some(function (relative, i) {
+    // The unresolved spelling is checked every time, so a folder created
+    // after the roots were resolved is refused at once.
+    if (within(real, path.join(home, relative))) return true;
+    return resolved[i] !== null && within(real, resolved[i]);
   });
+}
+
+// The real path of each secret path under one home folder (null for one that
+// is not there), kept for a short while: resolving eleven paths for every
+// address on every render is the cost this saves. A secret path that appears
+// or is turned into a symlink inside the window is still caught by the
+// unresolved check in isSecretPath; only where a new symlink leads waits.
+var SECRET_ROOTS_TTL_MS = 60 * 1000;
+var secretRootsCache = { home: null, at: 0, roots: null };
+
+function secretRoots(home) {
+  var now = Date.now();
+  if (secretRootsCache.home === home && now - secretRootsCache.at < SECRET_ROOTS_TTL_MS) return secretRootsCache.roots;
+  var roots = SECRET_PATHS.map(function (relative) {
+    try { return fs.realpathSync.native(path.join(home, relative)); } catch (err) { return null; }
+  });
+  secretRootsCache = { home: home, at: now, roots: roots };
+  return roots;
 }
 
 function mountPrefix(dir) {
@@ -117,10 +135,13 @@ function mountPrefix(dir) {
 
 // One render's view of which directories are mounted and how many files it has
 // named. `mounts` are prefixes already served. `follow: false` is a notes page:
-// it follows no link out of the folder it is served from.
+// it follows no link out of the folder it is served from. `inMount: true` is a
+// page served through a mount: its own-folder links are addresses under that
+// mount too, so they count toward the file limit like a translated link does.
 function createRegistry(options) {
   var opts = options || {};
   var follow = opts.follow !== false;
+  var inMount = opts.inMount === true;
   var mounts = Object.assign({}, opts.mounts || {});
   var named = [];
   var added = [];
@@ -138,6 +159,20 @@ function createRegistry(options) {
     linked: linked,
     get past() { return past; },
     get refused() { return refused; },
+    // Count a file this render names under a mount; false when the render has
+    // named FILE_LIMIT others. Files named before count, so a page past the
+    // limit stays past it however often it renders.
+    name: function (target) {
+      if (named.indexOf(target) !== -1) return true;
+      if (named.length >= FILE_LIMIT) { past += 1; refused = "too-many"; return false; }
+      named.push(target);
+      return true;
+    },
+    // A link that stays in the page's own folder. Free unless the page is
+    // itself served through a mount, where it names a file under that mount.
+    nameOwn: function (target) {
+      return inMount ? this.name(target) : true;
+    },
     note: function (target) {
       if (typeof target !== "string" || !target || !isPage(target)) return;
       if (linked.indexOf(target) === -1) linked.push(target);
@@ -167,10 +202,7 @@ function createRegistry(options) {
       }
       var own = key && typeof from === "string" && within(path.resolve(from), path.resolve(mounts[key]));
       if (!follow && !own) { refused = "no-follow"; return null; }
-      if (typeof target === "string" && named.indexOf(target) === -1) {
-        if (named.length >= FILE_LIMIT) { past += 1; refused = "too-many"; return null; }
-        named.push(target);
-      }
+      if (typeof target === "string" && !this.name(target)) return null;
       if (!key) {
         mounts[prefix] = dir;
         added.push({ prefix: prefix, dir: dir });
@@ -217,15 +249,17 @@ function blockedScheme(href) {
 // that exists and stays inside the document's folder by real path: the same
 // file the server would agree to hand out.
 function noteRelative(candidate, root, registry) {
-  if (!registry || typeof registry.note !== "function") return;
+  if (!registry || typeof registry.note !== "function") return true;
   var real;
-  try { real = fs.realpathSync.native(candidate); } catch (err) { return; }
+  try { real = fs.realpathSync.native(candidate); } catch (err) { return true; }
   var realRoot;
-  try { realRoot = fs.realpathSync.native(root); } catch (err) { return; }
-  if (!within(real, realRoot)) return;
-  try { if (!fs.statSync(real).isFile()) return; } catch (err) { return; }
-  if (isSecretPath(real)) return;
+  try { realRoot = fs.realpathSync.native(root); } catch (err) { return true; }
+  if (!within(real, realRoot)) return true;
+  try { if (!fs.statSync(real).isFile()) return true; } catch (err) { return true; }
+  if (isSecretPath(real)) return true;
+  if (typeof registry.nameOwn === "function" && !registry.nameOwn(real)) return false;
   registry.note(real);
+  return true;
 }
 
 // Decide what one href becomes in the rendered output.
@@ -252,7 +286,7 @@ function classify(href, sourceDir, registry) {
   } else {
     candidate = path.resolve(root, decoded);
     if (within(candidate, root)) {
-      noteRelative(candidate, root, registry);
+      if (!noteRelative(candidate, root, registry)) return { kind: "inert", target: candidate, reason: "too-many" };
       return { kind: "relative" };
     }
   }
