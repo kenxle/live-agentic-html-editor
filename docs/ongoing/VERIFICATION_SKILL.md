@@ -1,23 +1,26 @@
 # Verification skill for Lahe
 
-Updated: 2026-10-19T20:25-04:00
+Updated: 2026-10-19T21:10-04:00
 
 ## Latest
 
-- **Both cloud runs are created** in your new Lahe environment.
-  - [The one-time proof run](https://claude.ai/code/routines/trig_01MiiCApAdisxTsWjk4mc2Ww)
-    ran at 8:22pm and was **blocked at setup**. The Lahe environment's network
-    rules refused `cdn.playwright.dev`, so Chromium could not be downloaded
-    and no browser started. Everything before that worked: Linux, Node 22,
-    `npm ci`, the system packages, and Lahe itself started a review. Cleanup
-    was clean: `left running: nothing`. The report is
-    [on the branch `claude/verify-cloud-proof-20261020`](https://github.com/kenxle/live-agentic-html-editor/blob/claude/verify-cloud-proof-20261020/verification-evidence/cloud-proof-20261020/REPORT.md).
-  - [The weekly map check](https://claude.ai/code/routines/trig_01258YbvbKURmHoiNX7DGZzh)
+- **The cloud proof passed.** After you allowed `cdn.playwright.dev`, the
+  second run did the whole comment journey on a fresh cloud Linux machine: a
+  comment, the agent's question back, and the reviewer's follow-up in the same thread.
+  `doctor` passed all 12 checks twice, and `down` left nothing running.
+  [The report](https://github.com/kenxle/live-agentic-html-editor/blob/claude/verify-cloud-proof-20261020-2/verification-evidence/cloud-proof-20261020-2/REPORT.md) and its screenshots are on the branch
+  `claude/verify-cloud-proof-20261020-2`. The first run, blocked at the
+  Chromium download, is kept on `claude/verify-cloud-proof-20261020`.
+
+  ![The agent's question on a comment card, from the cloud run](verification-proof/cloud-reply.png)
+
+- **The weekly map check is set up.**
+  - [The routine](https://claude.ai/code/routines/trig_01258YbvbKURmHoiNX7DGZzh)
     first runs Monday at 04:00 UTC (12am Eastern on October 26, then 11pm
     Sunday from November 1). Until PR #84 merges, it stops at once and says it
     is blocked.
-  - Both run on Sonnet with no connectors attached (no Gmail, Drive or
-    Calendar).
+  - It runs on Sonnet with no connectors attached (no Gmail, Drive or
+    Calendar), in the Lahe environment the proof just passed in.
 - **[PR #84 (verification skill)](https://github.com/kenxle/live-agentic-html-editor/pull/84)
   is ready to merge.** GitHub's check passed, and it still merges cleanly
   even though main has moved ahead by 39 commits since. Nobody has merged it yet.
@@ -36,15 +39,6 @@ merge: 3087 passed, 0 failed, and no helper left running.
 
 ## Needs your call
 
-- **Allow `cdn.playwright.dev` in the Lahe environment?** The cloud runner
-  blocks it, and both cloud runs need it to download Chromium. The weekly check
-  would hit the same wall. My recommendation: add that host to the Lahe
-  environment's allowed network hosts at [claude.ai/code](https://claude.ai/code).
-  It is Playwright's own download server, nothing else. Tell me when it is in,
-  and I will run the proof again. The other route is to change `lahe-verify`
-  to use the older Chromium the runner already has. I do not recommend it:
-  that browser is a different version from the one the tests are written
-  against, so a pass there would prove less.
 - **Merge PR #84?** The weekly check reads the skill from `main`, so it does
   nothing useful until this merges. GitHub's check is green and it merges
   cleanly. Say the word and I will merge it, then run the unit gate on main.
@@ -114,7 +108,7 @@ hand-off and `lahe session takeover` also still need a live run.
   Approved. Planned as a one-time routine on the `docs/verification-skill`
   branch: `up`, `doctor`, the comment recipe, `down`, then push the evidence
   folder to its own `claude/` branch (a cloud run has no other place to keep
-  files). Created; it starts at 8:22pm on October 19.
+  files). Done: [passed on the second run](https://github.com/kenxle/live-agentic-html-editor/blob/claude/verify-cloud-proof-20261020-2/verification-evidence/cloud-proof-20261020-2/REPORT.md).
 - **Keep the map current.** Run [maintain-verification-skill](../../skills/maintain-verification-skill/SKILL.md)
   after user-facing changes, and turn the "not yet mapped" list into recipes.
   Approved as a weekly routine, Sunday at 11pm Eastern, on `main`. It opens a

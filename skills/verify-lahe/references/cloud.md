@@ -1,7 +1,7 @@
 # Cloud verification
 
-The same headless Chromium that `lahe-verify` drives locally is the intended cloud route. This is a
-setup contract, not a claim that Claude Code cloud has been exercised.
+The same headless Chromium that `lahe-verify` drives locally is the cloud route. The seed journey
+below passed on a Claude Code cloud runner (Linux, Node 22) on 2026-10-20.
 
 ## Runner setup
 
@@ -10,9 +10,15 @@ setup contract, not a claim that Claude Code cloud has been exercised.
 - On Linux, run `npx playwright install --with-deps chromium` during setup.
   If system packages require elevated permissions, prepare them in the runner
   image. Report a setup blocker if that is unavailable.
+- The runner's network must allow `cdn.playwright.dev`, where Playwright
+  downloads Chromium. A Claude Code cloud environment blocks it until the host
+  is added to the environment's allowed hosts. Without it the install fails
+  with a 403 naming that host, and `up` fails because the browser is missing.
 - Allow local listeners, browser child processes and writable temporary storage.
   The harness uses free ports and `*.lahe.localhost` hostnames. Verify name
   resolution in the actual runner through the seed journey, not by assumption.
+  On the cloud runner `getent` does not resolve them, but Chromium does, so a
+  `getent` or `curl` check gives a false alarm.
 - Run one journey with `lahe-verify` as the first proof: `up`, `doctor`, the
   comment recipe in [the feature map](../features/reviews-and-comments.md), and
   `down`. Pass `--evidence <artifact dir>` to `up`, and upload that folder before
