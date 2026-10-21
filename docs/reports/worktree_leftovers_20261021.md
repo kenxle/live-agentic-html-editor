@@ -1,10 +1,34 @@
 # Why 77 old checkouts piled up, and how to stop it
 
-Updated 2026-10-21 10:01. I cleaned up 50 LAHE worktrees and 27 old clones this morning. This page says why they stayed up and what we're changing. Nothing is waiting on you. Two fixes are done. The Seneschal change is built and in review.
+Updated 2026-10-21 10:52. I cleaned up 50 LAHE worktrees and 27 old clones this morning. This page says why they stayed up and what we're changing. Two fixes are done. The Seneschal change is built, reviewed twice and proven on a throwaway repo. One click from you: merge it.
+
+## What I need from you
+
+<div class="choice" data-choice="seneschal-merge">
+<p class="choice-q">Merge the Seneschal change into its main branch? Until it merges, the installed Seneschal can't run the new check, so its removal lines safely do nothing.</p>
+<button type="button" value="merge" data-recommended>Merge it</button>
+<button type="button" value="hold">Hold</button>
+</div>
+
+What you'll see in Seneschal's tidy report afterwards. These are real cards from the throwaway repo.
+
+A family card for finished worktrees. The table says how each one's work reached main (`ancestor` is a normal merge, `cherry` came in through another PR), and it names files git ignores so you can glance at them:
+
+![The Finished worktrees card, three worktrees, one Remove button for all](worktree_leftovers_20261021/card-c2-before.png)
+
+A stray clone, like the August copies, offered for the Trash:
+
+![A merged stray clone offered for the Trash](worktree_leftovers_20261021/card-c3-before.png)
+
+A finished worktree that still holds a file you might want. It's yours to decide, and nothing runs:
+
+![A finished worktree with a loose file, left for you](worktree_leftovers_20261021/card-c1-before.png)
+
+In that run, the removal line removed a finished worktree (exit 0) and refused one that got a new commit after the report (exit 1, "its head moved since the run"). Nothing in your real repos was touched.
 
 ## Where things stand
 
-- **Built and fixed: Seneschal spots finished worktrees.** It's on branch `task/finished-worktrees` in the Seneschal repo, not merged. The first review found six ways it could still remove or trash work that isn't on main. The worst: a whole checkout with a builder worktree inside it could go to the Trash as a "stray clone". All of them are fixed, each with a test that failed first. I ran the suite myself: 340 passed, 0 failed. A second review of the fix found two more holes in the last check before each removal. That check didn't recheck whether a worktree was brand new, and it trusted the report's word on whether a folder was a worktree or a clone. Those and four smaller ones are fixed too: 353 passed, 0 failed, run by me. The final check now runs as part of every removal line Seneschal prints, so it can't be skipped. Last step: the builder is running it on a throwaway repo and taking screenshots of the real cards, which will go here for you to look at before it merges. What it changes is in [the fixes](#the-fixes) below.
+- **Built, reviewed, proven: Seneschal spots finished worktrees.** It's on branch `task/finished-worktrees` in the Seneschal repo, not merged. The first review found six ways it could still remove or trash work that isn't on main. The worst: a whole checkout with a builder worktree inside it could go to the Trash as a "stray clone". A second review found two more in the last check before each removal. All are fixed, each with a test that failed first. 353 passed, 0 failed, run by me. That last check now runs on the same line as every removal Seneschal prints, so it can't be skipped. What it changes is in [the fixes](#the-fixes) below.
 - **A call I made:** files git is told to ignore (`.gitignore`) won't stop a worktree from counting as finished. Its card will name them, so you can see them before agreeing. If they blocked removal, files like the commit-message scratch files would pile worktrees up again. Comment here if you'd rather they block.
 - **Where it differs from the plan:**
   - A finished worktree with a real uncommitted file gets a card for you, naming the files, instead of a saved patch. The builder's reason: Seneschal shouldn't decide what scratch is worth keeping.
