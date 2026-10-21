@@ -1,28 +1,33 @@
 # Why 77 old checkouts piled up, and how to stop it
 
-Updated 2026-10-21 09:34. I cleaned up 50 LAHE worktrees and 27 old clones this morning. This page says why they stayed up and proposes three fixes. Each fix needs one click from you. I recommend all three.
+Updated 2026-10-21 09:44. I cleaned up 50 LAHE worktrees and 27 old clones this morning. This page says why they stayed up and what we're changing. Two fixes are done. One question is left for you: the Seneschal change.
 
 ## What I need from you
 
 <div class="choice" data-choice="sweep-command">
-<p class="choice-q">Add a sweep command to LAHE that finds finished worktrees and removes them safely?</p>
+<p class="choice-q">Teach Seneschal to tell a finished worktree from one in use, so its tidy report offers to remove the finished ones?</p>
 <button type="button" value="build" data-recommended>Build it</button>
 <button type="button" value="skip">Skip</button>
 </div>
 
+The details are in [the fixes](#the-fixes) below.
+
+## Done
+
+- **forge-cleanup tears down every worktree made for the feature.** Its last step no longer skips when the orchestrator runs in the main checkout. It now covers the builder, integration, review and subagent worktrees too.
+- **A builder worktree is removed without asking once all its work is on main.** Its branch is merged, or its commits reached main through another PR. Build leftovers like `node_modules` don't count as work. Any other uncommitted change is saved as a patch first. LAHE's CLAUDE.md now names this as the one exception to the no-delete rule, and the memory note says the same.
+
 <div class="choice" data-choice="forge-cleanup-teardown">
 <p class="choice-q">Change forge-cleanup's teardown step so it also removes the builders' worktrees, not only the one the session runs in?</p>
-<button type="button" value="fix" data-recommended>Fix the step</button>
+<button type="button" value="fix" data-recommended data-chosen>Fix the step</button>
 <button type="button" value="skip">Skip</button>
 </div>
 
 <div class="choice" data-choice="allow-worktree-remove">
 <p class="choice-q">Let an agent remove a merged worktree at cleanup without asking you first?</p>
-<button type="button" value="allow" data-recommended>Allow it</button>
+<button type="button" value="allow" data-recommended data-chosen>Allow it</button>
 <button type="button" value="keep">Keep asking</button>
 </div>
-
-The details of each fix are in [the fixes](#the-fixes) below.
 
 ## Why they piled up
 
@@ -49,20 +54,20 @@ Nothing tells you they are there, either. No check at the start of a session say
 <div class="option">
 <span class="badge badge--purple">Recommended</span>
 <p class="eyebrow">Fix 1</p>
-<h4>A sweep command in LAHE</h4>
-<p><code>npm run worktrees:sweep</code> lists every worktree and says, for each one, whether its branch is on main and whether anything in it is worth keeping. With <code>--apply</code> it removes the safe ones.</p>
+<h4>Seneschal spots finished worktrees</h4>
+<p>Seneschal already lists worktrees and can remove them from its report. Today it would have offered almost none of these. It counts any uncommitted file as work in progress, including <code>node_modules</code> and the screenshots the gate rewrites, and it never asks whether the branch is on main. Three changes:</p>
 <ul>
-<li>Safe means: the branch is merged (or its changes are already on main), nothing is running in it, and the only uncommitted files are ones the build makes: <code>node_modules</code>, the layer bundle, <code>package-lock.json</code>, and the four screenshots the gate rewrites.</li>
-<li>Any other uncommitted change is saved as a patch outside the repo before removal.</li>
-<li>It never touches <code>/tmp</code>, an unmerged branch, or a branch you haven't pushed.</li>
-<li>It also prints one line at the start of a session when finished worktrees are waiting.</li>
+<li><b>Build leftovers don't count as work.</b> Each repo names the files its build makes. For LAHE that's <code>node_modules</code>, the layer bundle, <code>package-lock.json</code> and the four gate screenshots.</li>
+<li><b>A merged worktree is finished.</b> The branch is on main, or its changes reached main through another PR. Then the card offers removal. Any other uncommitted change is saved as a patch first.</li>
+<li><b>It finds stray clones.</b> Folders beside the repo that are copies of it, like the August ones, show up as cards too.</li>
 </ul>
+<p>It still never touches <code>/tmp</code>, an unmerged branch or an unpushed one.</p>
 </div>
 <div class="option">
 <span class="badge badge--purple">Recommended</span>
 <p class="eyebrow">Fix 2</p>
 <h4>forge-cleanup tears down the builders' worktrees</h4>
-<p>The last step lists every worktree made for the feature, not only the session's own. It runs the repo's sweep when the repo has one, and plain <code>git worktree remove</code> after the merged check when it doesn't.</p>
+<p>The last step lists every worktree made for the feature, not only the session's own, and removes each one whose branch is merged, using Seneschal's check for what counts as finished.</p>
 <ul>
 <li>This is your global skill, so it changes cleanup in every project.</li>
 </ul>
@@ -71,7 +76,7 @@ Nothing tells you they are there, either. No check at the start of a session say
 <span class="badge badge--purple">Recommended</span>
 <p class="eyebrow">Fix 3</p>
 <h4>Removing a merged worktree is allowed at cleanup</h4>
-<p>Add one exception to the no-delete rule: at cleanup, an agent may remove a worktree the sweep calls safe, without asking. It uses <code>git worktree remove</code>, not <code>rm</code>, so it doesn't stop you with a prompt.</p>
+<p>Add one exception to the no-delete rule: at cleanup, an agent may remove a worktree Seneschal's check calls finished, without asking. It uses <code>git worktree remove</code>, not <code>rm</code>, so it doesn't stop you with a prompt.</p>
 <ul>
 <li>Every other deletion still waits for your batch.</li>
 <li>I'd update the LAHE CLAUDE.md line and the memory note that now says to list it for the batch.</li>
