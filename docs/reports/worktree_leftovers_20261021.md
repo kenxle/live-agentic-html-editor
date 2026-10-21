@@ -1,10 +1,15 @@
 # Why 77 old checkouts piled up, and how to stop it
 
-Updated 2026-10-21 09:43. I cleaned up 50 LAHE worktrees and 27 old clones this morning. This page says why they stayed up and what we're changing. Nothing is waiting on you. Two fixes are done, and the Seneschal change is being built.
+Updated 2026-10-21 10:01. I cleaned up 50 LAHE worktrees and 27 old clones this morning. This page says why they stayed up and what we're changing. Nothing is waiting on you. Two fixes are done. The Seneschal change is built and in review.
 
 ## Where things stand
 
-- **Being built: Seneschal spots finished worktrees.** A builder is working on it in a Seneschal worktree. What it changes is in [the fixes](#the-fixes) below.
+- **Built, in review: Seneschal spots finished worktrees.** It's on branch `task/finished-worktrees` in the Seneschal repo, not merged. 319 tests pass, up from 297. An independent reviewer is checking it now, mostly for any way it could remove work that isn't on main. What it changes is in [the fixes](#the-fixes) below.
+- **Where it differs from the plan:**
+  - A finished worktree with a real uncommitted file gets a card for you, naming the files, instead of a saved patch. The builder's reason: Seneschal shouldn't decide what scratch is worth keeping.
+  - Removal uses `git worktree remove --force`, and only when every uncommitted file is a build leftover. Without `--force`, git refuses a worktree that has a `node_modules` folder.
+  - A branch squashed into one commit on main isn't recognized as finished yet. It stays in flight.
+- **After it merges:** LAHE's `docs/STANDARD.md` gets a `generated_paths` row naming the layer bundle, `package-lock.json` and the gate screenshots, so Seneschal stops counting them as work.
 
 <div class="choice" data-choice="seneschal-finished">
 <p class="choice-q">Teach Seneschal to tell a finished worktree from one in use, so its tidy report offers to remove the finished ones?</p>
