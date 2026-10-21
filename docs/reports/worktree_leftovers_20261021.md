@@ -4,7 +4,7 @@ Updated 2026-10-21 09:44. I cleaned up 50 LAHE worktrees and 27 old clones this 
 
 ## What I need from you
 
-<div class="choice" data-choice="sweep-command">
+<div class="choice" data-choice="seneschal-finished">
 <p class="choice-q">Teach Seneschal to tell a finished worktree from one in use, so its tidy report offers to remove the finished ones?</p>
 <button type="button" value="build" data-recommended>Build it</button>
 <button type="button" value="skip">Skip</button>
@@ -15,7 +15,14 @@ The details are in [the fixes](#the-fixes) below.
 ## Done
 
 - **forge-cleanup tears down every worktree made for the feature.** Its last step no longer skips when the orchestrator runs in the main checkout. It now covers the builder, integration, review and subagent worktrees too.
-- **A builder worktree is removed without asking once all its work is on main.** Its branch is merged, or its commits reached main through another PR. Build leftovers like `node_modules` don't count as work. Any other uncommitted change is saved as a patch first. LAHE's CLAUDE.md now names this as the one exception to the no-delete rule, and the memory note says the same.
+- **No sweep command in LAHE.** That belongs in Seneschal, the question above.
+- **A builder worktree, and the orchestrator's own feature worktree, are removed without asking once all their work is on main.** The branch is merged, or its commits reached main through another PR. Build leftovers like `node_modules` don't count as work. Any other uncommitted change is saved as a patch first. LAHE's CLAUDE.md now names this as the one exception to the no-delete rule, and the memory note says the same.
+
+<div class="choice" data-choice="sweep-command">
+<p class="choice-q">Add a sweep command to LAHE that finds finished worktrees and removes them safely?</p>
+<button type="button" value="build">Build it</button>
+<button type="button" value="skip" data-chosen>Skip</button>
+</div>
 
 <div class="choice" data-choice="forge-cleanup-teardown">
 <p class="choice-q">Change forge-cleanup's teardown step so it also removes the builders' worktrees, not only the one the session runs in?</p>

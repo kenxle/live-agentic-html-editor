@@ -316,8 +316,9 @@ boilerplate. A one-line "never delete files" at the end did not hold on
 **One exception: a finished worktree.** At cleanup, the orchestrator removes
 every worktree made for the feature whose work is all on main, without asking,
 with `git worktree remove --force` (not `rm`). forge-cleanup's last step says
-how to tell a finished worktree from one in use. Builders still never remove
-their own. Skipping this left 50 worktrees and 27 clones behind by 2026-10-21.
+how to tell a finished worktree from one in use. That includes the
+orchestrator's own feature worktree, removed last from the main checkout.
+Builders still never remove their own. Skipping this left 50 worktrees and 27 clones behind by 2026-10-21.
 
 ## Read the result, then push
 
