@@ -1,16 +1,16 @@
 # Why 77 old checkouts piled up, and how to stop it
 
-Updated 2026-10-21 09:44. I cleaned up 50 LAHE worktrees and 27 old clones this morning. This page says why they stayed up and what we're changing. Two fixes are done. One question is left for you: the Seneschal change.
+Updated 2026-10-21 09:43. I cleaned up 50 LAHE worktrees and 27 old clones this morning. This page says why they stayed up and what we're changing. Nothing is waiting on you. Two fixes are done, and the Seneschal change is being built.
 
-## What I need from you
+## Where things stand
+
+- **Being built: Seneschal spots finished worktrees.** A builder is working on it in a Seneschal worktree. What it changes is in [the fixes](#the-fixes) below.
 
 <div class="choice" data-choice="seneschal-finished">
 <p class="choice-q">Teach Seneschal to tell a finished worktree from one in use, so its tidy report offers to remove the finished ones?</p>
-<button type="button" value="build" data-recommended>Build it</button>
+<button type="button" value="build" data-recommended data-chosen>Build it</button>
 <button type="button" value="skip">Skip</button>
 </div>
-
-The details are in [the fixes](#the-fixes) below.
 
 ## Done
 
@@ -59,7 +59,7 @@ Nothing tells you they are there, either. No check at the start of a session say
 
 <div class="options">
 <div class="option">
-<span class="badge badge--purple">Recommended</span>
+<span class="badge badge--outline">In progress</span>
 <p class="eyebrow">Fix 1</p>
 <h4>Seneschal spots finished worktrees</h4>
 <p>Seneschal already lists worktrees and can remove them from its report. Today it would have offered almost none of these. It counts any uncommitted file as work in progress, including <code>node_modules</code> and the screenshots the gate rewrites, and it never asks whether the branch is on main. Three changes:</p>
@@ -71,22 +71,22 @@ Nothing tells you they are there, either. No check at the start of a session say
 <p>It still never touches <code>/tmp</code>, an unmerged branch or an unpushed one.</p>
 </div>
 <div class="option">
-<span class="badge badge--purple">Recommended</span>
+<span class="badge badge--sage"><span class="badge-dot" aria-hidden="true"></span>Done</span>
 <p class="eyebrow">Fix 2</p>
-<h4>forge-cleanup tears down the builders' worktrees</h4>
-<p>The last step lists every worktree made for the feature, not only the session's own, and removes each one whose branch is merged, using Seneschal's check for what counts as finished.</p>
+<h4>forge-cleanup tears down every worktree the feature made</h4>
+<p>The last step lists every worktree made for the feature: builders, integration, review, subagents and the orchestrator's own. It removes each one whose work is all on main. The step carries its own check for that, so it doesn't wait on Seneschal.</p>
 <ul>
 <li>This is your global skill, so it changes cleanup in every project.</li>
 </ul>
 </div>
 <div class="option">
-<span class="badge badge--purple">Recommended</span>
+<span class="badge badge--sage"><span class="badge-dot" aria-hidden="true"></span>Done</span>
 <p class="eyebrow">Fix 3</p>
-<h4>Removing a merged worktree is allowed at cleanup</h4>
-<p>Add one exception to the no-delete rule: at cleanup, an agent may remove a worktree Seneschal's check calls finished, without asking. It uses <code>git worktree remove</code>, not <code>rm</code>, so it doesn't stop you with a prompt.</p>
+<h4>Removing a finished worktree is allowed at cleanup</h4>
+<p>One exception to the no-delete rule: at cleanup, the orchestrator removes a worktree whose work is all on main, without asking. It uses <code>git worktree remove</code>, not <code>rm</code>, so it doesn't stop you with a prompt.</p>
 <ul>
 <li>Every other deletion still waits for your batch.</li>
-<li>I'd update the LAHE CLAUDE.md line and the memory note that now says to list it for the batch.</li>
+<li>LAHE's CLAUDE.md and the memory note now say this.</li>
 </ul>
 </div>
 </div>
