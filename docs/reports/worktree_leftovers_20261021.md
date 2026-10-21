@@ -4,7 +4,7 @@ Updated 2026-10-21 10:01. I cleaned up 50 LAHE worktrees and 27 old clones this 
 
 ## Where things stand
 
-- **Built, being fixed: Seneschal spots finished worktrees.** It's on branch `task/finished-worktrees` in the Seneschal repo, not merged. The review found six ways it could still remove or trash work that isn't on main, and reproduced five. The worst: a whole checkout that had a builder worktree inside it could be sent to the Trash as a "stray clone". All of them, plus three smaller ones, are back with the builder, each with a test that has to fail first. What it changes is in [the fixes](#the-fixes) below.
+- **Built and fixed: Seneschal spots finished worktrees.** It's on branch `task/finished-worktrees` in the Seneschal repo, not merged. The first review found six ways it could still remove or trash work that isn't on main. The worst: a whole checkout with a builder worktree inside it could go to the Trash as a "stray clone". All of them are fixed, each with a test that failed first. I ran the suite myself: 340 passed, 0 failed. One short second review is checking the fix commit, because it rewrote the last safety check before each removal. What it changes is in [the fixes](#the-fixes) below.
 - **Where it differs from the plan:**
   - A finished worktree with a real uncommitted file gets a card for you, naming the files, instead of a saved patch. The builder's reason: Seneschal shouldn't decide what scratch is worth keeping.
   - Removal uses `git worktree remove --force`, and only when every uncommitted file is a build leftover. Without `--force`, git refuses a worktree that has a `node_modules` folder.
