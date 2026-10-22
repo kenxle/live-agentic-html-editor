@@ -184,7 +184,9 @@ test.describe("a reload is the same window, not a second one", () => {
     await pollPage(page, () => !window.__lahe.failures().some((f) => f.code === "SECOND_WINDOW_REFUSED"), undefined, {
       message: "the stale second-window chip to be cleared by the successful claim"
     });
-    expect((await refusalState(page)).readOnly, "and the window is not read-only").toBe(false);
+    // The chip clears and the write mode settles in separate ticks; a refused
+    // window would stay read-only and still fail here.
+    await expect.poll(async () => (await refusalState(page)).readOnly, { message: "and the window is not read-only" }).toBe(false);
   });
 
   test("a helper restart does not refuse the page that is already open", async ({ page }) => {
