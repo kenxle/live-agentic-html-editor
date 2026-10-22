@@ -255,3 +255,46 @@ test("a long path in inline code wraps at phone width instead of widening the pa
     await server.close();
   }
 });
+
+// LAHE-style-print-wide-tables: on paper .scrollx cannot scroll, so a wide
+// table printed cut off at the margin, and one long path pushed the other
+// columns off the page. Set LAHE_SHOTS_DIR to keep the PDF.
+test("a wide table fits the printed page, breaking code but not words", async ({ page }) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-markdown-print-"));
+  const state = path.join(root, "state");
+  const source = path.join(root, "WIDE.md");
+  const long = "docs/features/20261014.01_seneschal_report/scripts/build_the_report_from_the_walk_output_and_more.py";
+  fs.writeFileSync(source, [
+    "# Wide table",
+    "",
+    "| File | Owner | Purpose |",
+    "| --- | --- | --- |",
+    "| `" + long + "` | forge | builds the report |"
+  ].join("\n"));
+  const artifact = markdown.writeArtifact(state, "s_print", source);
+  const server = await startStaticServer({ root: path.dirname(artifact.target), label: "markdown-print" });
+
+  try {
+    // About a Letter page's printable width at 96 dpi.
+    await page.setViewportSize({ width: 700, height: 900 });
+    await page.goto(server.origin + "/" + path.basename(artifact.target));
+    await page.emulateMedia({ media: "print" });
+    const fit = await page.evaluate(() => {
+      const box = document.querySelector(".scrollx");
+      return {
+        overflow: getComputedStyle(box).overflowX,
+        table: box.querySelector("table").getBoundingClientRect().width,
+        box: box.getBoundingClientRect().width
+      };
+    });
+    expect(fit.overflow, JSON.stringify(fit)).toBe("visible");
+    expect(fit.table, JSON.stringify(fit)).toBeLessThanOrEqual(fit.box + 1);
+    // Words break only between words: a header split mid-word is worse than a long row.
+    expect(await page.locator("th").first().evaluate((el) => getComputedStyle(el).overflowWrap)).not.toBe("anywhere");
+    if (process.env.LAHE_SHOTS_DIR) {
+      await page.pdf({ path: path.join(process.env.LAHE_SHOTS_DIR, "print_wide_table.pdf"), format: "Letter" });
+    }
+  } finally {
+    await server.close();
+  }
+});
