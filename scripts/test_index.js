@@ -259,9 +259,9 @@ const GATE_AUDIENCE = {
 };
 
 const SCRIPT_MEANING = {
-  lint: "node --check over every tracked .js file, plus no jsdom, plus manifest completeness",
+  lint: "node --check over every tracked .js file, no duplicate top-level functions, a compile of the .lua filter, no jsdom, and manifest completeness",
   "check:layer": "fails when the committed bundle dist/lahe-layer.js is stale",
-  "test:unit": "node --test over test/unit",
+  "test:unit": "node --test over test/unit, stopped and failed after 30 minutes",
   "test:browser": "Playwright, Chromium only",
   "test:browser:all": "Playwright, Chromium and Firefox and WebKit"
 };

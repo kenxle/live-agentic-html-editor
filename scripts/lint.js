@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The lint gate. Zero dependencies, four checks, and it runs all four before
+// The lint gate. Zero dependencies, five checks, and it runs all four before
 // it exits so one failure does not hide the others.
 //
 //   1. SYNTAX. `node --check` over every tracked .js file. The cheapest possible
@@ -8,12 +8,15 @@
 //      Node accepts it (the second silently wins), but Playwright's parser
 //      refuses it, so it only surfaced when the browser suite loaded the file:
 //      a merge of two branches that each added `validPort` to one file did that.
+//   1c. LUA SYNTAX. Every .lua file under src/ (the pandoc filter) compiles,
+//      with luac or pandoc's own Lua. Skipped, with a line saying so, on a
+//      machine with neither.
 //   2. NO JSDOM. Not in package.json, and not required or imported anywhere
 //      under test/. This is one of the four rules that bind every builder in the
 //      plan: jsdom has no layout, no caret rectangles, no policy enforcement and
 //      no real key events, so every assertion that would catch the three
 //      symptoms is impossible in it. The rule stops being a slogan here.
-//   3. MANIFEST COMPLETENESS. Every file under src/ appears exactly once across
+//   3. MANIFEST COMPLETENESS. Every file under src/, of any kind, appears exactly once across
 //      the lists src/shared/manifest.js exposes. A file with two owners is a
 //      merge conflict every time both touch it; a file with none is a thing
 //      nobody built.
@@ -107,6 +110,32 @@ for (const file of jsFiles) {
 }
 
 if (duplicates.length > 0) fail("duplicate-declaration", duplicates);
+
+// ---------------------------------------------------------------------------
+// 1c. Lua syntax
+// ---------------------------------------------------------------------------
+
+const { findLuaChecker, luaSyntaxError } = require("./lint_lua.js");
+const luaFiles = collectFiles(path.join(root, "src"), [], function (name) {
+  return name.endsWith(".lua");
+});
+const luaChecker = luaFiles.length ? findLuaChecker() : null;
+const luaErrors = [];
+
+if (luaChecker) {
+  for (const file of luaFiles) {
+    const message = luaSyntaxError(file, luaChecker);
+    if (message) luaErrors.push("Syntax error in " + relative(file) + ":\n" + message);
+  }
+}
+
+if (luaErrors.length > 0) fail("lua-syntax", luaErrors);
+
+const luaSummary = !luaFiles.length
+  ? "no Lua files"
+  : luaChecker
+    ? "lua: " + luaFiles.length + " file" + (luaFiles.length === 1 ? "" : "s") + " via " + luaChecker.name
+    : "lua: " + luaFiles.length + " file" + (luaFiles.length === 1 ? "" : "s") + " NOT checked, no luac or pandoc here";
 
 // ---------------------------------------------------------------------------
 // 2. No jsdom
@@ -238,7 +267,11 @@ function checkManifest() {
     return;
   }
 
-  const onDisk = collectFiles(path.join(root, "src"), [], isJs).map(relative).sort();
+  // Every file, not only .js: the pandoc filter is Lua, and a file of any kind
+  // under src/ ships and needs an owner.
+  const onDisk = collectFiles(path.join(root, "src"), [], function () {
+    return true;
+  }).map(relative).sort();
   const missing = onDisk.filter(function (file) {
     return !counts.has(file);
   });
@@ -321,7 +354,9 @@ if (problems.length > 0) {
 console.log(
   "lint passed (syntax: " +
     jsFiles.length +
-    " files, no duplicate declarations, no " +
+    " files, no duplicate declarations, " +
+    luaSummary +
+    ", no " +
     JSDOM_NAME +
     ", manifest complete)"
 );

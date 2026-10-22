@@ -99,3 +99,69 @@ test("the wrapper keeps its run folder, and prints it, when a helper survived", 
   assert.ok(fs.existsSync(result.runRoot), "the run folder is kept as evidence");
   assert.ok(result.output.includes(result.runRoot), "and its path is printed");
 });
+
+/**
+ * Wait for a signalled process to go. A zombie counts as gone: it has stopped,
+ * and a container's first process may never reap it.
+ */
+async function goneWithin(pid, ms) {
+  const until = Date.now() + ms;
+  for (;;) {
+    let zombie = false;
+    try { zombie = /^\S+ \(.*\) Z/.test(fs.readFileSync("/proc/" + pid + "/stat", "utf8")); } catch (err) { /* no /proc */ }
+    if (!alive(pid) || zombie) return true;
+    if (Date.now() > until) return false;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+// LAHE-unit-run-timeout: one stuck test used to hold the unit run for a day,
+// because nothing in the chain had a deadline. The wrapper now has one for the
+// whole run, and stops the command and everything it started when it passes.
+
+test("the wrapper stops a run that outlives its limit, and fails it", { skip: process.platform === "win32" }, async (t) => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-wrap-test-"));
+  const pidFile = path.join(scratch, "grandchild.pid");
+  t.after(() => {
+    try { process.kill(Number(fs.readFileSync(pidFile, "utf8")), "SIGKILL"); } catch (err) { /* already gone */ }
+    fs.rmSync(scratch, { recursive: true, force: true });
+  });
+  // Like `node --test`, the command runs its work in a child of its own, and
+  // neither ever exits.
+  const command =
+    "const { spawn } = require('child_process');" +
+    "const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });" +
+    "require('fs').writeFileSync(process.argv[1], String(child.pid)); setInterval(() => {}, 1000);";
+  const started = Date.now();
+  const result = await wrap([process.execPath, "-e", command, pidFile], { graceMs: 200, limitMs: 1500 });
+  assert.equal(result.code, 1, "the run fails");
+  assert.ok(Date.now() - started < 10000, "and ends near its limit");
+  assert.match(result.output, /limit/, "the output says the run hit its limit");
+  const grandchild = Number(fs.readFileSync(pidFile, "utf8"));
+  assert.equal(await goneWithin(grandchild, 3000), true, "what the command started is stopped too");
+});
+
+test("the wrapper reads its limit from --limit-minutes before the command", () => {
+  assert.deepEqual(wrapper.parseArgs(["--limit-minutes", "30", "node", "--test", "x"]), { limitMs: 30 * 60000, command: ["node", "--test", "x"] });
+  assert.deepEqual(wrapper.parseArgs(["node", "--limit-minutes", "3"]), { limitMs: null, command: ["node", "--limit-minutes", "3"] }, "a flag after the command is the command's");
+});
+
+test("package.json gives the unit run a limit", () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "package.json"), "utf8"));
+  assert.match(pkg.scripts["test:unit"], /no_stray_helpers\.js --limit-minutes \d+ node --test/);
+});
+
+const service = require("../../src/service/index.js");
+const net = require("node:net");
+
+test("probeHealth gives up on a port that accepts and never answers", async (t) => {
+  const sockets = [];
+  const silent = net.createServer((s) => { sockets.push(s); });
+  await new Promise((resolve) => silent.listen(0, "127.0.0.1", resolve));
+  t.after(() => { sockets.forEach((s) => s.destroy()); silent.close(); });
+  const started = Date.now();
+  const health = await service.probeHealth("127.0.0.1", silent.address().port, { timeoutMs: 300 });
+  assert.equal(health, null);
+  assert.ok(Date.now() - started < 3000, "it returned near its timeout");
+  assert.ok(service.HEALTH_PROBE_TIMEOUT_MS > 0 && service.HEALTH_PROBE_TIMEOUT_MS <= 10000, "and has a default timeout");
+});

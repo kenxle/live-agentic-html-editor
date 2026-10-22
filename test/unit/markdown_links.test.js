@@ -255,21 +255,70 @@ test("only http, https, mailto and tel links render as links; every other scheme
   });
 });
 
-test("a refused link renders as plain text in every Markdown link form", () => {
-  withHome((home) => {
-    const doc = write(path.join(home, "notes", "page.md"), [
-      "# Page",
-      "",
-      "[inline](javascript:alert(1)) [ref][bad] <javascript:alert(2)> [angle](<java\tscript:alert(3)>) [ok](https://example.com)",
-      "",
-      "[bad]: JAVASCRIPT:alert(4)"
-    ].join("\n"));
-    const html = markdown.render(doc, { links: links.createRegistry({}) });
-    assert.doesNotMatch(html, /href="[^"]*script:/i, "no script link reaches an href");
-    assert.match(html, /<span class="lahe-blocked-link" title="javascript: links are not opened from a rendered page">inline<\/span>/);
-    assert.match(html, /<span class="lahe-blocked-link"[^>]*>ref<\/span>/, "a reference-style link is checked too");
-    assert.match(html, /<span class="lahe-blocked-link"[^>]*>javascript:alert\(2\)<\/span>/, "an autolink is checked too");
-    assert.match(html, /<span class="lahe-blocked-link"[^>]*>angle<\/span>/, "a tab inside the scheme does not slip through");
-    assert.match(html, /<a href="https:\/\/example\.com" target="_blank" rel="noopener noreferrer">ok<\/a>/);
+// LAHE-pandoc-link-safety-tests: the unit suite forces marked, but Ken's pages
+// render with pandoc, so the render checks run once per engine. pandoc turns
+// the tab in `<java\tscript:...>` into spaces before Lahe sees the address, so
+// it is read as a relative file and becomes a same-site path; the check is
+// then on what a browser would do with every href, not on its spelling.
+const pandoc = require("../../src/service/pandoc.js");
+const BLOCK_FORMS = [
+  "# Page",
+  "",
+  "[inline](javascript:alert(1)) [ref][bad] <javascript:alert(2)> [angle](<java\tscript:alert(3)>) [ok](https://example.com)",
+  "",
+  "[bad]: JAVASCRIPT:alert(4)"
+].join("\n");
+const PAGE_ORIGIN = "http://notes.lahe.localhost:1483";
+
+function pandocHere() {
+  const saved = { LAHE_MARKDOWN_ENGINE: process.env.LAHE_MARKDOWN_ENGINE, LAHE_PANDOC: process.env.LAHE_PANDOC };
+  delete process.env.LAHE_MARKDOWN_ENGINE;
+  delete process.env.LAHE_PANDOC;
+  pandoc.reset();
+  try { return !!pandoc.locate().path; }
+  finally {
+    Object.keys(saved).forEach((key) => { if (saved[key] !== undefined) process.env[key] = saved[key]; });
+    pandoc.reset();
+  }
+}
+const NEEDS_PANDOC = pandocHere() ? false : "pandoc 3 is not installed here, so the pandoc render cannot be checked";
+
+/** Every link's href, as a browser would resolve it on the served page. */
+function resolvedHrefs(html) {
+  const hrefs = [];
+  html.replace(/<a\s[^>]*?href="([^"]*)"/g, (all, href) => {
+    const raw = href.replace(/&amp;/g, "&").replace(/&#(\d+);/g, (m, n) => String.fromCharCode(Number(n)));
+    hrefs.push({ href: raw, url: new URL(raw, PAGE_ORIGIN + "/page.md") });
+    return all;
   });
-});
+  return hrefs;
+}
+
+for (const engine of ["marked", "pandoc"]) {
+  test("a refused link renders as plain text in every Markdown link form (" + engine + ")", { skip: engine === "pandoc" && NEEDS_PANDOC }, () => {
+    withHome((home) => {
+      const doc = write(path.join(home, "notes", "page.md"), BLOCK_FORMS);
+      const page = markdown.renderPage(doc, { engine, links: links.createRegistry({}) });
+      assert.equal(page.engine, engine, engine + " rendered the page");
+      const html = page.html;
+      for (const { href, url } of resolvedHrefs(html)) {
+        assert.ok(["http:", "https:", "mailto:", "tel:"].includes(url.protocol), JSON.stringify(href) + " opens as " + url.protocol);
+      }
+      assert.doesNotMatch(html, /href="\s*(java|vb)script:/i, "no href starts with a script scheme");
+      assert.match(html, /<span class="lahe-blocked-link" title="javascript: links are not opened from a rendered page">inline<\/span>/);
+      assert.match(html, /<span class="lahe-blocked-link"[^>]*>ref<\/span>/, "a reference-style link is checked too");
+      assert.match(html, /<span class="lahe-blocked-link"[^>]*>javascript:alert\(2\)<\/span>/, "an autolink is checked too");
+      if (engine === "marked") {
+        assert.match(html, /<span class="lahe-blocked-link"[^>]*>angle<\/span>/, "a tab inside the scheme does not slip through");
+      } else {
+        const angle = /<a href="([^"]*)"[^>]*>angle<\/a>/.exec(html);
+        if (angle) {
+          assert.equal(new URL(angle[1], PAGE_ORIGIN + "/page.md").origin, PAGE_ORIGIN, "the tab form is a path on this site, not a script");
+        } else {
+          assert.match(html, /<span class="lahe-blocked-link"[^>]*>angle<\/span>/);
+        }
+      }
+      assert.match(html, /<a href="https:\/\/example\.com" target="_blank" rel="noopener noreferrer">ok<\/a>/);
+    });
+  });
+}
