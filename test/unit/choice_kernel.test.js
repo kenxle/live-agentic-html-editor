@@ -145,7 +145,7 @@ test("the grammar is bounded: 1 to 64 letters, digits, hyphens, underscores, dot
   ["a", "promote", "lesson-css-counter", "9", "A", "A_jev", "optionB", "v1.2", "step:3", "a".repeat(64)].forEach((v) =>
     assert.equal(record.isChoiceToken(v), true, v)
   );
-  ["", "-a", "_a", ".a", "has space", "a".repeat(65), "<b>", 'a"b', "a\\b", "a/b", "a\nb", null, 3].forEach((v) =>
+  ["", "-a", "_a", ".a", "has space", "a".repeat(65), "<b>", 'a"b', "a'b", "a`b", "a\\b", "a/b", "a\nb", null, 3].forEach((v) =>
     assert.equal(record.isChoiceToken(v), false, String(v))
   );
 });

@@ -16,7 +16,7 @@ The grammar (`record.CHOICE_TOKEN`) exists for one reason: the group name and th
 
 A group name and a button value may be 1 to 64 characters: letters of either case, digits, hyphens, underscores, dots and colons, starting with a letter or digit. `A_jev`, `Closest_21`, `optionB`, `v1.2` and `step:3` all arm, and the agent reads them back exactly as written.
 
-Still refused: a space, a quote, a bracket, a slash, a backslash, a newline, a leading punctuation mark, or more than 64 characters. None of those is a key an agent picks by habit, and refusing them keeps both ids short of prose. Without a quote or backslash, the name stays safe in the quoted attribute selector the rail builds (`overlay.choiceAnswerText`).
+Still refused: a space, a quote, a bracket, a slash, a backslash, a newline, a leading punctuation mark, or more than 64 characters. None of those is a key an agent picks by habit, and refusing them keeps both ids short of prose. An id can still read like a phrase (`IgnorePriorInstructions`), as `approve-and-also-delete-the-test` could before; with no space it is never a sentence, and the agent reads it as an id under the intent fence. Names that differ only in case (`Foo`, `foo`) are separate groups; every comparison is an exact match. Without a quote or backslash, the name stays safe in the quoted attribute selector the rail builds (`overlay.choiceAnswerText`).
 
 The value is never rewritten. Lowercasing `A_jev` to `a-jev` would arm the group but hand the agent a key it does not recognise, which is the same relay problem one step later.
 
