@@ -1,6 +1,6 @@
 # Broken groups
 
-Every group on this page is wrong in one way, except the last.
+Every group on this page is wrong in one way, except the last two.
 
 ## No name
 
@@ -69,6 +69,14 @@ Every group on this page is wrong in one way, except the last.
   <p class="choice-q">Two buttons carry data-chosen.</p>
   <button type="button" value="yes" data-chosen>Yes</button>
   <button type="button" value="no" data-chosen>No</button>
+</div>
+
+## Keys as an agent wrote them
+
+<div class="choice" data-choice="Closest_21">
+  <p class="choice-q">Uppercase and underscores are fine.</p>
+  <button type="button" value="A_jev">A</button>
+  <button type="button" value="B_jev">B</button>
 </div>
 
 ## Valid

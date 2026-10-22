@@ -34,7 +34,7 @@ It works only on pages the Lahe program serves itself as documents. On a page fr
 </div>
 ```
 
-- `data-choice` names the group: lowercase letters, digits and hyphens, 1 to 32 characters, starting with a letter or digit (`record.CHOICE_TOKEN`). Unique on the page. It is not under `data-lahe-` on purpose: the tool strips that prefix from captured markup, and the name must survive.
+- `data-choice` names the group: letters of either case, digits, hyphens, underscores, dots and colons, 1 to 64 characters, starting with a letter or digit (`record.CHOICE_TOKEN`). An agent can use the keys it already holds (`A_jev`, `optionB`, `v1.2`) as written; no space, quote, bracket or slash, so neither id can hold a sentence. Until 2026-10-22 the grammar was lowercase, digits and hyphens up to 32, and agents kept tripping on it (`docs/features/20261022.05_choice_value_grammar/`). Unique on the page. It is not under `data-lahe-` on purpose: the tool strips that prefix from captured markup, and the name must survive.
 - Each button's `value` follows the same grammar. The button's text is the label. `type="button"` keeps it out of any form. `data-recommended` marks at most one.
 - Once the agent has handled a press, it writes `data-chosen` onto the chosen button in the source, and moves it when the answer changes; a group carries it on one button only. The stylesheet draws that button as the decision with no Lahe present.
 - In Markdown the block is written as HTML with a blank line before and after. The catalog entry is in COMPONENTS.md.

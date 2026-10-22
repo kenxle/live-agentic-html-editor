@@ -137,9 +137,15 @@ test("validateItem and validateChoice refuse every forgery, each with the CHOICE
   });
 });
 
-test("the grammar is bounded: 1 to 32 lowercase letters, digits and hyphens, starting with a letter or digit", () => {
-  ["a", "promote", "lesson-css-counter", "9", "a".repeat(32)].forEach((v) => assert.equal(record.isChoiceToken(v), true, v));
-  ["", "-a", "A", "has space", "a".repeat(33), "a_b", "<b>", null, 3].forEach((v) =>
+test("the grammar is bounded: 1 to 64 letters, digits, hyphens, underscores, dots or colons, starting with a letter or digit", () => {
+  // Agents name answers after the keys they already hold (A_jev, optionB,
+  // v1.2, step:3), so case and the usual key punctuation are accepted as
+  // written. No space, quote or bracket: still never a sentence, and still
+  // safe inside a quoted attribute selector.
+  ["a", "promote", "lesson-css-counter", "9", "A", "A_jev", "optionB", "v1.2", "step:3", "a".repeat(64)].forEach((v) =>
+    assert.equal(record.isChoiceToken(v), true, v)
+  );
+  ["", "-a", "_a", ".a", "has space", "a".repeat(65), "<b>", 'a"b', "a\\b", "a/b", "a\nb", null, 3].forEach((v) =>
     assert.equal(record.isChoiceToken(v), false, String(v))
   );
 });
@@ -168,6 +174,21 @@ test("a valid choice passes the door and projects", () => {
   const items = projected.pages.reduce((out, p) => out.concat(p.items), []);
   assert.equal(items.length, 1);
   assert.deepEqual(items[0].choice, { group: "lesson-css-counter", answer: "promote" });
+});
+
+test("a press named as an agent wrote its keys (Closest_21, A_jev) passes the door, projects and drains unchanged", () => {
+  const reviewId = "rchoicedoorkeys";
+  const { log } = setup(reviewId);
+  const press = { group: "Closest_21", answer: "A_jev" };
+  const it = choiceItem({ choice: press, region: { ref: record.choiceRef(press.group), label: "choice", lost: null } });
+  assert.equal(record.validateChoice(it), null);
+  const result = log.append(reviewId, [eventFor(reviewId, it)]);
+  assert.equal(result.accepted.length, 1);
+  const projected = projection.project(reviewId, log.read(reviewId));
+  const items = projected.pages.reduce((out, p) => out.concat(p.items), []);
+  assert.deepEqual(items[0].choice, press);
+  const line = status.drainLine({ review: reviewId, page: { path: it.page_path } }, reviewFormat.projectItem(it), true);
+  assert.deepEqual(line.choice, press, "the agent reads its own key back, not a rewritten one");
 });
 
 test("the projection refuses the same forgeries from a hand-edited log, and reports each drop", () => {
