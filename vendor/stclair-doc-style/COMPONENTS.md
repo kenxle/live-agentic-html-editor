@@ -432,7 +432,7 @@ A picture on top, then a name and a line. Two across; `image-cards--3` for three
 ```
 
 ### Image gallery
-Thumbnails with a caption each. Two-up; `gallery--3` for three-up.
+Thumbnails with a caption each. Two-up; `gallery--3` for three-up. Thumbnails are cropped to 4:3; add `gallery--whole` to show each picture uncropped at its own shape, for photos judged by their framing.
 
 ```html
 <div class="gallery">

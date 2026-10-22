@@ -881,6 +881,10 @@ figure.plate figcaption b{font-family:var(--font-display);font-weight:var(--w-di
   border:var(--image-frame);
   border-radius:var(--image-radius);
 }
+/* .gallery--whole shows each picture uncropped, at its own shape, for photos
+   someone is judging by their framing. Rows align to the top. */
+.gallery--whole{align-items:start}
+.gallery--whole img{aspect-ratio:auto;height:auto;object-fit:contain}
 
 /* Full-width image: a picture that runs to the page edge, for a hero shot or
    a wide chart. It works the way a band does: a figure.bleed is a direct
