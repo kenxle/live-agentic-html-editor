@@ -179,7 +179,8 @@ test("the Step 2 step test: a review from a random port, opened at its stable ad
 
   // An agent edit reloads the page.
   agentWrites(file, docHtml("Second edition"));
-  await expect.poll(() => page.evaluate(() => document.querySelector("#edition") && document.querySelector("#edition").textContent), {
+  // The reload can land mid-evaluate; that read counts as "not yet".
+  await expect.poll(() => page.evaluate(() => document.querySelector("#edition") && document.querySelector("#edition").textContent).catch(() => null), {
     message: "the page to reload onto the agent's edit",
     timeout: 20000
   }).toBe("Second edition");
