@@ -679,7 +679,9 @@ async function stopHelper(ready, host, port, live) {
  * @param {{runner?: function}} [options] the login item's command runner (tests)
  */
 async function startHelper(host, port, dir, options) {
-  var isUp = function () { return service.probeHealth(host, port); };
+  // A wait for a start: no answer yet means keep waiting, so each probe has
+  // a timeout and the wait reaches its own deadline.
+  var isUp = function () { return service.probeHealth(host, port, { timeoutMs: service.HEALTH_PROBE_TIMEOUT_MS }); };
   var installed = loginItem.installedFor(dir, port);
   if (installed) {
     await loginItem.startThroughItem(installed, isUp, { runner: options && options.runner });

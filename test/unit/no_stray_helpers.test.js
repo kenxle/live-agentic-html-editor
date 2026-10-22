@@ -17,6 +17,7 @@ const stateDir = require("../../src/service/state_dir.js");
 const sessionCommand = require("../../src/cli/commands/session.js");
 const { onFreePort } = require("../helpers/free_port.js");
 const { makeRunRoot, strayHelpers, reapStrayHelpers, stopTempHelpers } = require("../helpers/temp_helpers.js");
+const { pollUntil } = require("../helpers/poll.js");
 
 function alive(pid) {
   try { process.kill(pid, 0); return true; } catch (err) { return err.code !== "ESRCH"; }
@@ -105,13 +106,13 @@ test("the wrapper keeps its run folder, and prints it, when a helper survived", 
  * and a container's first process may never reap it.
  */
 async function goneWithin(pid, ms) {
-  const until = Date.now() + ms;
-  for (;;) {
-    let zombie = false;
-    try { zombie = /^\S+ \(.*\) Z/.test(fs.readFileSync("/proc/" + pid + "/stat", "utf8")); } catch (err) { /* no /proc */ }
-    if (!alive(pid) || zombie) return true;
-    if (Date.now() > until) return false;
-    await new Promise((resolve) => setTimeout(resolve, 50));
+  const zombie = () => {
+    try { return /^\S+ \(.*\) Z/.test(fs.readFileSync("/proc/" + pid + "/stat", "utf8")); } catch (err) { return false; }
+  };
+  try {
+    return await pollUntil(() => !alive(pid) || zombie(), { timeoutMs: ms, message: "process " + pid + " to stop" });
+  } catch (err) {
+    return false;
   }
 }
 
@@ -119,7 +120,7 @@ async function goneWithin(pid, ms) {
 // because nothing in the chain had a deadline. The wrapper now has one for the
 // whole run, and stops the command and everything it started when it passes.
 
-test("the wrapper stops a run that outlives its limit, and fails it", { skip: process.platform === "win32" }, async (t) => {
+test("the wrapper stops a run that outlives its limit, and fails it", { skip: process.platform === "win32", timeout: 20000 }, async (t) => {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-wrap-test-"));
   const pidFile = path.join(scratch, "grandchild.pid");
   t.after(() => {
@@ -128,10 +129,12 @@ test("the wrapper stops a run that outlives its limit, and fails it", { skip: pr
   });
   // Like `node --test`, the command runs its work in a child of its own, and
   // neither ever exits.
+  // A listening server keeps each process alive with no timer.
+  const keepAlive = "require('net').createServer().listen(0)";
   const command =
     "const { spawn } = require('child_process');" +
-    "const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });" +
-    "require('fs').writeFileSync(process.argv[1], String(child.pid)); setInterval(() => {}, 1000);";
+    "const child = spawn(process.execPath, ['-e', " + JSON.stringify(keepAlive) + "], { stdio: 'ignore' });" +
+    "require('fs').writeFileSync(process.argv[1], String(child.pid));" + keepAlive + ";";
   const started = Date.now();
   const result = await wrap([process.execPath, "-e", command, pidFile], { graceMs: 200, limitMs: 1500 });
   assert.equal(result.code, 1, "the run fails");
@@ -144,6 +147,8 @@ test("the wrapper stops a run that outlives its limit, and fails it", { skip: pr
 test("the wrapper reads its limit from --limit-minutes before the command", () => {
   assert.deepEqual(wrapper.parseArgs(["--limit-minutes", "30", "node", "--test", "x"]), { limitMs: 30 * 60000, command: ["node", "--test", "x"] });
   assert.deepEqual(wrapper.parseArgs(["node", "--limit-minutes", "3"]), { limitMs: null, command: ["node", "--limit-minutes", "3"] }, "a flag after the command is the command's");
+  assert.throws(() => wrapper.parseArgs(["--limit-minutes", "abc", "node"]), /minutes/, "a limit that is not a number is an error, not no limit");
+  assert.throws(() => wrapper.parseArgs(["--limit-minutes", "0", "node"]), /minutes/);
 });
 
 test("package.json gives the unit run a limit", () => {
@@ -154,7 +159,7 @@ test("package.json gives the unit run a limit", () => {
 const service = require("../../src/service/index.js");
 const net = require("node:net");
 
-test("probeHealth gives up on a port that accepts and never answers", async (t) => {
+test("probeHealth with a timeout gives up on a port that accepts and never answers", { timeout: 15000 }, async (t) => {
   const sockets = [];
   const silent = net.createServer((s) => { sockets.push(s); });
   await new Promise((resolve) => silent.listen(0, "127.0.0.1", resolve));
@@ -163,5 +168,17 @@ test("probeHealth gives up on a port that accepts and never answers", async (t) 
   const health = await service.probeHealth("127.0.0.1", silent.address().port, { timeoutMs: 300 });
   assert.equal(health, null);
   assert.ok(Date.now() - started < 3000, "it returned near its timeout");
-  assert.ok(service.HEALTH_PROBE_TIMEOUT_MS > 0 && service.HEALTH_PROBE_TIMEOUT_MS <= 10000, "and has a default timeout");
+  assert.ok(service.HEALTH_PROBE_TIMEOUT_MS > 0 && service.HEALTH_PROBE_TIMEOUT_MS <= 10000, "and the wait loops have a timeout to pass");
+});
+
+test("a start through the login item ends at its deadline even when the health probe never answers", { timeout: 15000 }, async (t) => {
+  const loginItem = require("../../src/service/login_item.js");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-stuck-probe-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const record = { system: "linux", label: "lahe-test-" + process.pid, port: 47999, state_dir: dir };
+  const runner = () => ({ status: 0, output: "" });
+  const never = () => new Promise(() => {});
+  const started = Date.now();
+  await assert.rejects(loginItem.startThroughItem(record, never, { runner, waitMs: 200 }), /did not start|not start/);
+  assert.ok(Date.now() - started < 5000, "it gave up near its deadline");
 });

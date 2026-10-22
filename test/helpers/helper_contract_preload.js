@@ -18,7 +18,7 @@ const service = require(path.join(__dirname, "..", "..", "src", "service", "inde
 const skew = Number(process.env.LAHE_TEST_HELPER_CONTRACT_SKEW || 0);
 const real = service.probeHealth;
 
-service.probeHealth = async function (host, port) {
-  const health = await real(host, port);
+service.probeHealth = async function (host, port, options) {
+  const health = await real(host, port, options);
   return health ? Object.assign({}, health, { service_contract: protocol.SERVICE_CONTRACT + skew }) : health;
 };

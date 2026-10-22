@@ -300,7 +300,9 @@ async function startHelper(dir, port, options) {
       throw new Error("refusing to replace an older helper whose process identity cannot be verified");
     }
   }
-  var isUp = function () { return service.probeHealth(protocol.DEFAULT_HOST, port); };
+  // A wait for a start: no answer yet means keep waiting, so each probe has
+  // a timeout and the wait reaches its own deadline.
+  var isUp = function () { return service.probeHealth(protocol.DEFAULT_HOST, port, { timeoutMs: service.HEALTH_PROBE_TIMEOUT_MS }); };
   if (installed) {
     await loginItem.startThroughItem(installed, isUp, { runner: opts.runner, waitMs: opts.waitMs });
     return { started: true, stale: stale, keptForReviewer: null };

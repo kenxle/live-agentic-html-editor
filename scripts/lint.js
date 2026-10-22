@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The lint gate. Zero dependencies, five checks, and it runs all four before
+// The lint gate. Zero dependencies, five checks, and it runs all of them before
 // it exits so one failure does not hide the others.
 //
 //   1. SYNTAX. `node --check` over every tracked .js file. The cheapest possible
@@ -268,9 +268,10 @@ function checkManifest() {
   }
 
   // Every file, not only .js: the pandoc filter is Lua, and a file of any kind
-  // under src/ ships and needs an owner.
-  const onDisk = collectFiles(path.join(root, "src"), [], function () {
-    return true;
+  // under src/ ships and needs an owner. Not what a machine or an editor
+  // leaves beside them: dotfiles (.DS_Store, swap files) and backups.
+  const onDisk = collectFiles(path.join(root, "src"), [], function (name) {
+    return name.charAt(0) !== "." && !/(~|\.orig|\.bak|\.swp|\.rej)$/.test(name);
   }).map(relative).sort();
   const missing = onDisk.filter(function (file) {
     return !counts.has(file);

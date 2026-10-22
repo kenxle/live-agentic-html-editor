@@ -29,13 +29,19 @@ const { makeRunRoot, reapStrayHelpers, removeRunRoot } = require("../test/helper
  * @returns {{limitMs: number|null, command: string[]}}
  */
 function parseArgs(argv) {
-  if (argv[0] === "--limit-minutes" && argv.length > 1) {
-    return { limitMs: Number(argv[1]) * 60000, command: argv.slice(2) };
+  if (argv[0] === "--limit-minutes") {
+    const minutes = Number(argv[1]);
+    if (!(minutes > 0)) throw new Error("--limit-minutes takes a number of minutes above 0, not " + JSON.stringify(argv[1]));
+    return { limitMs: minutes * 60000, command: argv.slice(2) };
   }
   return { limitMs: null, command: argv };
 }
 
-/** Signal the child's whole process group (POSIX), or the child alone (Windows). */
+/**
+ * Signal the child's whole process group (POSIX), or the child alone
+ * (Windows, which has no process groups here: the test files `node --test`
+ * started there are left to end on their own).
+ */
 function signalRun(child, signal) {
   try {
     if (process.platform === "win32") child.kill(signal);
@@ -81,7 +87,8 @@ async function main(argv, options) {
     // A child in its own group no longer gets the terminal's Ctrl-C, so pass
     // it on, and let the survivor check run once the child has gone.
     const forward = (signal) => signalRun(child, signal);
-    const signals = ["SIGINT", "SIGTERM"];
+    // SIGHUP too: a closed terminal used to take the run with it.
+    const signals = ["SIGINT", "SIGTERM", "SIGHUP"];
     signals.forEach((s) => process.on(s, forward));
     let limitTimer = null;
     let killTimer = null;
@@ -131,7 +138,13 @@ async function main(argv, options) {
 module.exports = { main, parseArgs };
 
 if (require.main === module) {
-  const parsed = parseArgs(process.argv.slice(2));
+  let parsed;
+  try {
+    parsed = parseArgs(process.argv.slice(2));
+  } catch (e) {
+    process.stderr.write("no_stray_helpers: " + e.message + "\n");
+    process.exit(2);
+  }
   main(parsed.command, { limitMs: parsed.limitMs }).then((code) => {
     process.exitCode = code;
   });

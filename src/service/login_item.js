@@ -513,6 +513,19 @@ function didNotStart(record, waitMs, failed, more) {
  *   `home` and `uid` are seams for tests; the plist path comes from them and
  *   the label, never from the record's login_item
  */
+/** The promise's value, or false when it has not settled within `ms`. */
+function answeredWithin(promise, ms) {
+  var timer = null;
+  var late = new Promise(function (resolve) { timer = setTimeout(function () { resolve(false); }, ms); });
+  return Promise.race([Promise.resolve(promise), late]).then(function (value) {
+    clearTimeout(timer);
+    return value;
+  }, function (error) {
+    clearTimeout(timer);
+    throw error;
+  });
+}
+
 async function startThroughItem(record, isUp, options) {
   var opts = options || {};
   var waitMs = typeof opts.waitMs === "number" ? opts.waitMs : START_WAIT_MS;
@@ -536,7 +549,10 @@ async function startThroughItem(record, isUp, options) {
   }
   var deadline = Date.now() + waitMs;
   for (;;) {
-    if (await isUp()) return;
+    // A probe that never answers must not hold the wait past its deadline
+    // (LAHE-unit-run-timeout): it gets what is left of the wait, plus a
+    // second, and then counts as "not up yet".
+    if (await answeredWithin(isUp(), Math.max(0, deadline - Date.now()) + 1000)) return;
     if (Date.now() >= deadline) break;
     await new Promise(function (resolve) { setTimeout(resolve, 100); });
   }

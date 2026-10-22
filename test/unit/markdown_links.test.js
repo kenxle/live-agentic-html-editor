@@ -281,7 +281,7 @@ function pandocHere() {
     pandoc.reset();
   }
 }
-const NEEDS_PANDOC = pandocHere() ? false : "pandoc 3 is not installed here, so the pandoc render cannot be checked";
+const NEEDS_PANDOC = pandocHere() ? false : "no usable pandoc 3 here (missing, or too old), so the pandoc render cannot be checked";
 
 /** Every link's href, as a browser would resolve it on the served page. */
 function resolvedHrefs(html) {
