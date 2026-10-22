@@ -166,7 +166,8 @@ test("V10: the helper serves on ::1 too", async (t) => {
 // the start (test/unit/ipv6_twin_taken.test.js). A machine with no IPv6
 // loopback still logs a line and serves on 127.0.0.1. 2001:db8::1 is a
 // documentation address no machine has, so binding it fails as a missing
-// IPv6 loopback does (EADDRNOTAVAIL).
+// IPv6 loopback does: EADDRNOTAVAIL, or EAFNOSUPPORT on a machine whose
+// kernel refuses the address family for it. The helper treats both alike.
 test("V10: no IPv6 loopback is a log line and the helper keeps serving", async (t) => {
   const dir = path.join(tempRoot(), "state");
   const helper = await service.serve({ port: 0, pagesPort: 0, stateDir: dir, quiet: true, ipv6Loopback: "2001:db8::1" });
@@ -174,8 +175,8 @@ test("V10: no IPv6 loopback is a log line and the helper keeps serving", async (
   const res = await raw(helper.port, { path: HEALTH, headers: { host: "127.0.0.1:" + helper.port } });
   assert.equal(res.status, 200);
   const log = fs.readFileSync(path.join(dir, "helper.log"), "utf8");
-  assert.match(log, /could not listen on \[2001:db8::1\]:\d+ for the api port \(EADDRNOTAVAIL\)/);
-  assert.match(log, /could not listen on \[2001:db8::1\]:\d+ for the pages port \(EADDRNOTAVAIL\)/);
+  assert.match(log, /could not listen on \[2001:db8::1\]:\d+ for the api port \((EADDRNOTAVAIL|EAFNOSUPPORT)\)/);
+  assert.match(log, /could not listen on \[2001:db8::1\]:\d+ for the pages port \((EADDRNOTAVAIL|EAFNOSUPPORT)\)/);
 });
 
 test("V68: the helper listens on 127.0.0.1 and ::1 only, never on all addresses", async (t) => {

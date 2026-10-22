@@ -161,11 +161,15 @@ rebuilding it means a machine-generated conflict at every checkpoint. Rebuild it
 locally if you need it for a browser test, but do not stage it. The orchestrator
 rebuilds and commits it once per checkpoint, then runs `gate` and `gate:all`.
 
-`lint` is three checks, not just syntax: `node --check` over every tracked `.js`
-file, **no jsdom** (not in `package.json`, not imported anywhere under `test/`),
-and **manifest completeness** (every file under `src/` appears exactly once
-across `src/shared/manifest.js`'s lists). `npm run test:unit` and
-`npm run test:browser` also run individually.
+`lint` is more than syntax: `node --check` over every tracked `.js` file, no
+function declared twice at a file's top level, a compile of every `.lua` file
+under `src/` (with `luac` or `pandoc lua`, skipped with a line when the machine
+has neither), **no jsdom** (not in `package.json`, not imported anywhere under
+`test/`), and **manifest completeness** (every file under `src/`, of any kind,
+appears exactly once across `src/shared/manifest.js`'s lists). `npm run test:unit`
+and `npm run test:browser` also run individually. `test:unit` stops itself and
+fails after 30 minutes (`--limit-minutes` in `scripts/no_stray_helpers.js`), so a
+stuck test cannot hold the run.
 
 Browsers install once: `npx playwright install chromium`, plus
 `npx playwright install firefox webkit` for the lanes. A bare `playwright test`

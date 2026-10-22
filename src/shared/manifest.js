@@ -261,7 +261,8 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/markdown.js", owner: "1A", why: "deterministic Markdown review artifacts" },
   { path: "src/service/styles.js", owner: "Style switcher 1.1", why: "installed document styles: the store, the checks, and serving their files" },
   { path: "src/service/tab_icon.js", owner: "1A", why: "the fallback tab icon, and the rule that a page declaring its own keeps it. The Markdown renderer and the static server both need it, so it is spelled once" },
-  { path: "src/service/pandoc.js", owner: "1A", why: "runs pandoc, the one system dependency, to render Markdown through lahe_render.lua beside it (the manifest lists .js only); marked is the fallback" },
+  { path: "src/service/pandoc.js", owner: "1A", why: "runs pandoc, the one system dependency, to render Markdown through lahe_render.lua beside it; marked is the fallback" },
+  { path: "src/service/lahe_render.lua", owner: "1A", why: "the pandoc filter pandoc.js renders through; lint compiles it with luac or pandoc's own Lua" },
   { path: "src/service/markdown_links.js", owner: "1A", why: "render-time translation of local Markdown links, and the mount path-safety rules that bound it" },
   { path: "src/service/reviews.js", owner: "1A", why: "review creation, per-review token minting, origin registration, the second-window session" },
   {

@@ -1293,10 +1293,20 @@ async function serve(options) {
  * already up), and idempotent means the second call reports the running one
  * rather than dying on EADDRINUSE.
  */
-async function probeHealth(host, port) {
+// The probe timeout a wait-for-start loop passes. Without one, a port that
+// accepts and never answers holds the loop past its own deadline, which once
+// held a unit run for a day (LAHE-unit-run-timeout). Only a caller that reads
+// "no answer yet" as "keep waiting" passes it: elsewhere null means "no helper",
+// and a helper that is merely busy must not be read that way (add.js writes
+// the log itself when no helper holds the review).
+var HEALTH_PROBE_TIMEOUT_MS = 5000;
+
+async function probeHealth(host, port, options) {
+  var timeoutMs = options && options.timeoutMs;
   try {
     var res = await fetch("http://" + host + ":" + port + protocol.BASE + "/health", {
-      headers: { host: host + ":" + port }
+      headers: { host: host + ":" + port },
+      signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined
     });
     if (!res.ok) return null;
     var body = await res.json();
@@ -1376,5 +1386,6 @@ module.exports = {
   MAX_BODY_BYTES: MAX_BODY_BYTES,
   serve: serve,
   pagesPortFrom: pagesPortFrom,
-  probeHealth: probeHealth
+  probeHealth: probeHealth,
+  HEALTH_PROBE_TIMEOUT_MS: HEALTH_PROBE_TIMEOUT_MS
 };

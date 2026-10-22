@@ -1,7 +1,11 @@
 // Run a test command, then fail if a helper or page server it started on a
 // temp state dir is still running.
 //
-//   node scripts/no_stray_helpers.js node --test test/unit/
+//   node scripts/no_stray_helpers.js [--limit-minutes N] node --test test/unit/
+//
+// With --limit-minutes, a run still going after N minutes is stopped, with
+// everything it started, and fails. One stuck test once held the unit run for
+// a day, because nothing in the chain had a deadline (LAHE-unit-run-timeout).
 //
 // This is the unit suite's survivor check; the browser suite has the same
 // check as a Playwright global teardown (test/browser/support/no_stray_helpers.js).
@@ -18,10 +22,86 @@ const { spawn } = require("node:child_process");
 const { makeRunRoot, reapStrayHelpers, removeRunRoot } = require("../test/helpers/temp_helpers.js");
 
 /**
+ * Split the wrapper's own flag from the command. Only a flag BEFORE the
+ * command is the wrapper's; anything after belongs to the command.
+ *
+ * @param {string[]} argv
+ * @returns {{limitMs: number|null, command: string[]}}
+ */
+function parseArgs(argv) {
+  if (argv[0] === "--limit-minutes") {
+    const minutes = Number(argv[1]);
+    if (!(minutes > 0)) throw new Error("--limit-minutes takes a number of minutes above 0, not " + JSON.stringify(argv[1]));
+    return { limitMs: minutes * 60000, command: argv.slice(2) };
+  }
+  return { limitMs: null, command: argv };
+}
+
+/**
+ * The failing tests in a TAP stream, kept so they can be printed again at the
+ * end of the run. CI shows only the tail of a long log, so a failure early in
+ * the unit run could not be named from there: on 2026-10-19 and again on
+ * 2026-10-22 a red CI run had one failure nobody could read.
+ *
+ * Each block is a `not ok` line and its YAML block, up to the `...` that ends
+ * it, capped in lines and in count.
+ */
+function collectFailures() {
+  const MAX_BLOCKS = 20;
+  const MAX_LINES = 60;
+  const blocks = [];
+  let current = null;
+  let partial = "";
+  function line(text) {
+    if (current) {
+      if (current.length < MAX_LINES) current.push(text);
+      if (/^\s*\.\.\.\s*$/.test(text)) current = null;
+      return;
+    }
+    if (/^\s*not ok \d+/.test(text) && !/# (SKIP|TODO)/i.test(text) && blocks.length < MAX_BLOCKS) {
+      current = [text];
+      blocks.push(current);
+    }
+  }
+  return {
+    feed(text) {
+      const lines = (partial + text).split("\n");
+      partial = lines.pop();
+      lines.forEach(line);
+    },
+    flush(write) {
+      if (partial) line(partial);
+      partial = "";
+      if (!blocks.length) return;
+      write(
+        "\nno_stray_helpers: " + blocks.length + (blocks.length === MAX_BLOCKS ? " or more" : "") +
+          " failing test" + (blocks.length === 1 ? "" : "s") + ", repeated here so the end of a log names them:\n" +
+          blocks.map((b) => b.join("\n")).join("\n") + "\n"
+      );
+    }
+  };
+}
+
+/**
+ * Signal the child's whole process group (POSIX), or the child alone
+ * (Windows, which has no process groups here: the test files `node --test`
+ * started there are left to end on their own).
+ */
+function signalRun(child, signal) {
+  try {
+    if (process.platform === "win32") child.kill(signal);
+    else process.kill(-child.pid, signal);
+  } catch (e) {
+    // Already gone.
+  }
+}
+
+/**
  * @param {string[]} argv the command and its arguments
- * @param {{graceMs?: number, onRunRoot?: function(string): void,
+ * @param {{graceMs?: number, limitMs?: number, onRunRoot?: function(string): void,
  *          out?: function(string): void, err?: function(string): void}} [options]
- *   graceMs is how long to wait for helpers still shutting down; onRunRoot is
+ *   graceMs is how long to wait for helpers still shutting down; limitMs is
+ *   how long the command may run before it is stopped and fails; onRunRoot is
  *   called with the run folder before the command starts; out and err take the
  *   wrapper's own messages (they default to stdout and stderr).
  * @returns {Promise<number>} the exit code
@@ -43,13 +123,73 @@ async function main(argv, options) {
   // parallel test files would otherwise fight over it, and Ken's own helper
   // holds it. A test that needs a fixed pages port names one itself.
   if (env.LAHE_PAGES_PORT === undefined) env.LAHE_PAGES_PORT = "0";
+  const limitMs = opts.limitMs || null;
   const code = await new Promise((resolve) => {
-    const child = spawn(argv[0], argv.slice(1), { stdio: "inherit", env });
+    // Its own process group, so a stop at the limit reaches the test files
+    // `node --test` runs as children of its own. Helpers detach into groups
+    // of their own and are left to the survivor check below.
+    // stdout passes through a pipe so the failures can be repeated at the end.
+    const child = spawn(argv[0], argv.slice(1), {
+      stdio: ["inherit", "pipe", "inherit"],
+      env,
+      detached: process.platform !== "win32"
+    });
+    const failures = collectFailures();
+    let stdoutEnded = false;
+    child.stdout.on("data", (chunk) => {
+      out(chunk.toString());
+      failures.feed(chunk.toString());
+    });
+    child.stdout.on("end", () => { stdoutEnded = true; });
+    // A child in its own group no longer gets the terminal's Ctrl-C, so pass
+    // it on, and let the survivor check run once the child has gone.
+    const forward = (signal) => signalRun(child, signal);
+    // SIGHUP too: a closed terminal used to take the run with it.
+    const signals = ["SIGINT", "SIGTERM", "SIGHUP"];
+    signals.forEach((s) => process.on(s, forward));
+    let limitTimer = null;
+    let killTimer = null;
+    let overLimit = false;
+    if (limitMs) {
+      limitTimer = setTimeout(() => {
+        overLimit = true;
+        err(
+          "\nno_stray_helpers: the run passed its limit of " + Math.round(limitMs / 1000) + " seconds and was stopped. " +
+            "The last `# Subtest:` line above with no `ok` after it names the test that was still running.\n"
+        );
+        signalRun(child, "SIGTERM");
+        killTimer = setTimeout(() => signalRun(child, "SIGKILL"), 2000);
+      }, limitMs);
+    }
+    let finished = false;
+    const done = (value) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(limitTimer);
+      clearTimeout(killTimer);
+      signals.forEach((s) => process.removeListener(s, forward));
+      // What the run started in its own group goes with it, even when the
+      // command itself exited first.
+      if (overLimit) signalRun(child, "SIGKILL");
+      resolve(overLimit ? 1 : value);
+    };
     child.on("error", (e) => {
       err("no_stray_helpers: " + e.message + "\n");
-      resolve(1);
+      done(1);
     });
-    child.on("exit", (exitCode, signal) => resolve(signal ? 1 : exitCode));
+    child.on("exit", (exitCode, signal) => {
+      // Let the last of stdout through, but not wait on a process that
+      // inherited the pipe and outlived the command.
+      const settle = () => {
+        failures.flush(out);
+        done(signal ? 1 : exitCode);
+      };
+      if (stdoutEnded) settle();
+      else {
+        const late = setTimeout(settle, 2000);
+        child.stdout.on("end", () => { clearTimeout(late); settle(); });
+      }
+    });
   });
   const left = await reapStrayHelpers(runRoot, opts.graceMs);
   const outcome = removeRunRoot(runRoot, left);
@@ -67,10 +207,17 @@ async function main(argv, options) {
   return code;
 }
 
-module.exports = { main };
+module.exports = { main, parseArgs, collectFailures };
 
 if (require.main === module) {
-  main(process.argv.slice(2)).then((code) => {
+  let parsed;
+  try {
+    parsed = parseArgs(process.argv.slice(2));
+  } catch (e) {
+    process.stderr.write("no_stray_helpers: " + e.message + "\n");
+    process.exit(2);
+  }
+  main(parsed.command, { limitMs: parsed.limitMs }).then((code) => {
     process.exitCode = code;
   });
 }
