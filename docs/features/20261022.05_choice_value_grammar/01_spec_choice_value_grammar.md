@@ -35,11 +35,14 @@ The chip's wording comes from one constant, `record.CHOICE_TOKEN_RULE`, so the s
 |---|---|
 | `choice_kernel.test.js` "the grammar is bounded: 1 to 64 ..." accepts `A`, `A_jev`, `optionB`, `v1.2`, `step:3`, 64 characters; refuses space, quote, backslash, slash, newline, leading `_` or `.`, 65 characters | red before the change, green after |
 | `choice_kernel.test.js` "a press named as an agent wrote its keys (Closest_21, A_jev) ..." passes the door, projects, and the drain line carries the press unchanged | red before, green after |
-| `choice_buttons.spec.js` V2: a group `Closest_21` with values `A_jev` and `B_jev` in `choice-broken.md` arms; the chip states the new rule | see the record below |
-| `npm run gate` | see the record below |
+| `choice_buttons.spec.js` V2: a group `Closest_21` with values `A_jev` and `B_jev` in `choice-broken.md` arms; the chip states the new rule | green in the gate run below |
+| `npm run gate` on 7b2c37c, cloud container, non-root, pandoc 3.9 | lint passed; bundle current; unit 3,153 tests, 3,140 passed, 0 failed, 11 skipped; browser 915 passed, 0 failed, 8 skipped. Helpers running before and after: 0 and 0 |
 
 ## Rollout and review
 
 Merge when the gate is green. One independent reviewer, since the change touches the field that fences intent.
 
 ## The record
+
+- Review: one independent reviewer, nothing blocking. Taken from its nits: the grammar test also refuses a single quote and a backtick, and the Behavior section now says an id can still read like a phrase and that names differing only in case are separate groups.
+- Two earlier gate runs each had two browser failures outside this change. `stable_addresses_mappers.spec.js` V27 and its Step 2 test polled `page.evaluate` while waiting for the reload that destroys the evaluate context; V27 failed the same way on main (1 in 15 runs). `reload_claim.spec.js:159` read `readOnly` once just after the chip cleared. All three polls now treat that read as "not yet"; 18 of 18 repeated runs of both files passed, then the full gate above.
