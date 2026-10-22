@@ -675,10 +675,15 @@ function createHandledCheck(options) {
     var pages = [];
     pageFilesFor(meta, item, dir).forEach(function (file) {
       // A Markdown page on a site is read as the render the reviewer was
-      // shown, from the same cache the server answers from.
-      var rendered = markdown.isMarkdown(file) ? pageRoutes.renderForFile(dir, file) : null;
-      if (rendered !== null) {
-        pages.push(rendered);
+      // shown, from the same cache the server answers from. With no site
+      // render, the review's state-folder render is the next best witness.
+      // The raw source never is: it has no blocks, so a placed paragraph is
+      // never found in it and the item would be held as "not on the page"
+      // (LAHE-handled-check-raw-markdown). With neither, it cannot tell.
+      if (markdown.isMarkdown(file)) {
+        var rendered = pageRoutes.renderForFile(dir, file);
+        if (rendered === null) rendered = stateFolderRender(meta, file);
+        if (rendered !== null) pages.push(rendered);
         return;
       }
       try {
@@ -688,6 +693,21 @@ function createHandledCheck(options) {
       }
     });
     return verdictFor(pages, item, !touchedSince(meta, item, dir));
+  }
+
+  /** The review's own state-folder render of a Markdown source, when it is current; else null. */
+  function stateFolderRender(meta, source) {
+    var session = typeof meta.agent_session_id === "string" ? meta.agent_session_id : "";
+    if (!session) return null;
+    try {
+      // Only a render as new as the source is evidence; an older one would
+      // hold the item as "not on the page" just as the raw source did.
+      var artifact = markdown.artifactPath(dir, session, source);
+      if (fs.statSync(artifact).mtimeMs < fs.statSync(source).mtimeMs) return null;
+      return fs.readFileSync(artifact, "utf8");
+    } catch (error) {
+      return null;
+    }
   }
 
   function linkedPageShows(meta, reviewId, item, pagePath) {

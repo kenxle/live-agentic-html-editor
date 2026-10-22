@@ -4,6 +4,9 @@
 //
 //   lahe serve [--port <n>] [--state-dir <path>] [--review <id>]... [--origin <origin>]...
 //
+// `lahe serve` runs the helper in the foreground. `lahe serve --restart` stops
+// the running helper, starts the new one detached and returns once it answers.
+//
 // SERVE IS IDEMPOTENT. `add` (3B) starts the helper when it is not already up,
 // which is what makes the install one command rather than two, so a second
 // `serve` against a port a helper is already answering on reports that and exits
@@ -16,6 +19,8 @@
 
 "use strict";
 
+var childProcess = require("node:child_process");
+var path = require("node:path");
 var protocol = require("../../shared/protocol.js");
 var service = require("../../service/index.js");
 var sourceStamp = require("../../service/source_stamp.js");
@@ -23,6 +28,9 @@ var stateDirModule = require("../../service/state_dir.js");
 var reviewsModule = require("../../service/reviews.js");
 var sessionCommand = require("./session.js");
 var loginItem = require("../../service/login_item.js");
+
+var BIN = path.join(__dirname, "..", "..", "..", "bin", "lahe.js");
+var RESTART_WAIT_MS = 15000;
 
 var USAGE = [
   "usage: lahe serve [--restart] [--always-on] [--port <n>] [--state-dir <path>] [--review <id>] [--origin <origin>]",
@@ -209,6 +217,53 @@ async function serveInstalled(options, installed, deps) {
 }
 
 /**
+ * Start `lahe serve` with the same arguments, minus --restart, as a detached
+ * process, and wait for it to answer.
+ *
+ * @returns {Promise<number>} the exit code
+ */
+async function startDetached(argv, options) {
+  var port = options.port === undefined ? protocol.DEFAULT_PORT : options.port;
+  var child = childProcess.spawn(
+    process.execPath,
+    // By name, so `--restart=1` is dropped too: a child that still restarts
+    // would find the port free and spawn another, without end.
+    [BIN, "serve"].concat((argv || []).filter(function (arg) { return arg.split("=")[0] !== "--restart"; })),
+    { detached: true, stdio: "ignore" }
+  );
+  // A start that fails (the port taken by something else, the pages port, the
+  // stop hold) exits at once; say so then, not after the whole wait.
+  var exited = null;
+  child.on("exit", function (code, signal) { exited = signal || code; });
+  child.unref();
+  var deadline = Date.now() + RESTART_WAIT_MS;
+  for (;;) {
+    if (exited !== null) {
+      process.stderr.write(
+        "lahe serve: the new helper exited (" + exited + ") before it answered on " + protocol.DEFAULT_HOST + ":" + port +
+          ". Run `lahe serve` yourself to see why.\n"
+      );
+      return 1;
+    }
+    var live = await service.probeHealth(protocol.DEFAULT_HOST, port, { timeoutMs: service.HEALTH_PROBE_TIMEOUT_MS });
+    if (live) {
+      process.stdout.write(
+        "lahe serve: restarted the helper on " + protocol.DEFAULT_HOST + ":" + port +
+          ". It runs in the background; `lahe status` shows it.\n"
+      );
+      return 0;
+    }
+    if (Date.now() >= deadline) break;
+    await new Promise(function (resolve) { setTimeout(resolve, 100); });
+  }
+  process.stderr.write(
+    "lahe serve: the new helper did not answer on " + protocol.DEFAULT_HOST + ":" + port + " within " +
+      RESTART_WAIT_MS / 1000 + " seconds. Run `lahe serve` yourself to see why.\n"
+  );
+  return 1;
+}
+
+/**
  * @param {string[]} argv the arguments after the command name
  * @param {{runner?: function, stdout?: function, stderr?: function}} [deps]
  *   the login item's command runner and output, for tests
@@ -242,6 +297,13 @@ async function run(argv, deps) {
   if (parsed.options.restart) {
     var stopped = await replaceRunningHelper(parsed.options);
     if (stopped !== true) return stopped;
+    // The new helper runs detached, like every other start, and the command
+    // returns once it answers. Run in the foreground, it lived inside the shell
+    // that ran the command, and went down with it: an agent's background shell
+    // being stopped or reaped took every review page with it
+    // (LAHE-serve-restart-foreground). --always-on stays in the foreground: a
+    // service manager runs that one and watches the process it started.
+    if (!parsed.options.alwaysOn) return startDetached(argv, parsed.options);
   }
 
   var helper;
