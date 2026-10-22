@@ -122,7 +122,7 @@
     }
     if (!record.isChoiceToken(name)) {
       out.refusal = REFUSAL.BAD_NAME;
-      out.detail = "its name \"" + clip(name, 40) + "\" is not 1 to 32 lowercase letters, digits and hyphens";
+      out.detail = "its name \"" + clip(name, 40) + "\" is not " + record.CHOICE_TOKEN_RULE;
       return out;
     }
     if (counts[name] > 1) {
@@ -150,7 +150,7 @@
         out.refusal = REFUSAL.BAD_VALUE;
         out.detail =
           "the button \"" + clip(textOf(buttons[i]), 40) + "\" has " +
-          (value === null || value === "" ? "no value" : "the value \"" + clip(value, 40) + "\", which is not 1 to 32 lowercase letters, digits and hyphens");
+          (value === null || value === "" ? "no value" : "the value \"" + clip(value, 40) + "\", which is not " + record.CHOICE_TOKEN_RULE);
         return out;
       }
       if (seen[value]) {

@@ -159,11 +159,18 @@
     CHOICE: "choice"
   };
 
-  // The grammar of a choice group's name and of each answer's value: lowercase
-  // letters, digits and hyphens, 1 to 32, starting with a letter or digit. Bounded
-  // so the intent field can never carry prose. Checked in the browser, at the
-  // helper's door and at projection.
-  var CHOICE_TOKEN = /^[a-z0-9][a-z0-9-]{0,31}$/;
+  // The grammar of a choice group's name and of each answer's value: letters
+  // of either case, digits, hyphens, underscores, dots and colons, 1 to 64,
+  // starting with a letter or digit. Agents name answers after keys they
+  // already hold (A_jev, optionB, v1.2), and a refusal over case or an
+  // underscore only sent the reviewer back to relay a formatting error
+  // (20261022.05). Still bounded so the intent field can never carry prose: no
+  // space, quote, bracket or slash, which also keeps the name safe inside a
+  // quoted attribute selector. Checked in the browser, at the helper's door
+  // and at projection.
+  var CHOICE_TOKEN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/;
+  // The grammar in words, for the rail chip that refuses a group.
+  var CHOICE_TOKEN_RULE = "1 to 64 letters, digits, hyphens, underscores, dots or colons";
   var KINDS = Object.keys(KIND).map(function (k) {
     return KIND[k];
   });
@@ -2606,6 +2613,7 @@
     FIELD: FIELD,
     KIND: KIND,
     CHOICE_TOKEN: CHOICE_TOKEN,
+    CHOICE_TOKEN_RULE: CHOICE_TOKEN_RULE,
     KINDS: KINDS,
     isHandEdit: isHandEdit,
     STATE: STATE,

@@ -716,7 +716,7 @@ test.describe("groups an agent got wrong", () => {
   test("each broken group is inert and the chip names it and why; the valid one arms (V2)", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await ready(page, world);
-    expect(await page.evaluate(() => window.__lahe.choices.armed())).toEqual(["fine"]);
+    expect(await page.evaluate(() => window.__lahe.choices.armed())).toEqual(["Closest_21", "fine"]);
     const inert = await page.evaluate(() =>
       Array.from(document.querySelectorAll(".choice")).map((g) => ({
         name: g.getAttribute("data-choice"),
@@ -733,12 +733,13 @@ test.describe("groups an agent got wrong", () => {
       { name: "wrapped", inert: "nested-buttons" },
       { name: "same-value", inert: "same-value" },
       { name: "two-chosen", inert: "two-chosen" },
+      { name: "Closest_21", inert: null },
       { name: "fine", inert: null }
     ]);
     const chip = await page.evaluate(() => window.__lahe.failures().find((f) => f.code === "CHOICE_GROUP_INERT") || null);
     expect(chip, "one chip for the broken groups").toBeTruthy();
     expect(chip.detail).toContain('The choice asking "No name on this group.": it has no data-choice name.');
-    expect(chip.detail).toContain('"Has Spaces And Caps" is not 1 to 32 lowercase letters, digits and hyphens');
+    expect(chip.detail).toContain('"Has Spaces And Caps" is not 1 to 64 letters, digits, hyphens, underscores, dots or colons');
     expect(chip.detail).toContain("The choice twin: 2 groups on this page are named twin.");
     expect(chip.detail).toContain("The choice lonely: it has only one button.");
     expect(chip.detail).toContain('The choice bad-value: the button "Yes" has the value "yes please do it"');

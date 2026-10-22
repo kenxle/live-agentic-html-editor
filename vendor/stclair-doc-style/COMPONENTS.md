@@ -328,8 +328,9 @@ answer. A page may use both, the cards above the group.
 </div>
 ```
 
-- `data-choice` names the group: lowercase letters, digits and hyphens, 1 to 32
-  characters, starting with a letter or digit. Unique on the page.
+- `data-choice` names the group: letters, digits, hyphens, underscores, dots
+  and colons, 1 to 64 characters, starting with a letter or digit. No spaces.
+  Unique on the page. Keys you already use, such as `A_jev`, work as written.
 - Two or more `button`s, each `type="button"` with a `value` in the same form.
   The button's text is what the reader sees.
 - `data-recommended` on at most one button draws the Recommended badge. Leave it
