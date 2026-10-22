@@ -47,6 +47,11 @@ var USAGE = [
 var BUSY_SENTENCE =
   "the helper was busy taking a reviewer's changes, so it was left running; the next lahe command replaces it";
 
+// How long a spawned helper has to answer. The same as add.js: a busy machine
+// (a CI runner, a laptop on battery) can take more than 10 seconds, and the
+// helper is reported at once if it exits instead.
+var HELPER_START_WAIT_MS = 15000;
+
 function delay(ms) {
   return new Promise(function (resolve) { setTimeout(resolve, ms); });
 }
@@ -314,9 +319,24 @@ async function startHelper(dir, port, options) {
     detached: true,
     stdio: "ignore"
   });
+  // A helper that cannot start (its port taken, a bad state folder) exits at
+  // once; say so then, with its status, not after the whole wait. One that
+  // exits because another command's helper won the port is a start: that
+  // helper answers, so the probe decides.
+  var exited = null;
+  child.on("exit", function (code, signal) { exited = signal || code; });
   child.unref();
-  var started = await waitFor(isUp, 10000);
-  if (!started) throw new Error("the helper did not start within 10 seconds");
+  var started = await waitFor(async function () {
+    if (exited !== null) {
+      if (await isUp()) return true;
+      throw new Error(
+        "the helper exited (" + exited + ") before it answered on " + protocol.DEFAULT_HOST + ":" + port +
+          ". Run `lahe serve --port " + port + "` yourself to see why"
+      );
+    }
+    return isUp();
+  }, HELPER_START_WAIT_MS);
+  if (!started) throw new Error("the helper did not start within " + HELPER_START_WAIT_MS / 1000 + " seconds");
   return { started: true, stale: stale, keptForReviewer: null };
 }
 
@@ -658,6 +678,7 @@ module.exports = {
   stopVerifiedHelper: stopVerifiedHelper,
   helperStillWanted: helperStillWanted,
   startHelper: startHelper,
+  HELPER_START_WAIT_MS: HELPER_START_WAIT_MS,
   staleDecision: staleDecision,
   otherCloneSentence: otherCloneSentence,
   run: run

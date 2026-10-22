@@ -1878,6 +1878,16 @@ body > footer a{color:var(--on-surface)}
   table,.panel,.insight,.callout{break-inside:avoid}
   .badge,.stat,.stat--tint,.panel--danger,.choice{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .stat,ol.sequence,figure.plate,.option,.choice,.image-card,.media,.peek-pair,blockquote.pullquote{break-inside:avoid}
+  /*
+    Paper does not scroll. On screen a wide table scrolls inside .scrollx; in
+    a PDF the same box cut it off at the margin, and a long path in one cell
+    pushed the other columns off the page entirely. In print the box shows
+    everything and code in a cell (a path, a token) may break anywhere, so
+    the table fits the page. Words still break only between words: a header
+    split mid-word is what the forge build's old print fixes got wrong.
+  */
+  .scrollx{overflow:visible}
+  :is(td,th) code{overflow-wrap:anywhere}
 }
 
 
