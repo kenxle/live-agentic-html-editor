@@ -182,3 +182,40 @@ test("a start through the login item ends at its deadline even when the health p
   await assert.rejects(loginItem.startThroughItem(record, never, { runner, waitMs: 200 }), /did not start|not start/);
   assert.ok(Date.now() - started < 5000, "it gave up near its deadline");
 });
+
+// A CI log shows only its tail, so a failure early in the unit run could not be
+// named from there. The wrapper repeats each failing test at the end.
+test("the wrapper repeats each failing test, with its details, at the end of the run", async () => {
+  const tap = [
+    "TAP version 13",
+    "ok 1 - first",
+    "not ok 2 - the one that failed",
+    "  ---",
+    "  location: 'test/unit/x.test.js:3:1'",
+    "  error: 'boom'",
+    "  ...",
+    "not ok 3 - skipped on purpose # SKIP no pandoc",
+    "ok 4 - after"
+  ].join("\n") + "\n";
+  const command = "process.stdout.write(" + JSON.stringify(tap) + ");";
+  const result = await wrap([process.execPath, "-e", command], { graceMs: 200 });
+  assert.equal(result.code, 0, "the command's own exit code is kept");
+  const tail = result.output.slice(result.output.lastIndexOf("ok 4 - after"));
+  assert.match(tail, /1 failing test, repeated here/);
+  assert.match(tail, /not ok 2 - the one that failed\n  ---\n  location: 'test\/unit\/x.test.js:3:1'\n  error: 'boom'\n  \.\.\./);
+  assert.doesNotMatch(tail, /skipped on purpose/, "a skip is not a failure");
+});
+
+test("the failure collector reads lines split across chunks, and says nothing when all pass", () => {
+  const c = wrapper.collectFailures();
+  c.feed("ok 1 - a\nnot o");
+  c.feed("k 2 - b\n  ...\n");
+  const said = [];
+  c.flush((t) => said.push(t));
+  assert.match(said.join(""), /not ok 2 - b/);
+  const quiet = wrapper.collectFailures();
+  quiet.feed("ok 1 - a\n");
+  const none = [];
+  quiet.flush((t) => none.push(t));
+  assert.deepEqual(none, []);
+});
