@@ -327,6 +327,60 @@ test("a paragraph placed in a Markdown file passes the handled check when a moun
   assert.equal(check.pageShows(review.id, item), true);
 });
 
+// LAHE-handled-check-raw-markdown: when the site render is not available, the
+// handled check used to read the raw Markdown, where a placed paragraph is never
+// found, so the item was held as "not on the page". It now reads the review's
+// state-folder render, and with none, it cannot tell. The source is never read.
+
+function placedItem(origin) {
+  const item = createFixtures({ seed: "rawmd" }).runItem({
+    before: "Write the strategy.",
+    before_html: "Write the strategy.",
+    anchor_after_html: "Write the strategy.",
+    new_blocks: [{ tag: "p", html: "We will check your public pages for tags." }]
+  });
+  item[record.FIELD.PAGE_ORIGIN] = origin;
+  item[record.FIELD.PAGE_PATH] = "/hw.md";
+  item[record.FIELD.UPDATED_AT] = "2000-01-01T00:00:00.000Z";
+  return item;
+}
+
+test("with no site render, a Markdown page is checked against the review's state-folder render", (t) => {
+  const w = world(t, "on");
+  const { doc, origin } = mountedFirst(w);
+  const artifact = markdown.writeArtifact(w.dir, SESSION, doc).target;
+  const review = w.reviews.create({ target_path: artifact, source_path: doc, agent_session_id: SESSION, origins: ["null"] });
+  t.mock.method(pageRoutes, "renderForFile", () => null);
+  assert.equal(handledCheck.createHandledCheck({ dir: w.dir }).pageShows(review.id, placedItem(origin)), true);
+});
+
+test("with no site render, a state-folder render older than the source is not evidence", (t) => {
+  const w = world(t, "on");
+  const { doc, origin } = mountedFirst(w);
+  const artifact = markdown.writeArtifact(w.dir, SESSION, doc).target;
+  const review = w.reviews.create({ target_path: path.join(w.dir, "elsewhere.html"), source_path: doc, agent_session_id: SESSION, origins: ["null"] });
+  const old = new Date(Date.now() - 60000);
+  fs.utimesSync(artifact, old, old);
+  t.mock.method(pageRoutes, "renderForFile", () => null);
+  assert.equal(handledCheck.createHandledCheck({ dir: w.dir }).pageShows(review.id, placedItem(origin)), null);
+});
+
+test("with no site render and no state-folder render, a Markdown page is cannot-tell, never its raw source", (t) => {
+  const w = world(t, "on");
+  const { doc, origin } = mountedFirst(w);
+  const review = w.reviews.create({ target_path: doc, agent_session_id: SESSION, origins: ["null"] });
+  t.mock.method(pageRoutes, "renderForFile", () => null);
+  const read = [];
+  const realRead = fs.readFileSync;
+  t.mock.method(fs, "readFileSync", function (file) {
+    read.push(String(file));
+    return realRead.apply(fs, arguments);
+  });
+  const verdict = handledCheck.createHandledCheck({ dir: w.dir }).pageShows(review.id, placedItem(origin));
+  assert.equal(verdict, null);
+  assert.ok(!read.some((file) => file.endsWith("hw.md")), "the raw Markdown was not read as the page");
+});
+
 test("the deepest folder site owns a file, and a file only a mount reaches is still served", (t) => {
   const w = world(t, "on");
   const outer = path.join(w.home, "ws", "repo");

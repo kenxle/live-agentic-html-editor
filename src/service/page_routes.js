@@ -1473,11 +1473,14 @@ function holderOfFile(dir, file) {
   var target = realOrNull(file) || path.resolve(file);
   var entry = registryEntry(dir);
   var metas = readReviews(dir).filter(function (each) { return typeof each.meta.retired_at !== "string"; });
+  // The same rule as tier 1 (newer): newest wins and the id breaks a tie, so
+  // two reviews stamped in one millisecond do not go to whichever the folder
+  // listing names first, which differs by OS (LAHE-holder-tie-same-millisecond).
   function newestOf(list, tier) {
     var best = null;
     list.forEach(function (each) {
-      var at = stampOf(each.meta);
-      if (!best || at > best.at) best = { review: each.id, meta: each.meta, tier: tier, at: at };
+      var one = { review: each.id, meta: each.meta, tier: tier, at: stampOf(each.meta) };
+      if (newer(one, best)) best = one;
     });
     if (best) delete best.at;
     return best;

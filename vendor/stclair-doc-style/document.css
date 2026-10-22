@@ -268,7 +268,9 @@ code{
   background:var(--accent-tint);
   padding:.1em .35em;
   border-radius:var(--r-code);   /* a corner this small reads as a chip; var(--r) rounds an inline run too far */
+  overflow-wrap:anywhere;   /* a long path in a heading breaks instead of widening the page at phone width */
 }
+:is(td,th) code{overflow-wrap:break-word}   /* in a table, keep the column sizing the cells already chose */
 pre{
   font-family:var(--font-mono);
   font-size:var(--text-small);

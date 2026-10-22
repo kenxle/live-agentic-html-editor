@@ -209,3 +209,49 @@ test("an agent-authored page gets the document style from the helper", async ({ 
     await helper.close();
   }
 });
+
+// LAHE-inline-code-forces-sideways-scroll: a long path in inline code in a
+// heading widened the page at phone width (784px and 810px pages in a 390px
+// viewport on the Seneschal walk), because only p, li and dd wrapped anywhere.
+// Set LAHE_SHOTS_DIR to keep a screenshot of the page; the gate writes none.
+test("a long path in inline code wraps at phone width instead of widening the page", async ({ page }) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-markdown-phone-"));
+  const state = path.join(root, "state");
+  const source = path.join(root, "REPORT.md");
+  const long = "docs/features/20261014.01_seneschal_report/scripts/build_the_report_from_the_walk_output.py";
+  fs.writeFileSync(source, [
+    "# Fix `" + long + "`",
+    "",
+    "A lede with `" + long + "` in it.",
+    "",
+    "## Where `" + long + "` runs",
+    "",
+    "| `" + long + "` | What |",
+    "| --- | --- |",
+    "| `" + long + "` | the build |"
+  ].join("\n"));
+  const artifact = markdown.writeArtifact(state, "s_phone", source);
+  const server = await startStaticServer({ root: path.dirname(artifact.target), label: "markdown-phone" });
+
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(server.origin + "/" + path.basename(artifact.target));
+    await expect(page.locator("div.hero h1 code")).toHaveCount(1);
+    const widths = await page.evaluate(() => ({
+      page: document.documentElement.scrollWidth,
+      viewport: window.innerWidth,
+      h1: document.querySelector("div.hero h1").scrollWidth,
+      h2: document.querySelector("section.sheet h2").scrollWidth
+    }));
+    expect(widths.page, JSON.stringify(widths)).toBeLessThanOrEqual(widths.viewport);
+    expect(await page.locator("div.hero h1 code").evaluate((el) => getComputedStyle(el).overflowWrap)).toBe("anywhere");
+    // In a table the column sizing td chose stays as it was.
+    expect(await page.locator("td code").evaluate((el) => getComputedStyle(el).overflowWrap)).toBe("break-word");
+    expect(await page.locator("th code").evaluate((el) => getComputedStyle(el).overflowWrap)).toBe("break-word");
+    if (process.env.LAHE_SHOTS_DIR) {
+      await page.screenshot({ path: path.join(process.env.LAHE_SHOTS_DIR, "phone_inline_code.png"), fullPage: true });
+    }
+  } finally {
+    await server.close();
+  }
+});

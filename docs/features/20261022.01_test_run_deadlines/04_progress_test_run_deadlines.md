@@ -1,6 +1,6 @@
 # Progress: Test run deadlines and checks
 
-**Building.** Three board rows about the test tooling, shipped as one whetstone change, picked from the board for overnight work on 2026-10-22. Nothing is waiting on you.
+**Shipped** in [PR #90](https://github.com/kenxle/live-agentic-html-editor/pull/90), merged 2026-10-22. Three board rows about the test tooling, shipped as one whetstone change, picked from the board for overnight work on 2026-10-22. Nothing is waiting on you.
 
 ## Needs your attention
 
@@ -33,9 +33,9 @@ Nothing is waiting on you.
 | 0 Size it | done: three small rows, one PR | 2026-10-22 |
 | 2 Spec | done, above | 2026-10-22 |
 | 5 Build | done: each new test red on the old code, green on the new | 2026-10-22 |
-| 6 Code review and verify | review round 1 done, fixes in; gate running | 2026-10-22 |
-| 7 Ship and land | not started | |
-| 8 Close out | not started | |
+| 6 Code review and verify | done: review round 1 fixed, `npm run gate` 0 failed | 2026-10-22 |
+| 7 Ship and land | done: merged as PR #90 after CI went green | 2026-10-22 |
+| 8 Close out | done, below | 2026-10-22 |
 
 ## The record
 
@@ -54,6 +54,10 @@ One independent reviewer. Findings and what changed:
 - The wrapper forwards SIGHUP too, and `--limit-minutes` with no usable number is an error, not "no limit".
 - The limit test has its own 20 s timeout, so a regression fails instead of hanging.
 - The pandoc skip message says "missing, or too old".
+
+### Surprise and lesson
+
+The first CI run had one unit failure that nobody could name: the tools that read CI return only the last 5,000 lines, the failure sat earlier, and the log download is blocked from the cloud container. The same commit passed twice here as a non-root user with no pandoc, and the next CI run passed. The unit wrapper now repeats every failing test at the end of the log, so the next one names itself.
 
 ## To delete at cleanup
 

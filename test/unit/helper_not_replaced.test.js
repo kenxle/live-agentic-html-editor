@@ -186,3 +186,35 @@ test("lahe serve --restart replaces the helper anyway, and says whose page it in
     await stopHelper(dir);
   }
 });
+
+// LAHE-serve-restart-foreground: the restarted helper used to run inside the
+// command that started it, so stopping that shell took every review page down.
+test("lahe serve --restart returns once the new helper answers, and the helper outlives the command", { timeout: 40000 }, async () => {
+  const dir = path.join(tempDir("lahe-restart-detached-"), "state");
+  const port = await freePort();
+  let child = null;
+  try {
+    const boot = await sessionCommand.startHelper(dir, port);
+    assert.equal(boot.started, true);
+    const first = readyFile(dir);
+    child = childProcess.spawn(
+      process.execPath,
+      [BIN, "serve", "--restart", "--port", String(port), "--state-dir", dir],
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+    let out = "";
+    child.stdout.on("data", function (chunk) { out += String(chunk); });
+    let exitCode = null;
+    child.on("exit", function (code) { exitCode = code; });
+    await pollUntil(() => exitCode !== null, { timeoutMs: 20000, message: "lahe serve --restart to return" });
+    assert.equal(exitCode, 0, out);
+    assert.match(out, /restarted the helper/);
+    const live = await serviceModule.probeHealth(protocol.DEFAULT_HOST, port);
+    assert.ok(live, "a helper still answers after the command returned");
+    assert.notEqual(live.started_at, first.started_at, "and it is the new one");
+    assert.notEqual(readyFile(dir).pid, child.pid, "running in its own process, not the command's");
+  } finally {
+    if (child && child.exitCode === null) child.kill("SIGTERM");
+    await stopHelper(dir);
+  }
+});
