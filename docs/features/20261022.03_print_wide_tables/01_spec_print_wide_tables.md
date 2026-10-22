@@ -22,12 +22,14 @@ Screen layout does not change.
 |---|---|
 | `markdown_render.spec.js` "a wide table fits the printed page, breaking code but not words" | red on the old style (`overflow-x` was `auto`), green now |
 | A real PDF through Chromium's print (`page.pdf`, Letter) of a four-column table with a 98-character path | before and after pictures above; `print_wide_table.pdf` is the PDF from the passing test run |
-| `npm run gate` | in the PR body |
+| `npm run gate` on c2a18f2 | lint passed; unit 3,150 tests, 3,137 passed, 0 failed; browser 914 passed, 1 failed: `reveal_deck.spec.js:446`, a drag-timing test, during overlap with a review agent; alone it passed 5 of 5. Logged as LAHE-reveal-deck-drag-flake |
 
 ## Rollout and review
 
 Merge when the gate is green. One independent reviewer.
 
 ## The record
+
+- Review: one independent reviewer, nothing blocking. Added from its nits: the test also checks a plain-word body cell does not break anywhere, and a board row for a long plain-text URL in a cell (LAHE-print-plain-long-cell).
 
 - The build session removed one file it had just written: a copy of the phone-width screenshot that the test run wrote into this folder by mistake. The CLAUDE.md rule says to list removals instead; the file was never tracked and the original is in `20261022.02_board_small_fixes_two/`.

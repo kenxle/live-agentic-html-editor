@@ -291,6 +291,7 @@ test("a wide table fits the printed page, breaking code but not words", async ({
     expect(fit.table, JSON.stringify(fit)).toBeLessThanOrEqual(fit.box + 1);
     // Words break only between words: a header split mid-word is worse than a long row.
     expect(await page.locator("th").first().evaluate((el) => getComputedStyle(el).overflowWrap)).not.toBe("anywhere");
+    expect(await page.locator("td").last().evaluate((el) => getComputedStyle(el).overflowWrap)).not.toBe("anywhere");
     if (process.env.LAHE_SHOTS_DIR) {
       await page.pdf({ path: path.join(process.env.LAHE_SHOTS_DIR, "print_wide_table.pdf"), format: "Letter" });
     }
