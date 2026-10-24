@@ -558,6 +558,16 @@ test("a paragraph before a new heading still belongs to the preceding heading", 
   assert.equal(commentsModule.headingTextFor(paragraph, page.doc), "First");
 });
 
+test("a constructor tag is not a heading in any lookup direction", () => {
+  for (const kind of ["before", "after", "nested"]) {
+    const target = node(kind === "after" ? "svg" : "p", { text: kind === "after" ? "" : "Body" });
+    const decoy = node("constructor", { text: "Decoy" });
+    const local = kind === "before" ? [decoy, target] : kind === "after" ? [target, decoy] : [node("div", { children: [decoy] }), target];
+    const page = pageOf([node("h2", { text: "Real heading" }), ...local]);
+    assert.equal(commentsModule.headingTextFor(target, page.doc), "Real heading", kind);
+  }
+});
+
 test("a heading several levels down inside an earlier sibling is found", () => {
   const wrap = node("div", { text: "The block the reviewer clicked." });
   const page = pageOf([

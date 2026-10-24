@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.4.0+91ad228b28b1
+ * version 0.4.0+97ad679ab775
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.4.0+91ad228b28b1";
+  g.LAHE.version = "0.4.0+97ad679ab775";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -14749,7 +14749,7 @@
       if (isSkipped(kids[i])) continue;
       var deeper = lastHeadingWithin(kids[i], budget);
       if (deeper) return deeper;
-      if (HEADING_TAGS[tagOf(kids[i])] && headingWords(kids[i])) return kids[i];
+      if (Object.prototype.hasOwnProperty.call(HEADING_TAGS, tagOf(kids[i])) && headingWords(kids[i])) return kids[i];
     }
     return null;
   }
@@ -14766,14 +14766,14 @@
         for (var after = at + 1; after < siblings.length; after += 1) {
           if (budget.left <= 0) return null;
           budget.left -= 1;
-          if (HEADING_TAGS[tagOf(siblings[after])] && headingWords(siblings[after])) return headingWords(siblings[after]);
+          if (Object.prototype.hasOwnProperty.call(HEADING_TAGS, tagOf(siblings[after])) && headingWords(siblings[after])) return headingWords(siblings[after]);
           if (textOf(siblings[after])) break;
         }
       }
       for (var i = at - 1; i >= 0; i -= 1) {
         if (budget.left <= 0) return null;
         budget.left -= 1;
-        if (HEADING_TAGS[tagOf(siblings[i])] && headingWords(siblings[i])) return headingWords(siblings[i]);
+        if (Object.prototype.hasOwnProperty.call(HEADING_TAGS, tagOf(siblings[i])) && headingWords(siblings[i])) return headingWords(siblings[i]);
         var inside = lastHeadingWithin(siblings[i], budget);
         if (inside) return headingWords(inside);
       }
@@ -53453,7 +53453,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.4.0+91ad228b28b1";
+  var VERSION = "0.4.0+97ad679ab775";
 
   var protocol = ns.protocol;
   var record = ns.record;

@@ -756,7 +756,7 @@
       if (isSkipped(kids[i])) continue;
       var deeper = lastHeadingWithin(kids[i], budget);
       if (deeper) return deeper;
-      if (HEADING_TAGS[tagOf(kids[i])] && headingWords(kids[i])) return kids[i];
+      if (Object.prototype.hasOwnProperty.call(HEADING_TAGS, tagOf(kids[i])) && headingWords(kids[i])) return kids[i];
     }
     return null;
   }
@@ -773,14 +773,14 @@
         for (var after = at + 1; after < siblings.length; after += 1) {
           if (budget.left <= 0) return null;
           budget.left -= 1;
-          if (HEADING_TAGS[tagOf(siblings[after])] && headingWords(siblings[after])) return headingWords(siblings[after]);
+          if (Object.prototype.hasOwnProperty.call(HEADING_TAGS, tagOf(siblings[after])) && headingWords(siblings[after])) return headingWords(siblings[after]);
           if (textOf(siblings[after])) break;
         }
       }
       for (var i = at - 1; i >= 0; i -= 1) {
         if (budget.left <= 0) return null;
         budget.left -= 1;
-        if (HEADING_TAGS[tagOf(siblings[i])] && headingWords(siblings[i])) return headingWords(siblings[i]);
+        if (Object.prototype.hasOwnProperty.call(HEADING_TAGS, tagOf(siblings[i])) && headingWords(siblings[i])) return headingWords(siblings[i]);
         var inside = lastHeadingWithin(siblings[i], budget);
         if (inside) return headingWords(inside);
       }

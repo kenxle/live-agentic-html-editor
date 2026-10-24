@@ -137,6 +137,25 @@ test("a saved named-SVG signature still resolves when excluded text was present"
   expect(result.bound).toBe(true);
 });
 
+test("custom constructor tags cannot become heading context", async ({ page, fixtureServer }) => {
+  await page.goto(fixtureServer.urlFor("panel-icons.html"));
+  await loadEngine(page);
+  const headings = await page.evaluate(() => {
+    const markup = [
+      '<constructor>Decoy</constructor><p>Body</p>',
+      '<svg></svg><constructor>Decoy</constructor>',
+      '<div><constructor>Decoy</constructor></div><p>Body</p>'
+    ];
+    return markup.map(content => {
+      const scope = document.createElement("section");
+      scope.innerHTML = '<h2>Real heading</h2>' + content;
+      document.body.appendChild(scope);
+      return window.LAHE.anchor.headingOf(scope.querySelector("p,svg"), scope);
+    });
+  });
+  for (const heading of headings) expect(heading).toBe("Real heading");
+});
+
 // Everything below drives the engine from inside the page, because the whole
 // point is that it runs against live nodes. Verdicts come back as plain data,
 // and node identity is asserted in the page with ===, never by comparing
