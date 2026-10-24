@@ -499,6 +499,17 @@ function node(tag, opts) {
       return this.children.map((child) => child.textContent).join(" ");
     }
   });
+  Object.defineProperty(el, "firstChild", {
+    get() {
+      return this.children[0] || (this.ownText ? { nodeType: 3, data: this.ownText, nextSibling: null } : null);
+    }
+  });
+  Object.defineProperty(el, "nextSibling", {
+    get() {
+      if (!this.parentElement) return null;
+      return this.parentElement.children[this.parentElement.children.indexOf(this) + 1] || null;
+    }
+  });
   Object.defineProperty(el, "previousElementSibling", {
     get() {
       const parent = this.parentElement;
