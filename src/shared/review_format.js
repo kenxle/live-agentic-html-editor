@@ -568,7 +568,7 @@
           tag: boundData(subject.tag, CONTEXT_MAX),
           src: boundData(subject.src, CONTEXT_MAX),
           alt: boundData(subject.alt, CONTEXT_MAX),
-          // The opening tag only. Bounded on the longer limit because a data
+          // The opening tag, media sources, or SVG drawing. Bounded on the longer limit because a data
           // URI is a legitimate src and truncating it to 400 characters would
           // hand the agent a tag that matches nothing in the source.
           html: boundData(record.subjectHtmlOf(subject), BEFORE_MAX),

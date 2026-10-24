@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.4.0+303fbd19a4bb
+ * version 0.4.0+91ad228b28b1
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.4.0+303fbd19a4bb";
+  g.LAHE.version = "0.4.0+91ad228b28b1";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -10629,7 +10629,7 @@
           tag: boundData(subject.tag, CONTEXT_MAX),
           src: boundData(subject.src, CONTEXT_MAX),
           alt: boundData(subject.alt, CONTEXT_MAX),
-          // The opening tag only. Bounded on the longer limit because a data
+          // The opening tag, media sources, or SVG drawing. Bounded on the longer limit because a data
           // URI is a legitimate src and truncating it to 400 characters would
           // hand the agent a tag that matches nothing in the source.
           html: boundData(record.subjectHtmlOf(subject), BEFORE_MAX),
@@ -14189,7 +14189,7 @@
       stamp: null,
       // The ancestor chain as an agent reads it, innermost last. See whereOf.
       where: null,
-      // Which of N identical siblings this is. See twinOrdinalOf.
+      // Which of N elements sharing this path and text. See twinOrdinalOf.
       ordinal: null,
       // Whether the region's own words can find it again on their own. False
       // does NOT mean the reference is bad: it means text alone will not place a
@@ -14317,7 +14317,7 @@
   }
 
   /**
-   * Which of N identical siblings this one is, in document order.
+   * Which of N elements sharing the reported path and text, in document order.
    *
    * The agent's tie-breaker when the words are on the page more than once: the
    * first edit of one of N twins happens before any stamp is in the source, so
@@ -14325,23 +14325,21 @@
    * source keeps the source's order, so the third identical row on the page is
    * the third identical row in the source. Looped output is the deferred case.
    *
-   * Identical means the same tag and the same normalized text under the same
-   * parent. A unique element answers {index: 1, of: 1}.
+   * Separate wrappers still count together when `where` describes them alike.
+   * A unique element answers {index: 1, of: 1}.
    */
-  function twinOrdinalOf(node) {
-    var parent = parentOf(node);
-    if (!isElement(parent)) return { index: 1, of: 1 };
-    var kids = elementChildren(parent);
+  function twinOrdinalOf(node, scope) {
     var tag = tagOf(node);
     var text = textOf(node);
+    var where = whereOf(node, scope);
     var index = 0;
     var of = 0;
-    for (var i = 0; i < kids.length; i += 1) {
-      if (tagOf(kids[i]) !== tag) continue;
-      if (textOf(kids[i]) !== text) continue;
+    eachElement(scope, function (candidate) {
+      if (tagOf(candidate) !== tag || textOf(candidate) !== text) return;
+      if (whereOf(candidate, scope) !== where) return;
       of += 1;
-      if (kids[i] === node) index = of;
-    }
+      if (candidate === node) index = of;
+    });
     if (!of) return { index: 1, of: 1 };
     return { index: index || 1, of: of };
   }
@@ -14469,6 +14467,7 @@
   function firstDescendantOfTag(node, tag) {
     var kids = elementChildren(node);
     for (var i = 0; i < kids.length; i += 1) {
+      if (isExcludedSvgContent(kids[i])) continue;
       if (tagOf(kids[i]) === tag) return kids[i];
       var deeper = firstDescendantOfTag(kids[i], tag);
       if (deeper) return deeper;
@@ -14523,9 +14522,20 @@
         if (childText) said = true;
         parts.push(described[i] + "=" + childText);
       }
-      var inner = rawTextOf(node);
+      var inner = normalize.normalizeText(normalize.blockTextFromNode(node, { skip: isExcludedSvgContent }));
       if (inner) said = true;
-      parts.push("text=" + inner);
+      // Keep saved named-SVG signatures byte-compatible. Excluded text cannot
+      // name an SVG by itself or enter a new unnamed drawing signature.
+      parts.push("text=" + (said ? rawTextOf(node) : inner));
+    }
+    // Unnamed icons are identified by their drawing. Named SVGs retain their
+    // existing signature so saved references remain readable.
+    if (!said && tag === "svg") {
+      var drawing = svgMarkupOf(node, true, true);
+      if (drawing) {
+        parts.push("drawing=" + normalize.embeddedName("data:image/svg+xml," + drawing));
+        said = true;
+      }
     }
     if (!said) return "";
     return tag + "|" + parts.join("|");
@@ -14725,14 +14735,47 @@
     return (isElement(scope) ? tagOf(scope) : "") + ">" + parts.join(">");
   }
 
+  var HEADING_SCAN_CAP = 2000;
+
+  function headingWords(node) {
+    return normalize.normalizeText(node.textContent || "") || null;
+  }
+
+  function lastHeadingWithin(node, budget) {
+    var kids = elementChildren(node);
+    for (var i = kids.length - 1; i >= 0; i -= 1) {
+      if (budget.left <= 0) return null;
+      budget.left -= 1;
+      if (isSkipped(kids[i])) continue;
+      var deeper = lastHeadingWithin(kids[i], budget);
+      if (deeper) return deeper;
+      if (HEADING_TAGS[tagOf(kids[i])] && headingWords(kids[i])) return kids[i];
+    }
+    return null;
+  }
+
   function headingOf(node, scope) {
+    var budget = { left: HEADING_SCAN_CAP };
     var current = node;
     while (isElement(current) && current !== scope) {
       var siblings = siblingsOf(current);
-      for (var i = siblings.indexOf(current) - 1; i >= 0; i -= 1) {
-        if (Object.prototype.hasOwnProperty.call(HEADING_TAGS, tagOf(siblings[i]))) {
-          return textOf(siblings[i]);
+      var at = siblings.indexOf(current);
+      // An icon commonly precedes its own panel heading. Read that local
+      // heading before climbing out to a neighbouring panel's contents.
+      if (!textOf(current)) {
+        for (var after = at + 1; after < siblings.length; after += 1) {
+          if (budget.left <= 0) return null;
+          budget.left -= 1;
+          if (HEADING_TAGS[tagOf(siblings[after])] && headingWords(siblings[after])) return headingWords(siblings[after]);
+          if (textOf(siblings[after])) break;
         }
+      }
+      for (var i = at - 1; i >= 0; i -= 1) {
+        if (budget.left <= 0) return null;
+        budget.left -= 1;
+        if (HEADING_TAGS[tagOf(siblings[i])] && headingWords(siblings[i])) return headingWords(siblings[i]);
+        var inside = lastHeadingWithin(siblings[i], budget);
+        if (inside) return headingWords(inside);
       }
       current = parentOf(current);
     }
@@ -15202,7 +15245,7 @@
     // and stamped there. Taken here because this is where the element is in our
     // hands, and neither one ever places a write.
     ref.where = whereOf(element, scope);
-    ref.ordinal = twinOrdinalOf(element);
+    ref.ordinal = twinOrdinalOf(element, scope);
 
     var levelCount = contextLevelsOf(element, scope).length;
     var workspace = candidateWorkspace(ref, scope);
@@ -15515,8 +15558,9 @@
   function openingTagOf(node, options) {
     if (!isElement(node)) return null;
     var srcRef = options && typeof options.srcRef === "string" ? options.srcRef : null;
-    var out = "<" + tagOf(node);
+    var out = "<" + (options && options.tagName ? options.tagName : tagOf(node));
     var pairs = attrPairsOf(node);
+    if (options && options.sortAttrs) pairs.sort(function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; });
     for (var i = 0; i < pairs.length; i += 1) {
       if (markers && typeof markers.isToolAttrName === "function" && markers.isToolAttrName(pairs[i].name)) continue;
       // An embedded source is stored once, in subject.src; the tag points at
@@ -15526,6 +15570,36 @@
       out += " " + pairs[i].name + "=\"" + normalize.escapeAttrValue(value) + "\"";
     }
     return out + ">";
+  }
+
+  function isExcludedSvgContent(node) {
+    var tag = tagOf(node);
+    return tag === "script" || tag === "foreignobject" || !!(markers && markers.isToolNode(node));
+  }
+
+  // Keep the drawing as data, without browser stamps or executable subtrees.
+  function svgMarkupOf(node, canonical, requireContent) {
+    if (!isElement(node) || isExcludedSvgContent(node)) return "";
+    var tag = tagOf(node);
+    var name = node.localName || tag;
+    var out = openingTagOf(node, { sortAttrs: canonical, tagName: name });
+    var opening = out;
+    if (node.childNodes) {
+      for (var i = 0; i < node.childNodes.length; i += 1) {
+        var child = node.childNodes[i];
+        if (child.nodeType === 1) out += svgMarkupOf(child, canonical);
+        else if (child.nodeType === 3 || child.nodeType === 4) {
+          var value = child.nodeValue || "";
+          if (!canonical || value.trim()) out += normalize.escapeAttrValue(value);
+        }
+      }
+    } else {
+      var kids = elementChildren(node);
+      for (var k = 0; k < kids.length; k += 1) out += svgMarkupOf(kids[k], canonical);
+      if (!kids.length) out += normalize.escapeAttrValue(rawTextOf(node));
+    }
+    if (requireContent && out === opening) return "";
+    return out + "</" + name + ">";
   }
 
   // Media whose content is named by child <source> tags rather than, or as well
@@ -15648,10 +15722,10 @@
       // The one place a record keeps an embedded source, whole.
       src: attrOf(element, "src"),
       alt: attrOf(element, "alt"),
-      // The opening tag, minus the library's own attributes, plus any child
-      // <source> tags. An embedded src is written as record.SUBJECT_SRC_REF;
+      // The opening tag plus media sources, or the SVG drawing, without tool
+      // markup. An embedded src is written as record.SUBJECT_SRC_REF;
       // record.subjectHtmlOf puts it back for whoever reads the tag.
-      html: openingTagOf(element, { srcRef: record.SUBJECT_SRC_REF }) + sourceTagsOf(element),
+      html: tagOf(element) === "svg" ? svgMarkupOf(element, false) : openingTagOf(element, { srcRef: record.SUBJECT_SRC_REF }) + sourceTagsOf(element),
       near: nearTextOf(element, scope)
     };
   }
@@ -15717,6 +15791,7 @@
     contextTextsOf: contextTextsOf,
     pathOf: pathOf,
     headingOf: headingOf,
+    HEADING_SCAN_CAP: HEADING_SCAN_CAP,
     // Read by src/layer/pointing.js, which asks the same questions of a node
     // that this file does and must not grow its own second answer to any of
     // them. Exported as readers, never as decisions: nothing here returns a
@@ -38543,69 +38618,10 @@
 
 
   // ---------------------------------------------------------------------------
-  // The nearest heading above an element
+  // Heading context
   // ---------------------------------------------------------------------------
-  //
-  // `context.heading` is the one line in review.json that says WHERE on the page
-  // the reviewer was. The original walk only looked AT earlier siblings, so it
-  // saw an H1-H6 element and nothing else. Built pages almost never lay out that
-  // way: the heading is wrapped, as in
-  //
-  //   <div class="thead"><h2>3. Mark icon</h2></div>
-  //   <div class="wrap"> ... the block the reviewer clicked ... </div>
-  //
-  // and the walk saw a div, skipped it, and reported no heading. The L8 tearsheet
-  // case (docs/ongoing/FINGERPRINTING.md) is what this cost: six treatments of
-  // one blog block, each in a bare `div.wrap`, and the agent had to ask which
-  // treatment the comment was on while a heading two elements up said so.
-  //
-  // So for each earlier sibling the walk now also looks INSIDE it, for the LAST
-  // heading that sibling contains, which is the one nearest the element in
-  // document order. Then up to the parent and the same again, stopping at body.
-  //
-  // Two rules it keeps:
-  //
-  //   the element's OWN descendants are never searched. A heading inside the
-  //   thing being commented on is that thing's content, not the context for it.
-  //
-  //   nearest in document order wins, whatever its level. An H4 one sibling up
-  //   beats an H2 five siblings up: the reviewer was reading the H4.
-  //
-  // The work is capped, because this runs on a click. A page built as one long
-  // wrapper of thousands of nodes must not be able to stall the pick, so the
-  // walk counts the nodes it inspects and gives up at the cap, reporting no
-  // heading rather than hanging.
-  var HEADING_SCAN_CAP = 2000;
-
-  function isHeadingElement(node) {
-    return !!node && node.nodeType === 1 && /^H[1-6]$/.test(String(node.tagName || ""));
-  }
-
-  function headingWords(node) {
-    var text = normalize.normalizeText(node.textContent || "");
-    return text ? text : null;
-  }
-
-  // The last heading inside `node` in document order, or null. Last rather than
-  // first because the walk is moving backwards from the element: of two headings
-  // in one wrapper, the later one is the nearer one.
-  //
-  // `budget` is shared with the caller and counts down across the whole walk.
-  function lastHeadingWithin(node, budget) {
-    var children = node && node.children ? node.children : null;
-    if (!children) return null;
-    for (var i = children.length - 1; i >= 0; i -= 1) {
-      if (budget.left <= 0) return null;
-      budget.left -= 1;
-      var child = children[i];
-      // Descendants first: inside a child, the child's own tag comes before
-      // everything under it, so the deeper heading is the later one.
-      var deeper = lastHeadingWithin(child, budget);
-      if (deeper) return deeper;
-      if (isHeadingElement(child) && headingWords(child)) return child;
-    }
-    return null;
-  }
+  // Shared with the anchor engine so context and labels describe the same panel.
+  var HEADING_SCAN_CAP = anchor.HEADING_SCAN_CAP;
 
   // ---------------------------------------------------------------------------
   // The element a selection is about
@@ -38764,34 +38780,7 @@
   }
 
   function headingTextFor(element, doc) {
-    if (!element) return null;
-    var body = doc ? doc.body : null;
-    var budget = { left: HEADING_SCAN_CAP };
-    var current = element;
-    while (current) {
-      var sibling = current.previousElementSibling;
-      while (sibling) {
-        if (budget.left <= 0) return null;
-        budget.left -= 1;
-        if (isHeadingElement(sibling)) {
-          var own = headingWords(sibling);
-          if (own) return own;
-        } else {
-          var inside = lastHeadingWithin(sibling, budget);
-          if (inside) return headingWords(inside);
-        }
-        sibling = sibling.previousElementSibling;
-      }
-      var parent = current.parentElement;
-      if (!parent || parent === body || parent === doc) return null;
-      // Named-tag stop as well as the identity stop: a walk given no document
-      // (the unit harness, a detached tree) still has to end at the page root
-      // rather than climbing out of it.
-      var tag = String(parent.tagName || "").toUpperCase();
-      if (tag === "BODY" || tag === "HTML") return null;
-      current = parent;
-    }
-    return null;
+    return element ? anchor.headingOf(element, anchor.scopeOf(doc, element)) : null;
   }
 
   // ---------------------------------------------------------------------------
@@ -53464,7 +53453,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.4.0+303fbd19a4bb";
+  var VERSION = "0.4.0+91ad228b28b1";
 
   var protocol = ns.protocol;
   var record = ns.record;

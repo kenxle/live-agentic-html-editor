@@ -240,6 +240,20 @@ purpose. **This is the single most important thing in this document.**
 
 ## What is captured when you click
 
+Icons before a panel heading use that local heading before the lookup leaves the panel.
+Comments, edits and the anchor engine share this lookup. The source-location ordinal counts
+elements with the same reported ancestor path and normalized text, including icons in separate
+wrappers. Older records counted only siblings.
+
+An unnamed SVG uses its drawing as content identity. The signature contains a fixed-size name
+for the serialized drawing, with attributes sorted so an attribute reorder does not change it.
+Existing SVGs named by supported text or attributes keep their signatures, including their earlier
+text representation. The subject sent to the agent includes drawing markup. Drawing markup and
+new unnamed drawing signatures omit scripts, foreign objects and tool markup. No retained SVG
+content means no drawing signature. Position still never authorizes a write.
+
+The panel-icon regression is in [the fix record](../features/20261024.01_panel_icon_fingerprint/01_spec_panel_icon_fingerprint.md).
+
 The reviewer clicks; the element is right there in our hands. Everything below is
 recorded at that instant, and **mint never fails**. It used to refuse when it
 could not guarantee re-finding the element later, which threw away the comment at

@@ -345,69 +345,10 @@
 
 
   // ---------------------------------------------------------------------------
-  // The nearest heading above an element
+  // Heading context
   // ---------------------------------------------------------------------------
-  //
-  // `context.heading` is the one line in review.json that says WHERE on the page
-  // the reviewer was. The original walk only looked AT earlier siblings, so it
-  // saw an H1-H6 element and nothing else. Built pages almost never lay out that
-  // way: the heading is wrapped, as in
-  //
-  //   <div class="thead"><h2>3. Mark icon</h2></div>
-  //   <div class="wrap"> ... the block the reviewer clicked ... </div>
-  //
-  // and the walk saw a div, skipped it, and reported no heading. The L8 tearsheet
-  // case (docs/ongoing/FINGERPRINTING.md) is what this cost: six treatments of
-  // one blog block, each in a bare `div.wrap`, and the agent had to ask which
-  // treatment the comment was on while a heading two elements up said so.
-  //
-  // So for each earlier sibling the walk now also looks INSIDE it, for the LAST
-  // heading that sibling contains, which is the one nearest the element in
-  // document order. Then up to the parent and the same again, stopping at body.
-  //
-  // Two rules it keeps:
-  //
-  //   the element's OWN descendants are never searched. A heading inside the
-  //   thing being commented on is that thing's content, not the context for it.
-  //
-  //   nearest in document order wins, whatever its level. An H4 one sibling up
-  //   beats an H2 five siblings up: the reviewer was reading the H4.
-  //
-  // The work is capped, because this runs on a click. A page built as one long
-  // wrapper of thousands of nodes must not be able to stall the pick, so the
-  // walk counts the nodes it inspects and gives up at the cap, reporting no
-  // heading rather than hanging.
-  var HEADING_SCAN_CAP = 2000;
-
-  function isHeadingElement(node) {
-    return !!node && node.nodeType === 1 && /^H[1-6]$/.test(String(node.tagName || ""));
-  }
-
-  function headingWords(node) {
-    var text = normalize.normalizeText(node.textContent || "");
-    return text ? text : null;
-  }
-
-  // The last heading inside `node` in document order, or null. Last rather than
-  // first because the walk is moving backwards from the element: of two headings
-  // in one wrapper, the later one is the nearer one.
-  //
-  // `budget` is shared with the caller and counts down across the whole walk.
-  function lastHeadingWithin(node, budget) {
-    var children = node && node.children ? node.children : null;
-    if (!children) return null;
-    for (var i = children.length - 1; i >= 0; i -= 1) {
-      if (budget.left <= 0) return null;
-      budget.left -= 1;
-      var child = children[i];
-      // Descendants first: inside a child, the child's own tag comes before
-      // everything under it, so the deeper heading is the later one.
-      var deeper = lastHeadingWithin(child, budget);
-      if (deeper) return deeper;
-      if (isHeadingElement(child) && headingWords(child)) return child;
-    }
-    return null;
-  }
+  // Shared with the anchor engine so context and labels describe the same panel.
+  var HEADING_SCAN_CAP = anchor.HEADING_SCAN_CAP;
 
   // ---------------------------------------------------------------------------
   // The element a selection is about
@@ -566,34 +507,7 @@
   }
 
   function headingTextFor(element, doc) {
-    if (!element) return null;
-    var body = doc ? doc.body : null;
-    var budget = { left: HEADING_SCAN_CAP };
-    var current = element;
-    while (current) {
-      var sibling = current.previousElementSibling;
-      while (sibling) {
-        if (budget.left <= 0) return null;
-        budget.left -= 1;
-        if (isHeadingElement(sibling)) {
-          var own = headingWords(sibling);
-          if (own) return own;
-        } else {
-          var inside = lastHeadingWithin(sibling, budget);
-          if (inside) return headingWords(inside);
-        }
-        sibling = sibling.previousElementSibling;
-      }
-      var parent = current.parentElement;
-      if (!parent || parent === body || parent === doc) return null;
-      // Named-tag stop as well as the identity stop: a walk given no document
-      // (the unit harness, a detached tree) still has to end at the page root
-      // rather than climbing out of it.
-      var tag = String(parent.tagName || "").toUpperCase();
-      if (tag === "BODY" || tag === "HTML") return null;
-      current = parent;
-    }
-    return null;
+    return element ? anchor.headingOf(element, anchor.scopeOf(doc, element)) : null;
   }
 
   // ---------------------------------------------------------------------------

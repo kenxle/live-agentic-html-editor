@@ -12,6 +12,7 @@ thread.
 - `comment-agent-answer`: the agent's question or handled reply appears on the card.
 - `comment-follow-up`: the reviewer answers in the thread; the agent gets it as the next revision.
 - `comment-delete`: the reviewer deletes an outstanding comment; it leaves the agent's drain.
+- `comment-panel-icon`: an icon before its panel heading reaches the agent with that heading, its drawing and its position across matching wrappers.
 
 ## How to get to it (user POV)
 
@@ -19,6 +20,7 @@ thread.
 - Type in the rail box under "Add a note on the whole page", press Cmd-Enter or Send.
 - Read the agent's answer on the card. Type in the card's "Add a new message" box and press Cmd-Enter.
 - Press × ("Delete this comment") on a card.
+- Press Cmd-Shift-C with no selection, then click a panel icon.
 
 ## Driving it with lahe-verify
 
@@ -35,9 +37,19 @@ Preconditions:
 - **Delete.** With a second comment on the page, run `lv page click "rail:article[data-state=ready]:has(textarea) [data-lahe-act=delete]"` (or `rail-text:Delete this comment` when only one card is open). `lv agent drain` no longer has that note, and `lv page eval "window.__lahe.cardIds().length"` dropped by one.
 - **Proof.** `lv page shot <name>` after the answer and after the follow-up, plus the two drain lines from `commands.jsonl`.
 
+For `comment-panel-icon`, start with `lv up --doc test/fixtures/panel-icons.html` from the clone.
+Run `lv page key ControlOrMeta+Shift+KeyC`, `lv page click ".panel:nth-child(2) svg"`,
+`lv page type "Make this a computer"`, and `lv page key ControlOrMeta+Enter`.
+`lv agent wait "Make this a computer"` must name `Hybrid delivery` in both heading and nearby text,
+include the circle drawing in `subject.html`, and report `region.ordinal` as `{index:2,of:3}`.
+Edit the copied source's matching SVG, carry its stamp, and reply handled. Wait for the page to show
+the computer, then reload. The computer stays in Hybrid delivery; the other icons keep their shapes.
+Driven in run `panel-icon-accepted`; proof is linked from the panel-icon fix record.
+
 ## Gotchas
 
 - The follow-up box is labelled "Follow up" once the agent has answered. A hidden "Add another message to this comment" box also exists on the card; `rail:` picks the visible match.
 - Delete happens at once, with no confirmation, for an outstanding comment. A handled item cannot be deleted.
 - `page aria` cannot see the rail. Use `page rail` and `page shot` for card proof.
 - Regression specs: `comments_highlights.spec.js` (injected layer, no helper), `agent_replies.spec.js`, `catalog_library.spec.js --grep "Open a closed review"`.
+- Panel icon regression specs: `comments_highlights.spec.js` and `anchor_engine.spec.js`, including reload, reorder, ambiguity and SVG serialization.

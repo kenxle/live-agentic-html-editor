@@ -1,0 +1,44 @@
+# Identify the icon the reviewer clicked
+
+Lahe gave the agent conflicting clues for a center-panel icon. The fix passes the targeted regressions and live walkthrough. The full gate is next. No decision is needed from Ken.
+
+## Problem and intended behavior
+
+The Steady Thread review supplied the preceding panel's heading, an ordinal that counted only the SVG's own wrapper, and an opening SVG tag without its drawing. The icon had no content signature, so it also became unmatched after reload. The agent changed the wrong panel.
+
+- An icon before a panel heading gets that local heading before the lookup leaves its wrapper.
+- The ordinal counts elements sharing the reported path and text across wrappers.
+- An unnamed SVG has a signature made from its drawing. The agent receives its drawing markup as page data.
+- Reloading and reordering panels finds the original drawing with its local context. Identical drawings still need unique context.
+
+## Scope and approach
+
+Fix capture in the anchor engine and comment context. Preserve the write rule: a unique content match or carried stamp is required. Position never authorizes a write. Keep existing named SVG references readable. Do not change the pitch deck or take over its review.
+
+## Verification
+
+| Check | Owner | Status and evidence |
+| --- | --- | --- |
+| Regression fails before the fix | Codex | Passed against base fde019af. See /tmp/lahe-panel-icon-base-red.log. | 
+| Heading, ordinal, drawing and reload regression | Codex | Passed the focused browser run. Added reorder, ambiguity, excluded-content and saved-signature coverage. | 
+| Real click, agent drain, source change and rebuilt page | Codex | Passed in run panel-icon-accepted. Entry: comment-panel-icon in the verification map. Evidence: /tmp/lahe-panel-icon-accepted/commands.jsonl and source-edit.json. | 
+| Full project gate | Codex | Pending |
+| Independent code and acceptance review | Independent Codex reviewer | Passed after fixes for styled SVG markup, excluded-only content and saved signatures. | 
+
+## Rollout and progress
+
+Work is isolated on `fix/panel-icon-fingerprint`. Ship only after the full gate and independent review pass. The existing deck review belongs to its original agent.
+
+No cleanup removals are requested.
+
+## Browser proof
+
+The agent receives the center panel heading and drawing.
+
+![Center panel comment](captured-center-icon.png)
+
+The source edit changes the center icon. It remains there after reload.
+
+![Computer on the center panel after reload](center-icon-after-reload.png)
+
+The run used the final source diff on base fde019af with layer version 0.4.0+91ad228b28b1. Helper count returned to its starting value after teardown. Other mapped entry points were not run in this walkthrough. This proves the CLI and page protocol; it does not test an independent agent host wake.

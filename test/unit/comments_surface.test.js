@@ -532,6 +532,21 @@ test("a heading wrapped in a sibling div is still the heading above the block", 
   assert.equal(commentsModule.headingTextFor(wrap, page.doc), "3. Mark icon");
 });
 
+test("an icon before its panel heading does not borrow the preceding panel's heading", () => {
+  const icon = node("svg");
+  const page = pageOf([
+    node("div", { children: [node("h4", { text: "AI adoption" })] }),
+    node("div", { children: [node("div", { children: [icon] }), node("h4", { text: "Hybrid delivery" })] })
+  ]);
+  assert.equal(commentsModule.headingTextFor(icon, page.doc), "Hybrid delivery");
+});
+
+test("a paragraph before a new heading still belongs to the preceding heading", () => {
+  const paragraph = node("p", { text: "Still in the first section." });
+  const page = pageOf([node("h2", { text: "First" }), paragraph, node("h2", { text: "Second" })]);
+  assert.equal(commentsModule.headingTextFor(paragraph, page.doc), "First");
+});
+
 test("a heading several levels down inside an earlier sibling is found", () => {
   const wrap = node("div", { text: "The block the reviewer clicked." });
   const page = pageOf([
