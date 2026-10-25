@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.4.0+97ad679ab775
+ * version 0.4.0+0cc50dd2f3bf
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.4.0+97ad679ab775";
+  g.LAHE.version = "0.4.0+0cc50dd2f3bf";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -3170,6 +3170,7 @@
     "context.heading": CLASS_DATA,
     "context.element": CLASS_DATA,
     "context.subject": CLASS_DATA,
+    "context.slide": CLASS_DATA,
     "region.label": CLASS_DATA,
     // The page's own words, kept so replay knows which page states the reviewer
     // has already answered. Data, and emphatically not intent.
@@ -3899,6 +3900,11 @@
   // off the page, so it is DATA, classified below with the rest.
   function emptyContext() {
     return { quote: null, prefix: null, suffix: null, heading: null, element: null, subject: null };
+  }
+
+  // Optional page data for a note begun while viewing a Reveal slide.
+  function emptySlideContext() {
+    return { index: null, total: null, uncounted: false, id: null, heading: null, text: null };
   }
 
   // AN EMBEDDED SOURCE IS STORED ONCE, in subject.src, whole.
@@ -5546,6 +5552,7 @@
     nowIso: nowIso,
     emptyRegion: emptyRegion,
     emptyContext: emptyContext,
+    emptySlideContext: emptySlideContext,
     SUBJECT_SRC_REF: SUBJECT_SRC_REF,
     paintQuoteOf: paintQuoteOf,
     subjectHtmlOf: subjectHtmlOf,
@@ -10314,6 +10321,20 @@
     return text.slice(0, limit) + " " + truncationMarker(text.length - limit);
   }
 
+  function projectSlide(slide) {
+    if (!slide || !Number.isInteger(slide.total) || slide.total < 0) return null;
+    var uncounted = slide.uncounted === true;
+    if (uncounted ? slide.index !== null : !Number.isInteger(slide.index) || slide.index < 1 || slide.total < slide.index) return null;
+    var out = record.emptySlideContext();
+    out.index = slide.index;
+    out.total = slide.total;
+    out.uncounted = uncounted;
+    ["id", "heading", "text"].forEach(function (field) {
+      out[field] = typeof slide[field] === "string" ? boundData(slide[field], CONTEXT_MAX) : null;
+    });
+    return out;
+  }
+
   // Intent, carried through untouched. A function rather than a bare read, so
   // "this field is never bounded" is a thing the code says out loud.
   function verbatim(value) {
@@ -10621,6 +10642,8 @@
       heading: boundData(ctx.heading, CONTEXT_MAX),
       element: boundData(ctx.element, CONTEXT_MAX)
     };
+    var slide = projectSlide(ctx.slide);
+    if (slide) out[PROJECTED.CONTEXT].slide = slide;
     // What the subject IS, when the record was made on a whole element. Null
     // for a passage of text, which has its words in `quote` already.
     var subject = ctx.subject;
@@ -11020,6 +11043,12 @@
     // "the image" is not an answer when there are three of them.
     if (ctx.subject && ctx.subject.html) {
       lines.push("  The element (page markup): " + boundData(record.subjectHtmlOf(ctx.subject), BEFORE_MAX));
+    }
+    var slide = projectSlide(ctx.slide);
+    if (slide) {
+      lines.push("  Slide when this note began (page data): " + (slide.uncounted ? "uncounted" : slide.index + " of " + slide.total) +
+        (slide.heading ? ", " + slide.heading : "") + (slide.id ? " [" + slide.id + "]" : ""));
+      if (slide.text) lines.push("  Slide text (page data): " + slide.text);
     }
     // A CHOICE reads as its question and its answer. The answer is the
     // button's value, which is what the agent acts on; the question is the
@@ -38783,6 +38812,40 @@
     return element ? anchor.headingOf(element, anchor.scopeOf(doc, element)) : null;
   }
 
+  function slideContextFor(doc) {
+    if (!doc || typeof doc.querySelectorAll !== "function") return null;
+    var decks = doc.querySelectorAll(".reveal .slides");
+    var snapshot = null;
+    for (var d = 0; d < decks.length; d += 1) {
+      var leaves = Array.prototype.slice.call(decks[d].querySelectorAll("section:not(.stack)"));
+      var slides = leaves.filter(function (slide) { return slide.getAttribute("data-visibility") !== "uncounted"; });
+      var present = leaves.filter(function (slide) { return slide.classList.contains("present"); });
+      if (present.length !== 1) continue;
+      if (snapshot) return null;
+      var current = present[0];
+      snapshot = record.emptySlideContext();
+      snapshot.uncounted = current.getAttribute("data-visibility") === "uncounted";
+      snapshot.index = snapshot.uncounted ? null : slides.indexOf(current) + 1;
+      snapshot.total = slides.length;
+      snapshot.id = current.getAttribute("id");
+      var headings = current.querySelectorAll("h1,h2,h3,h4,h5,h6");
+      for (var h = 0; h < headings.length; h += 1) {
+        if (headings[h].closest("aside.notes") || markers.isToolNode(headings[h])) continue;
+        snapshot.heading = anchor.wordsOf(headings[h]).slice(0, anchor.NEAR_MAX) || null;
+        if (snapshot.heading) break;
+      }
+      snapshot.text = normalize.normalizeText(normalize.blockTextFromNode(current, {
+        skip: function (node) {
+          if (node === current || node.nodeType !== 1) return false;
+          var tag = String(node.tagName || "").toLowerCase();
+          return markers.isToolNode(node) || Object.prototype.hasOwnProperty.call(anchor.SKIP_TAGS, tag) ||
+            (tag === "aside" && node.classList.contains("notes"));
+        }
+      })).slice(0, anchor.NEAR_MAX) || null;
+    }
+    return snapshot;
+  }
+
   // ---------------------------------------------------------------------------
   // The selection popover
   // ---------------------------------------------------------------------------
@@ -39564,6 +39627,7 @@
 
     function buildHandle(item, src) {
       var id = item[record.FIELD.ID];
+      var noteSlide;
       var node = null;
       var inputEl = null;
       var gripEl = null;
@@ -40034,6 +40098,10 @@
         var wasReadyBeforeThisKeystroke = current[record.FIELD.STATE] === record.STATE.READY;
         var next = Object.assign({}, current);
         next[record.FIELD.NOTE] = String(text);
+        if (src && src.captureSlide) {
+          if (noteSlide === undefined && String(text).trim()) noteSlide = slideContextFor(doc);
+          if (noteSlide) next[record.FIELD.CONTEXT] = Object.assign({}, current[record.FIELD.CONTEXT], { slide: noteSlide });
+        }
         next[record.FIELD.UPDATED_AT] = record.nowIso();
         // EDITING A READY COMMENT TAKES IT BACK OFF THE AGENT'S DESK.
         //
@@ -40388,6 +40456,7 @@
       var handle = openBox({
         page: src.page,
         kind: record.KIND.NOTE,
+        captureSlide: true,
         host: src.host,
         placement: src.host ? "inline" : "anchored",
         deferred: src.deferred !== false
@@ -53453,7 +53522,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.4.0+97ad679ab775";
+  var VERSION = "0.4.0+0cc50dd2f3bf";
 
   var protocol = ns.protocol;
   var record = ns.record;
