@@ -898,7 +898,7 @@ test.describe("3A: an agent answers by appending one line", () => {
       expect(laidOut.composerDisplay).toBe("flex");
       expect(laidOut.composerDirection).toBe("column");
       expect(laidOut.hasLabel, "no Follow up heading over the box").toBe(false);
-      expect(laidOut.placeholder).toBe("Add a new message");
+      expect(laidOut.placeholder).toBe("Comment on this thread");
 
       // One sheet, not one per remount.
       expect(laidOut.sheets, "two remounts leave one stylesheet in the rail's root").toBe(1);

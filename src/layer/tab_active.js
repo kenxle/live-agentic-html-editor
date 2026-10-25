@@ -747,7 +747,7 @@
       // line between a control worth removing and a control worth keeping: the
       // ones taken off these cards today all sat in the action row repeating
       // something already on screen.
-      input.setAttribute("placeholder", "Add another message");
+      input.setAttribute("placeholder", "Comment on this thread");
       input.value = keepsDrafts() ? store.readFollowupDraft(reviewId, id) : "";
 
       function submit() {
@@ -843,7 +843,7 @@
       var box = buildAddBox(id);
       var field = box.querySelector("textarea");
       if (field) {
-        field.setAttribute("placeholder", "Add a message");
+        field.setAttribute("placeholder", "Comment on this thread");
         field.setAttribute("aria-label", "Add a message to this answer");
       }
       row.appendChild(box);

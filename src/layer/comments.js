@@ -1402,7 +1402,7 @@
         inputEl.setAttribute("rows", "3");
         inputEl.setAttribute(
           "placeholder",
-          item[record.FIELD.KIND] === record.KIND.NOTE ? "Not tied to any passage" : "What should change here?"
+          item[record.FIELD.KIND] === record.KIND.NOTE ? "Comment on the page" : "What should change here?"
         );
         inputEl.value = item[record.FIELD.NOTE] || "";
         node.appendChild(inputEl);

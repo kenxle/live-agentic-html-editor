@@ -19,7 +19,7 @@ thread.
 
 - Select words on the page, press Cmd-Shift-C (Ctrl-Shift-C elsewhere), type, press Cmd-Enter.
 - Type in the rail box under "Add a note on the whole page", press Cmd-Enter or Send.
-- Read the agent's answer on the card. Type in the card's "Add a new message" box and press Cmd-Enter.
+- Read the agent's answer on the card. Type in the card's "Comment on this thread" box and press Cmd-Enter.
 - Press × ("Delete this comment") on a card.
 - Press Cmd-Shift-C with no selection, then click a panel icon.
 
@@ -34,7 +34,7 @@ Preconditions:
 - **Agent receives it.** Run `lv agent wait "Which side is north"`. The drain line has `"kind":"comment"`, `"quote":"roof leaks"` and the note text.
 - **Agent asks back.** Run `lv agent reply <item> 1 question --text "Is north the road side?"` and `lv page wait "(window.__lahe.items()[0].reply||{}).status === 'question'"`. `lv page shot reply` shows the card with a QUESTION chip and "verify is asking" above the agent's words.
 - **Reviewer answers.** Run `lv page click "rail:textarea[aria-label='Follow up']"`, `lv page type "Yes, the road side."`, `lv page key ControlOrMeta+Enter`. `lv agent wait "Yes, the road side"` shows the same item at `"rev":2` with a `thread` holding the first exchange.
-- **Page note.** Run `lv page click "rail:textarea[placeholder='Not tied to any passage']"`, `lv page type "Overall this reads well."`, `lv page key ControlOrMeta+Enter`. `lv agent wait "Overall this reads well"` shows `"kind":"note"`.
+- **Page note.** Run `lv page click "rail:textarea[placeholder='Comment on the page']"`, `lv page type "Overall this reads well."`, `lv page key ControlOrMeta+Enter`. `lv agent wait "Overall this reads well"` shows `"kind":"note"`.
 - **Delete.** With a second comment on the page, run `lv page click "rail:article[data-state=ready]:has(textarea) [data-lahe-act=delete]"` (or `rail-text:Delete this comment` when only one card is open). `lv agent drain` no longer has that note, and `lv page eval "window.__lahe.cardIds().length"` dropped by one.
 - **Proof.** `lv page shot <name>` after the answer and after the follow-up, plus the two drain lines from `commands.jsonl`.
 
@@ -51,7 +51,7 @@ For `comment-slide-note`, prepare a portable copy of the real Reveal fixture:
 `python3 docs/features/20261024.02_slide_comment_context/prepare_deck.py /tmp/lahe-slide-proof`.
 Start `lv up --doc /tmp/lahe-slide-proof/deck.html`, then run `lv doctor`.
 Press `lv page key ArrowRight ArrowRight`, click the page-note box with
-`lv page click "rail:textarea[placeholder='Not tied to any passage']"`, and type
+`lv page click "rail:textarea[placeholder='Comment on the page']"`, and type
 `lv page type "Change this slide title to Better together."`.
 Click `lv page click "#three-heading"`, press `lv page key ArrowRight`, click the note box again,
 and send with `lv page key ControlOrMeta+Enter`.

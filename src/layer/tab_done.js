@@ -1504,7 +1504,7 @@
         input.id = "lahe-followup-" + id;
         input.setAttribute("aria-label", "Follow up");
         input.setAttribute("rows", "3");
-        input.setAttribute("placeholder", "Add a new message");
+        input.setAttribute("placeholder", "Comment on this thread");
         input.value = store.readFollowupDraft(reviewId, id);
         input.disabled = isReadOnly();
         input.addEventListener("input", function () {
