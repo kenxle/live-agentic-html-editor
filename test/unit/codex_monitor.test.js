@@ -199,7 +199,7 @@ test("Codex CLI returns while idle, queues only real work, and re-arms after a b
   assert.equal(w.queued().length, 1, "the same ending does not queue twice");
 });
 
-test("adding a session extends the same watcher and coalesces both sessions into one queue", async t => {
+test("adding a session extends the same watcher and delivers that session's work", async t => {
   const w = await fixture(t);
   w.store.create({ id: "s_added" });
   w.reviews.create({ id: "r_added", agent_session_id: "s_added" });
@@ -208,8 +208,23 @@ test("adding a session extends the same watcher and coalesces both sessions into
   await w.run(w.argv.concat(["--session", "s_added"]));
   await pollUntil(() => w.store.readMonitor("s_added"), { message: "the existing watcher to add its session" });
   assert.equal(w.store.readMonitor("s_added").pid, pid);
+  w.log.append("r_added", [protocol.newEvent({ event: protocol.EVENT.REVIEW_ARCHIVED, event_id: "ev_cx_multi2", review: "r_added" })]);
+  await pollUntil(() => w.queued().length && !w.store.readMonitor("s_codex") && !w.store.readMonitor("s_added"), { message: "the added session's delivery" });
+  assert.equal(w.queued().length, 1);
+  assert.match(w.queued()[0][6], /1 ended review/);
+  assert.match(w.queued()[0][6], /Drain: lahe status --session s_added/);
+  assert.match(w.queued()[0][6], /--session s_codex.*--handoff-rev 0/);
+  assert.match(w.queued()[0][6], /--session s_added.*--handoff-rev 0/);
+});
+
+test("work already pending in both sessions is coalesced into one queue", async t => {
+  const w = await fixture(t);
+  w.store.create({ id: "s_added" });
+  w.reviews.create({ id: "r_added", agent_session_id: "s_added" });
+  // End both before scanning: arrivals between reads can form separate batches.
   w.log.append("r_codex", [protocol.newEvent({ event: protocol.EVENT.REVIEW_ARCHIVED, event_id: "ev_cx_multi1", review: "r_codex" })]);
   w.log.append("r_added", [protocol.newEvent({ event: protocol.EVENT.REVIEW_ARCHIVED, event_id: "ev_cx_multi2", review: "r_added" })]);
+  await w.run(w.argv.concat(["--session", "s_added"]));
   await pollUntil(() => w.queued().length && !w.store.readMonitor("s_codex") && !w.store.readMonitor("s_added"), { message: "one combined delivery" });
   assert.equal(w.queued().length, 1);
   assert.match(w.queued()[0][6], /2 ended reviews/);

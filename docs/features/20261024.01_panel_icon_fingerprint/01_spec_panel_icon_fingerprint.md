@@ -48,3 +48,11 @@ The run used the final source diff on base fde019af with layer version 0.4.0+91a
 The combined icon and slide-note code passed `npm run gate:all` on the configured Node. No failures or helper leaks remained. Existing optional skips were unchanged. See [the gate summary](gate-summary.json). [The summarizer](summarize_gate.py) produced the counts and one classified row per browser case; the summary names its source log and row file.
 
 The full gate inspected source commit 816f38d6 with layer 0.4.0+0cc50dd2f3bf. Final documentation changes do not change that runtime. Landing and the check on main are next.
+
+## Post-merge monitor test correction
+
+The context fix merged and passed the local gate on main. Main CI exposed a race in the monitor test: it wrote review endings after the watcher started, then expected the watcher to see both in the same scan. The watcher can read between those writes.
+
+The correction keeps the watcher-extension and added-session delivery checks. A separate coalescing test starts with both endings already pending. Independent review approved this test setup, and the focused monitor file passed. The follow-up full gate passed on source 1871abb3. CI and landing are next.
+
+Evidence: [the monitor tests](../../../test/unit/codex_monitor.test.js), [the failed main CI run](https://github.com/kenxle/live-agentic-html-editor/actions/runs/40148717816), and the local logs at `/tmp/lahe-monitor-coalescing-target.log` and `/tmp/lahe-feedback-context-main-gate.log`.
