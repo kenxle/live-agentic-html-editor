@@ -253,6 +253,20 @@
     return text.slice(0, limit) + " " + truncationMarker(text.length - limit);
   }
 
+  function projectSlide(slide) {
+    if (!slide || !Number.isInteger(slide.total) || slide.total < 0) return null;
+    var uncounted = slide.uncounted === true;
+    if (uncounted ? slide.index !== null : !Number.isInteger(slide.index) || slide.index < 1 || slide.total < slide.index) return null;
+    var out = record.emptySlideContext();
+    out.index = slide.index;
+    out.total = slide.total;
+    out.uncounted = uncounted;
+    ["id", "heading", "text"].forEach(function (field) {
+      out[field] = typeof slide[field] === "string" ? boundData(slide[field], CONTEXT_MAX) : null;
+    });
+    return out;
+  }
+
   // Intent, carried through untouched. A function rather than a bare read, so
   // "this field is never bounded" is a thing the code says out loud.
   function verbatim(value) {
@@ -560,6 +574,8 @@
       heading: boundData(ctx.heading, CONTEXT_MAX),
       element: boundData(ctx.element, CONTEXT_MAX)
     };
+    var slide = projectSlide(ctx.slide);
+    if (slide) out[PROJECTED.CONTEXT].slide = slide;
     // What the subject IS, when the record was made on a whole element. Null
     // for a passage of text, which has its words in `quote` already.
     var subject = ctx.subject;
@@ -959,6 +975,12 @@
     // "the image" is not an answer when there are three of them.
     if (ctx.subject && ctx.subject.html) {
       lines.push("  The element (page markup): " + boundData(record.subjectHtmlOf(ctx.subject), BEFORE_MAX));
+    }
+    var slide = projectSlide(ctx.slide);
+    if (slide) {
+      lines.push("  Slide when this note began (page data): " + (slide.uncounted ? "uncounted" : slide.index + " of " + slide.total) +
+        (slide.heading ? ", " + slide.heading : "") + (slide.id ? " [" + slide.id + "]" : ""));
+      if (slide.text) lines.push("  Slide text (page data): " + slide.text);
     }
     // A CHOICE reads as its question and its answer. The answer is the
     // button's value, which is what the agent acts on; the question is the

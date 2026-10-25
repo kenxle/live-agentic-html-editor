@@ -644,6 +644,13 @@ source keeps the source's order, so the third identical row on the page is the t
 the source. None of this places a write in the browser, where position never decides (D9); it is
 information handed to an agent editing the source with the reviewer's words in front of it.
 
+**`context.slide`** is optional page data for a page note begun on a Reveal deck. It is
+`{index, total, uncounted, id, heading, text}`. The snapshot is taken on the first nonblank input,
+not when the always-open composer is created or when the note is sent. `index` is the counted
+slide's one-based position; `total` counts the deck's numbered leaf slides. An uncounted visible
+slide carries `index: null` and `uncounted: true`, with its id and words. Navigation, reload and
+rewording preserve the snapshot. It locates context without creating an anchor or a write target.
+Ordinary pages and ambiguous multiple decks omit it. Strings use `CONTEXT_MAX` in the projection.
 **`subject`** is what the reviewer pointed at, when they pointed at a whole element rather than at a
 passage of text (D9, the element anchor). It is `{tag, src, alt, html, near}`, and it is null for a
 comment on text. `src` is the attribute **as the page author wrote it**, not the resolved absolute
@@ -652,6 +659,7 @@ element's child `<source>` tags for a `<video>`, `<audio>` or `<picture>`. For S
 drawing markup, including styled text and definitions. Tool nodes, tool attributes, scripts and
 foreign objects are omitted. Older SVG records carry only the opening tag. All of it is text off the
 page, so it is data and it is bounded, exactly like `quote`.
+
 In the stored record (not in review.json), an embedded `src` (a `data:` URL) is kept once, whole,
 in `context.subject.src`. The stored `html` carries the pointer `src="lahe:subject.src"` in its
 place, and the region's signature carries a fixed-size name for it. `record.subjectHtmlOf` puts the

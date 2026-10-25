@@ -510,6 +510,40 @@
     return element ? anchor.headingOf(element, anchor.scopeOf(doc, element)) : null;
   }
 
+  function slideContextFor(doc) {
+    if (!doc || typeof doc.querySelectorAll !== "function") return null;
+    var decks = doc.querySelectorAll(".reveal .slides");
+    var snapshot = null;
+    for (var d = 0; d < decks.length; d += 1) {
+      var leaves = Array.prototype.slice.call(decks[d].querySelectorAll("section:not(.stack)"));
+      var slides = leaves.filter(function (slide) { return slide.getAttribute("data-visibility") !== "uncounted"; });
+      var present = leaves.filter(function (slide) { return slide.classList.contains("present"); });
+      if (present.length !== 1) continue;
+      if (snapshot) return null;
+      var current = present[0];
+      snapshot = record.emptySlideContext();
+      snapshot.uncounted = current.getAttribute("data-visibility") === "uncounted";
+      snapshot.index = snapshot.uncounted ? null : slides.indexOf(current) + 1;
+      snapshot.total = slides.length;
+      snapshot.id = current.getAttribute("id");
+      var headings = current.querySelectorAll("h1,h2,h3,h4,h5,h6");
+      for (var h = 0; h < headings.length; h += 1) {
+        if (headings[h].closest("aside.notes") || markers.isToolNode(headings[h])) continue;
+        snapshot.heading = anchor.wordsOf(headings[h]).slice(0, anchor.NEAR_MAX) || null;
+        if (snapshot.heading) break;
+      }
+      snapshot.text = normalize.normalizeText(normalize.blockTextFromNode(current, {
+        skip: function (node) {
+          if (node === current || node.nodeType !== 1) return false;
+          var tag = String(node.tagName || "").toLowerCase();
+          return markers.isToolNode(node) || Object.prototype.hasOwnProperty.call(anchor.SKIP_TAGS, tag) ||
+            (tag === "aside" && node.classList.contains("notes"));
+        }
+      })).slice(0, anchor.NEAR_MAX) || null;
+    }
+    return snapshot;
+  }
+
   // ---------------------------------------------------------------------------
   // The selection popover
   // ---------------------------------------------------------------------------
@@ -1291,6 +1325,7 @@
 
     function buildHandle(item, src) {
       var id = item[record.FIELD.ID];
+      var noteSlide;
       var node = null;
       var inputEl = null;
       var gripEl = null;
@@ -1761,6 +1796,10 @@
         var wasReadyBeforeThisKeystroke = current[record.FIELD.STATE] === record.STATE.READY;
         var next = Object.assign({}, current);
         next[record.FIELD.NOTE] = String(text);
+        if (src && src.captureSlide) {
+          if (noteSlide === undefined && String(text).trim()) noteSlide = slideContextFor(doc);
+          if (noteSlide) next[record.FIELD.CONTEXT] = Object.assign({}, current[record.FIELD.CONTEXT], { slide: noteSlide });
+        }
         next[record.FIELD.UPDATED_AT] = record.nowIso();
         // EDITING A READY COMMENT TAKES IT BACK OFF THE AGENT'S DESK.
         //
@@ -2115,6 +2154,7 @@
       var handle = openBox({
         page: src.page,
         kind: record.KIND.NOTE,
+        captureSlide: true,
         host: src.host,
         placement: src.host ? "inline" : "anchored",
         deferred: src.deferred !== false

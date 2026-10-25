@@ -61,6 +61,36 @@ function reviewWith(items, sourceHint) {
   };
 }
 
+test("a deck note carries bounded slide context as page data", () => {
+  const slide = { index: 3, total: 6, uncounted: false, id: "slide-three", heading: "What the first month looks like", text: "The first month is not training." };
+  const item = anEdit({ kind: record.KIND.NOTE, context: { slide } });
+  const projected = rf.projectReview(reviewWith([item], null)).pages[0].items[0];
+  assert.deepEqual(projected.context.slide, slide);
+  assert.equal(record.fieldClass("context.slide"), record.CLASS_DATA);
+
+  const long = anEdit({ kind: record.KIND.NOTE, context: { slide: Object.assign({}, slide, { heading: "x".repeat(rf.CONTEXT_MAX + 20) }) } });
+  const bounded = rf.projectReview(reviewWith([long], null)).pages[0].items[0].context.slide;
+  assert.ok(bounded.heading.startsWith("x".repeat(rf.CONTEXT_MAX)));
+  assert.ok(!bounded.heading.includes("x".repeat(rf.CONTEXT_MAX + 1)));
+  assert.match(bounded.heading, /bounded here/);
+  assert.match(rf.renderText(reviewWith([item], null)), /Slide when this note began \(page data\): 3 of 6, What the first month looks like \[slide-three\]/);
+});
+
+test("invalid slide positions are omitted and old page notes keep their context shape", () => {
+  for (const slide of [null, {}, { index: -1, total: 6 }, { index: 2, total: 1 }, { index: "2", total: 6 }]) {
+    const item = anEdit({ kind: record.KIND.NOTE, context: { slide } });
+    const context = rf.projectReview(reviewWith([item], null)).pages[0].items[0].context;
+    assert.equal(Object.hasOwn(context, "slide"), false);
+  }
+});
+
+test("an uncounted slide keeps its identity without claiming a numbered position", () => {
+  const slide = { index: null, total: 6, uncounted: true, id: "divider", heading: "A pause", text: "Questions" };
+  const item = anEdit({ kind: record.KIND.NOTE, context: { slide } });
+  assert.deepEqual(rf.projectReview(reviewWith([item], null)).pages[0].items[0].context.slide, slide);
+  assert.match(rf.renderText(reviewWith([item], null)), /Slide when this note began \(page data\): uncounted, A pause \[divider\]/);
+});
+
 // ---------------------------------------------------------------------------
 // Review files carry data only; the skill holds agent instructions.
 // ---------------------------------------------------------------------------

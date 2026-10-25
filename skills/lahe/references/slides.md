@@ -103,6 +103,24 @@ the script tag has `data-lahe-frames="allow"`. Keep framing refused for a
 Reveal.js speaker-notes window: it embeds the same deck and can compete with
 the presentation for review.
 
+### Locate feedback on a slide
+
+A page note on a Reveal deck can carry `page.context.slide` in the drain,
+or `context.slide` in `review.json`. It records the slide visible when the
+reviewer began typing, including its position, id, heading and text excerpt.
+Use this to interpret this slide or here in their note. Their words can still
+refer to the whole deck or explicitly name another slide.
+
+Find the slide in the editable source by its id and words. Its recorded index
+is a position at capture time; earlier insertions can change the numbering.
+An uncounted slide has no numbered index; use its id and words.
+Check that source slide and the rendered result before replying handled.
+
+Older notes may lack slide context. Inspect the note, its thread and the deck
+to recover the intended location. If it remains ambiguous, ask on the card
+before changing the deck's order. Do not choose an insertion point from the
+last slide mentioned in a different comment.
+
 ## Verify every slide and export
 
 Walk the whole deck in the browser, including title, section, exercise and

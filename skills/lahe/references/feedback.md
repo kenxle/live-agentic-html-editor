@@ -23,6 +23,8 @@ Work each item against this checklist.
   says, write `data-chosen` onto that button in the source, and reply. Read [choices](choices.md).
 - **Make the change where the item points**, then apply the same change wherever
   it clearly applies in the rest of the document. Leave everything else alone.
+- **A deck note can name the slide the reviewer was viewing.** Use
+  `page.context.slide` to locate it, and read [slide feedback](slides.md#locate-feedback-on-a-slide).
 - **Protect handled edits.** If a sweep would change text a handled edit placed,
   apply the rest of the sweep, leave that spot, and reply `question` naming the
   conflict.
