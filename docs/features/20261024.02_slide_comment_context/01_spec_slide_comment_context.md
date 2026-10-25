@@ -1,6 +1,6 @@
 # Keep the slide with a deck note
 
-Lahe currently sends page notes without the slide the reviewer was viewing. The fix is in progress. Ken has no decision to make.
+Lahe currently sends page notes without the slide the reviewer was viewing. Capture, instructions, independent review and live proof pass. Final integrated checks are next. Ken has no decision to make.
 
 ## Intended behavior
 
@@ -19,11 +19,11 @@ This is separate from [the icon fix](../20261024.01_panel_icon_fingerprint/01_sp
 
 | Check | Owner | Status and evidence |
 | --- | --- | --- |
-| Projection and bounded page data | Codex | Pending |
-| Real Reveal note captures the slide at first input and survives navigation and reload | Codex | Pending |
-| Vertical slides and ordinary document notes | Codex | Pending |
-| Real note, CLI drain and agent response | Codex | Pending |
-| Independent code, acceptance and instruction review | Independent reviewer | Pending |
+| Projection and bounded page data | Codex | Passed [projection and export tests](../../../test/unit/review_format.test.js), including text export, bounded strings and uncounted slides. |
+| Real Reveal note captures the slide at first input and survives navigation and reload | Codex | Passed in Chromium, Firefox and WebKit, including rewording a restored note. |
+| Vertical slides and ordinary document notes | Codex | Passed in every supported browser. Whitespace-first input, uncounted slides and ambiguous multiple decks also passed. |
+| Real note, CLI drain and agent response | Codex | Passed in slide-note-accepted using layer 0.4.0+0cc50dd2f3bf. Entry: comment-slide-note. Evidence: /tmp/lahe-slide-note-accepted/commands.jsonl and source-edit.json. |
+| Independent code, acceptance and instruction review | Independent Codex reviewer | Approved after adding visible uncounted-slide support and the missing edge-case tests. |
 | Full project gate | Codex | Pending |
 
 ## Progress
@@ -31,3 +31,15 @@ This is separate from [the icon fix](../20261024.01_panel_icon_fingerprint/01_sp
 The page-note composer creates an empty record at page load and persists it at the first keystroke. It currently stores an empty context. The agent's slide runbook covers editing and building decks but does not tell it how to locate a page note's slide.
 
 No cleanup removals are requested.
+
+## Live proof
+
+The reviewer began the note on The first month and navigated to What to measure before sending. The drain retained the original slide. See [the captured slide data](captured-slide.json).
+
+The agent used that id to change the original slide title. The next slide kept its title, and the change survived reload. The image below shows the changed source artifact with the chat bar collapsed.
+
+![The captured slide after the source edit](changed-slide.png)
+
+The portable fixture comes from [prepare_deck.py](prepare_deck.py). The main walkthrough and result-view runs were both torn down. The helper count returned to its starting value. This proves the CLI and page protocol; host wake behaviour was not tested in this walkthrough. Other mapped entry points were not run here.
+
+The [icon fix record](../20261024.01_panel_icon_fingerprint/01_spec_panel_icon_fingerprint.md) records its earlier full gate. The combined code will pass its final full gate before shipping.

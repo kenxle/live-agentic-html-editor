@@ -13,6 +13,7 @@ thread.
 - `comment-follow-up`: the reviewer answers in the thread; the agent gets it as the next revision.
 - `comment-delete`: the reviewer deletes an outstanding comment; it leaves the agent's drain.
 - `comment-panel-icon`: an icon before its panel heading reaches the agent with that heading, its drawing and its position across matching wrappers.
+- `comment-slide-note`: a deck page note keeps the slide where typing began, even if the reviewer navigates before sending.
 
 ## How to get to it (user POV)
 
@@ -46,6 +47,21 @@ Edit the copied source's matching SVG, carry its stamp, and reply handled. Wait 
 the computer, then reload. The computer stays in Hybrid delivery; the other icons keep their shapes.
 Driven in run `panel-icon-accepted`; proof is linked from the panel-icon fix record.
 
+For `comment-slide-note`, prepare a portable copy of the real Reveal fixture:
+`python3 docs/features/20261024.02_slide_comment_context/prepare_deck.py /tmp/lahe-slide-proof`.
+Start `lv up --doc /tmp/lahe-slide-proof/deck.html`, then run `lv doctor`.
+Press `lv page key ArrowRight ArrowRight`, click the page-note box with
+`lv page click "rail:textarea[placeholder='Not tied to any passage']"`, and type
+`lv page type "Change this slide title to Better together."`.
+Click `lv page click "#three-heading"`, press `lv page key ArrowRight`, click the note box again,
+and send with `lv page key ControlOrMeta+Enter`.
+`lv agent wait "Change this slide title"` must carry `page.context.slide.id` as `slide-three`
+and the heading `What the first month looks like`, although another slide is now visible.
+Edit that section in the copied source, wait for the automatic rebuild, reply handled,
+navigate back and reload. The captured slide changes; its neighbour retains its title.
+Driven in run `slide-note-accepted`, with a collapsed-rail view of the result in
+`slide-note-result-view`. The slide-note fix record links the captured data and screenshot.
+
 ## Gotchas
 
 - The follow-up box is labelled "Follow up" once the agent has answered. A hidden "Add another message to this comment" box also exists on the card; `rail:` picks the visible match.
@@ -53,3 +69,4 @@ Driven in run `panel-icon-accepted`; proof is linked from the panel-icon fix rec
 - `page aria` cannot see the rail. Use `page rail` and `page shot` for card proof.
 - Regression specs: `comments_highlights.spec.js` (injected layer, no helper), `agent_replies.spec.js`, `catalog_library.spec.js --grep "Open a closed review"`.
 - Panel icon regression specs: `comments_highlights.spec.js` and `anchor_engine.spec.js`, including reload, reorder, ambiguity and SVG serialization.
+- Deck page-note regressions: `reveal_deck.spec.js`, including navigation, reload, rewording, vertical and uncounted slides, whitespace-first input, multiple active decks and ordinary documents.

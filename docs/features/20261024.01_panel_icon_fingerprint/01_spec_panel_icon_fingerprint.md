@@ -1,6 +1,6 @@
 # Identify the icon the reviewer clicked
 
-Lahe gave the agent conflicting clues for a center-panel icon. The fix passes the targeted regressions and live walkthrough. The full gate is next. No decision is needed from Ken.
+Lahe gave the agent conflicting clues for a center-panel icon. The icon fix passed the full gate and live walkthrough. The related [slide-note fix](../20261024.02_slide_comment_context/01_spec_slide_comment_context.md) is ready for final integrated checks. No decision is needed from Ken.
 
 ## Problem and intended behavior
 
@@ -19,11 +19,11 @@ Fix capture in the anchor engine and comment context. Preserve the write rule: a
 
 | Check | Owner | Status and evidence |
 | --- | --- | --- |
-| Regression fails before the fix | Codex | Passed against base fde019af. See /tmp/lahe-panel-icon-base-red.log. | 
-| Heading, ordinal, drawing and reload regression | Codex | Passed the focused browser run. Added reorder, ambiguity, excluded-content and saved-signature coverage. | 
-| Real click, agent drain, source change and rebuilt page | Codex | Passed in run panel-icon-accepted. Entry: comment-panel-icon in the verification map. Evidence: /tmp/lahe-panel-icon-accepted/commands.jsonl and source-edit.json. | 
-| Full project gate | Codex | Pending |
-| Independent code and acceptance review | Independent Codex reviewer | Passed after fixes for styled SVG markup, excluded-only content and saved signatures. | 
+| Regression fails before the fix | Codex | Passed against base fde019af. See /tmp/lahe-panel-icon-base-red.log. |
+| Heading, ordinal, drawing and reload regression | Codex | Passed the focused browser run. Added reorder, ambiguity, excluded-content and saved-signature coverage. |
+| Real click, agent drain, source change and rebuilt page | Codex | Passed in run panel-icon-accepted. Entry: comment-panel-icon in the verification map. Evidence: /tmp/lahe-panel-icon-accepted/commands.jsonl and source-edit.json. |
+| Full project gate | Codex | Passed on ac39ff4b with the configured Node. All browser lanes passed. Log: /tmp/lahe-panel-icon-gate-all-accepted.log. |
+| Independent code and acceptance review | Independent Codex reviewer | Passed after fixes for styled SVG markup, excluded-only content and saved signatures. |
 
 ## Rollout and progress
 

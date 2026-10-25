@@ -236,6 +236,8 @@ test("a page note remembers the slide where typing began through navigation and 
     await page.keyboard.type(" Revised.");
     await page.keyboard.press("ControlOrMeta+Enter");
     const reworded = (await itemsIn(page)).find(item => item.id === note.id);
+    expect(reworded.note).toContain("Revised.");
+    expect(reworded.rev).toBeGreaterThan(restored.rev);
     expect(reworded.context.slide).toEqual(note.context.slide);
     const nextExpected = await expectedSlide(page);
     await clickPageNote(page);
