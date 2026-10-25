@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.4.0+0cc50dd2f3bf
+ * version 0.4.0+0e96dabba7ca
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.4.0+0cc50dd2f3bf";
+  g.LAHE.version = "0.4.0+0e96dabba7ca";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -29041,7 +29041,7 @@
       // line between a control worth removing and a control worth keeping: the
       // ones taken off these cards today all sat in the action row repeating
       // something already on screen.
-      input.setAttribute("placeholder", "Add another message");
+      input.setAttribute("placeholder", "Comment on this thread");
       input.value = keepsDrafts() ? store.readFollowupDraft(reviewId, id) : "";
 
       function submit() {
@@ -29137,7 +29137,7 @@
       var box = buildAddBox(id);
       var field = box.querySelector("textarea");
       if (field) {
-        field.setAttribute("placeholder", "Add a message");
+        field.setAttribute("placeholder", "Comment on this thread");
         field.setAttribute("aria-label", "Add a message to this answer");
       }
       row.appendChild(box);
@@ -31017,7 +31017,7 @@
         input.id = "lahe-followup-" + id;
         input.setAttribute("aria-label", "Follow up");
         input.setAttribute("rows", "3");
-        input.setAttribute("placeholder", "Add a new message");
+        input.setAttribute("placeholder", "Comment on this thread");
         input.value = store.readFollowupDraft(reviewId, id);
         input.disabled = isReadOnly();
         input.addEventListener("input", function () {
@@ -39704,7 +39704,7 @@
         inputEl.setAttribute("rows", "3");
         inputEl.setAttribute(
           "placeholder",
-          item[record.FIELD.KIND] === record.KIND.NOTE ? "Not tied to any passage" : "What should change here?"
+          item[record.FIELD.KIND] === record.KIND.NOTE ? "Comment on the page" : "What should change here?"
         );
         inputEl.value = item[record.FIELD.NOTE] || "";
         node.appendChild(inputEl);
@@ -53522,7 +53522,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.4.0+0cc50dd2f3bf";
+  var VERSION = "0.4.0+0e96dabba7ca";
 
   var protocol = ns.protocol;
   var record = ns.record;
