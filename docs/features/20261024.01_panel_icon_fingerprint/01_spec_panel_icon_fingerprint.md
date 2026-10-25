@@ -1,6 +1,6 @@
 # Identify the icon the reviewer clicked
 
-Lahe gave the agent conflicting clues for a center-panel icon. The icon fix passed the full gate and live walkthrough. The related [slide-note fix](../20261024.02_slide_comment_context/01_spec_slide_comment_context.md) is ready for final integrated checks. No decision is needed from Ken.
+Lahe gave the agent conflicting clues for a center-panel icon. The icon fix passed the full gate and live walkthrough. The related [slide-note fix](../20261024.02_slide_comment_context/01_spec_slide_comment_context.md) also passed the final integrated gate. No decision is needed from Ken.
 
 ## Problem and intended behavior
 
@@ -42,3 +42,9 @@ The source edit changes the center icon. It remains there after reload.
 ![Computer on the center panel after reload](center-icon-after-reload.png)
 
 The run used the final source diff on base fde019af with layer version 0.4.0+91ad228b28b1. Helper count returned to its starting value after teardown. Other mapped entry points were not run in this walkthrough. This proves the CLI and page protocol; it does not test an independent agent host wake.
+
+## Combined verification
+
+The combined icon and slide-note code passed `npm run gate:all` on the configured Node. No failures or helper leaks remained. Existing optional skips were unchanged. See [the gate summary](gate-summary.json). [The summarizer](summarize_gate.py) produced the counts and one classified row per browser case; the summary names its source log and row file.
+
+The full gate inspected source commit 816f38d6 with layer 0.4.0+0cc50dd2f3bf. Final documentation changes do not change that runtime. Landing and the check on main are next.

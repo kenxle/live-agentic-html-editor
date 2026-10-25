@@ -1,6 +1,6 @@
 # Keep the slide with a deck note
 
-Lahe currently sends page notes without the slide the reviewer was viewing. Capture, instructions, independent review and live proof pass. Final integrated checks are next. Ken has no decision to make.
+Lahe currently sends page notes without the slide the reviewer was viewing. Capture, instructions, independent review and live proof pass. The final integrated gate passed. Landing and the check on main are next. Ken has no decision to make.
 
 ## Intended behavior
 
@@ -24,7 +24,7 @@ This is separate from [the icon fix](../20261024.01_panel_icon_fingerprint/01_sp
 | Vertical slides and ordinary document notes | Codex | Passed in every supported browser. Whitespace-first input, uncounted slides and ambiguous multiple decks also passed. |
 | Real note, CLI drain and agent response | Codex | Passed in slide-note-accepted using layer 0.4.0+0cc50dd2f3bf. Entry: comment-slide-note. Evidence: /tmp/lahe-slide-note-accepted/commands.jsonl and source-edit.json. |
 | Independent code, acceptance and instruction review | Independent Codex reviewer | Approved after adding visible uncounted-slide support and the missing edge-case tests. |
-| Full project gate | Codex | Pending |
+| Full project gate | Codex | Passed npm run gate:all on source 816f38d6 with the configured Node. See [the combined gate summary](../20261024.01_panel_icon_fingerprint/gate-summary.json). |
 
 ## Progress
 
@@ -42,4 +42,4 @@ The agent used that id to change the original slide title. The next slide kept i
 
 The portable fixture comes from [prepare_deck.py](prepare_deck.py). The main walkthrough and result-view runs were both torn down. The helper count returned to its starting value. This proves the CLI and page protocol; host wake behaviour was not tested in this walkthrough. Other mapped entry points were not run here.
 
-The [icon fix record](../20261024.01_panel_icon_fingerprint/01_spec_panel_icon_fingerprint.md) records its earlier full gate. The combined code will pass its final full gate before shipping.
+The [icon fix record](../20261024.01_panel_icon_fingerprint/01_spec_panel_icon_fingerprint.md) records its earlier full gate. The combined full gate passed. No failures or helper leaks remained.
