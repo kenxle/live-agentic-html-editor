@@ -41,6 +41,121 @@ async function loadEngine(page) {
   expect(await page.evaluate(() => typeof window.LAHE.anchor.mint)).toBe("function");
 }
 
+test("unnamed SVG drawings survive a rebuild and panel reorder without matching another icon", async ({ page, fixtureServer }) => {
+  await page.goto(fixtureServer.urlFor("panel-icons.html"));
+  await loadEngine(page);
+  const result = await page.evaluate(() => {
+    const anchor = window.LAHE.anchor;
+    const panel = document.querySelectorAll(".panel")[1];
+    const svg = panel.querySelector("svg");
+    const ref = anchor.mint({ element: svg, root: document.body });
+    const before = ref.probe;
+    svg.removeAttribute("data-lahe-id");
+    // A renderer can reorder attributes without changing the drawing.
+    const circle = svg.querySelector("circle");
+    const cx = circle.getAttribute("cx");
+    circle.removeAttribute("cx");
+    circle.setAttribute("cx", cx);
+    const unchanged = anchor.signatureOf(svg) === before;
+    panel.parentNode.prepend(panel);
+    const reordered = anchor.resolve(ref, document.body);
+    svg.remove();
+    const removed = anchor.resolve(ref, document.body);
+    return { unchanged, reordered: reordered.element === svg, removed: removed.bound };
+  });
+  expect(result).toEqual({ unchanged: true, reordered: true, removed: false });
+});
+
+test("identical unnamed SVG drawings with no distinguishing context refuse a write", async ({ page, fixtureServer }) => {
+  await page.goto(fixtureServer.urlFor("panel-icons.html"));
+  await loadEngine(page);
+  const result = await page.evaluate(() => {
+    const anchor = window.LAHE.anchor;
+    const root = document.createElement("div");
+    const icon = document.querySelectorAll(".panel svg")[1];
+    for (let i = 0; i < 2; i += 1) {
+      const wrap = document.createElement("div");
+      wrap.appendChild(icon.cloneNode(true));
+      root.appendChild(wrap);
+    }
+    document.body.appendChild(root);
+    const svg = root.querySelector("svg");
+    const ref = anchor.mint({ element: svg, root });
+    svg.removeAttribute("data-lahe-id");
+    const verdict = anchor.resolve(ref, root);
+    return { unique: ref.text_unique, bound: verdict.bound, code: verdict.failureCode };
+  });
+  expect(result).toEqual({ unique: false, bound: false, code: "ANCHOR_AMBIGUOUS" });
+});
+
+test("SVG subject markup preserves styled text and gradient names without tool markup", async ({ page, fixtureServer }) => {
+  await page.goto(fixtureServer.urlFor("panel-icons.html"));
+  await loadEngine(page);
+  const html = await page.evaluate(() => {
+    const svg = document.querySelector("svg");
+    svg.innerHTML = '<style>.accent { fill: red; }</style><defs><linearGradient id="fade"><stop offset="0" stop-color="red"/></linearGradient></defs><text x="1">Hi <tspan fill="red">there</tspan>!</text><script>bad()</script><foreignObject><p>Skip</p></foreignObject><g data-lahe="chrome"><circle r="4"/></g>';
+    svg.setAttribute("data-lahe-id", "runtime-only");
+    return window.LAHE.anchor.subjectFor(svg, document.body).html;
+  });
+  expect(html).toContain('<style>.accent { fill: red; }</style>');
+  expect(html).toContain('<text x="1">Hi <tspan fill="red">there</tspan>!</text>');
+  expect(html).toContain('<linearGradient id="fade">');
+  expect(html).not.toMatch(/data-lahe|script|foreignObject|Skip|bad\(\)/);
+});
+
+test("SVGs with only excluded content do not claim a drawing signature", async ({ page, fixtureServer }) => {
+  await page.goto(fixtureServer.urlFor("panel-icons.html"));
+  await loadEngine(page);
+  const results = await page.evaluate(() => {
+    const anchor = window.LAHE.anchor;
+    const svg = document.querySelector("svg");
+    return ['<script href="a.js"></script>', '<foreignObject><div>App</div></foreignObject>', '<g data-lahe="chrome"><circle r="2"/></g>'].map(markup => {
+      svg.innerHTML = markup;
+      const signature = anchor.signatureOf(svg);
+      const ref = anchor.mint({ element: svg, root: document.body });
+      svg.removeAttribute("data-lahe-id");
+      return { signature, bound: anchor.resolve(ref, document.body).bound };
+    });
+  });
+  for (const result of results) expect(result).toEqual({ signature: "", bound: false });
+});
+
+test("a saved named-SVG signature still resolves when excluded text was present", async ({ page, fixtureServer }) => {
+  await page.goto(fixtureServer.urlFor("panel-icons.html"));
+  await loadEngine(page);
+  const result = await page.evaluate(() => {
+    const anchor = window.LAHE.anchor;
+    const svg = document.querySelector("svg");
+    svg.innerHTML = '<title>Revenue</title><foreignObject><span>App</span></foreignObject><circle r="4"/>';
+    const ref = anchor.mint({ element: svg, root: document.body });
+    const legacyProbe = "svg|aria-label=|id=|href=|value=|title=Revenue|desc=|text=RevenueApp";
+    ref.probe = legacyProbe;
+    svg.removeAttribute("data-lahe-id");
+    return { signature: anchor.signatureOf(svg), bound: anchor.resolve(ref, document.body).element === svg, legacyProbe };
+  });
+  expect(result.signature).toBe(result.legacyProbe);
+  expect(result.bound).toBe(true);
+});
+
+test("custom constructor tags cannot become heading context", async ({ page, fixtureServer }) => {
+  await page.goto(fixtureServer.urlFor("panel-icons.html"));
+  await loadEngine(page);
+  const headings = await page.evaluate(() => {
+    const markup = [
+      '<constructor>Decoy</constructor><p>Body</p>',
+      '<svg></svg><constructor>Decoy</constructor>',
+      '<div><constructor>Decoy</constructor></div><p>Body</p>'
+    ];
+    return markup.map(content => {
+      const scope = document.createElement("section");
+      scope.innerHTML = '<h2>Real heading</h2>' + content;
+      document.body.appendChild(scope);
+      return window.LAHE.anchor.headingOf(scope.querySelector("p,svg"), scope);
+    });
+  });
+  for (const heading of headings) expect(heading).toBe("Real heading");
+});
+
 // Everything below drives the engine from inside the page, because the whole
 // point is that it runs against live nodes. Verdicts come back as plain data,
 // and node identity is asserted in the page with ===, never by comparing

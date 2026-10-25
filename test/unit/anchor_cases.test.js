@@ -843,6 +843,18 @@ test("the fingerprint chain keeps ancestor ids, not only their classes", () => {
   assert.deepEqual(print.chain[0].classes, ["card"]);
 });
 
+test("the agent's ordinal counts matching paths across separate icon wrappers", () => {
+  const icons = [el("svg"), el("svg"), el("svg")];
+  const panels = icons.map((icon, i) => el("div", {
+    attrs: { class: "panel" },
+    children: [el("div", { attrs: { class: "ic" }, children: [icon] }), el("h4", { text: "Panel " + i })]
+  }));
+  const body = el("body", { children: panels });
+  const ref = anchor.mint({ element: icons[1], root: body });
+  assert.equal(ref.where, "div.panel > div.ic > svg");
+  assert.deepEqual(ref.ordinal, { index: 2, of: 3 });
+});
+
 // ---------------------------------------------------------------------------
 // S5: the tie-breakers disagree, and they are still only tie-breakers
 // ---------------------------------------------------------------------------

@@ -75,6 +75,35 @@ function itemsIn(page) {
   });
 }
 
+test("a picked center-panel SVG supplies its own heading, drawing and position after reload", async ({ page, fixtureServer }) => {
+  await page.goto(fixtureServer.urlFor("panel-icons.html"));
+  await bootLayer(page);
+  await page.keyboard.press("ControlOrMeta+Shift+KeyC");
+  const icon = await page.locator(".panel").nth(1).locator("svg").boundingBox();
+  await page.mouse.click(icon.x + icon.width / 2, icon.y + icon.height / 2 - 4);
+  await page.keyboard.type("Make this a computer");
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect.poll(async () => (await itemsIn(page)).filter(item => item.state === "ready").length).toBe(1);
+
+  const [item] = await itemsIn(page);
+  expect.soft(item.context.heading).toBe("Hybrid delivery");
+  expect.soft(item.context.subject.near).toBe("Hybrid delivery");
+  expect.soft(item.context.subject.html).toContain('<circle cx="12" cy="12" r="6">');
+  expect.soft(item.region.ref.heading).toBe("Hybrid delivery");
+  expect.soft(item.region.ref.ordinal).toEqual({ index: 2, of: 3 });
+  expect.soft(item.region.ref.text_unique).toBe(true);
+
+  // The source has no browser stamp. A fresh render must identify the drawing.
+  await page.reload();
+  await bootLayer(page);
+  const result = await page.evaluate(ref => {
+    const anchor = window.LAHE.anchor;
+    const verdict = anchor.resolve(ref, document.body);
+    return { bound: verdict.bound, rightPanel: verdict.element === document.querySelectorAll(".panel svg")[1] };
+  }, item.region.ref);
+  expect(result).toEqual({ bound: true, rightPanel: true });
+});
+
 // Selects the whole text of one element, the way a reviewer's drag does.
 async function selectElementText(page, selector) {
   await page.evaluate(function (sel) {

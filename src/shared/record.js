@@ -254,6 +254,7 @@
     "context.heading": CLASS_DATA,
     "context.element": CLASS_DATA,
     "context.subject": CLASS_DATA,
+    "context.slide": CLASS_DATA,
     "region.label": CLASS_DATA,
     // The page's own words, kept so replay knows which page states the reviewer
     // has already answered. Data, and emphatically not intent.
@@ -983,6 +984,11 @@
   // off the page, so it is DATA, classified below with the rest.
   function emptyContext() {
     return { quote: null, prefix: null, suffix: null, heading: null, element: null, subject: null };
+  }
+
+  // Optional page data for a note begun while viewing a Reveal slide.
+  function emptySlideContext() {
+    return { index: null, total: null, uncounted: false, id: null, heading: null, text: null };
   }
 
   // AN EMBEDDED SOURCE IS STORED ONCE, in subject.src, whole.
@@ -2630,6 +2636,7 @@
     nowIso: nowIso,
     emptyRegion: emptyRegion,
     emptyContext: emptyContext,
+    emptySlideContext: emptySlideContext,
     SUBJECT_SRC_REF: SUBJECT_SRC_REF,
     paintQuoteOf: paintQuoteOf,
     subjectHtmlOf: subjectHtmlOf,

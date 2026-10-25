@@ -185,6 +185,185 @@ function goToSlide(page, h) {
   }, h);
 }
 
+async function clickPageNote(page) {
+  const rect = await page.evaluate(() => {
+    const input = window.__h.tab().noteBox().input;
+    const box = input.getBoundingClientRect();
+    return { x: box.x, y: box.y, width: box.width, height: box.height };
+  });
+  await page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height / 2);
+}
+
+async function expectedSlide(page) {
+  return page.evaluate(() => {
+    const current = Reveal.getCurrentSlide();
+    return { index: current.getAttribute("data-visibility") === "uncounted" ? null : Reveal.getSlides().indexOf(current) + 1, total: Reveal.getTotalSlides(), id: current.id,
+      heading: current.querySelector("h1,h2,h3,h4,h5,h6").textContent };
+  });
+}
+
+test("a page note remembers the slide where typing began through navigation and reload", async ({ page }) => {
+  const server = await startStaticServer({ root: REPO_ROOT });
+  try {
+    await page.goto(server.urlFor(FIXTURE_REL));
+    await deckReady(page);
+    await bootLayer(page);
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(async () => (await deckState(page)).h).toBe(2);
+    const expected = await expectedSlide(page);
+    await clickPageNote(page);
+    await page.keyboard.type("Make this a flywheel");
+    await page.locator("#three-heading").click();
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(async () => (await deckState(page)).h).toBe(3);
+    await clickPageNote(page);
+    await page.keyboard.type(" with the trainer at the center.");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    const note = (await itemsIn(page)).find(item => item.kind === "note" && item.state === "ready");
+    expect(note.context.slide).toMatchObject(expected);
+    expect(note.region.ref).toBeNull();
+    await page.reload();
+    await deckReady(page);
+    await bootLayer(page);
+    const restored = (await itemsIn(page)).find(item => item.id === note.id);
+    expect(restored.context.slide).toEqual(note.context.slide);
+    const noteRect = await page.evaluate(id => {
+      const rect = window.__h.rail.cardNode(id).querySelector(".lahe-rail-note").getBoundingClientRect();
+      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+    }, note.id);
+    await page.mouse.click(noteRect.x + noteRect.width / 2, noteRect.y + noteRect.height / 2);
+    await page.keyboard.type(" Revised.");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    const reworded = (await itemsIn(page)).find(item => item.id === note.id);
+    expect(reworded.note).toContain("Revised.");
+    expect(reworded.rev).toBeGreaterThan(restored.rev);
+    expect(reworded.context.slide).toEqual(note.context.slide);
+    const nextExpected = await expectedSlide(page);
+    await clickPageNote(page);
+    await page.keyboard.type("This slide needs a clearer title.");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    const next = (await itemsIn(page)).find(item => item.kind === "note" && item.state === "ready" && item.id !== note.id);
+    expect(next.context.slide).toMatchObject(nextExpected);
+  } finally {
+    await server.close();
+  }
+});
+
+test("page notes identify the active vertical leaf and omit speaker notes", async ({ page }) => {
+  const server = await startStaticServer({ root: REPO_ROOT });
+  try {
+    await page.goto(server.urlFor(FIXTURE_REL));
+    await deckReady(page);
+    await page.evaluate(() => {
+      const stack = document.createElement("section");
+      stack.innerHTML = '<section id="vertical-first"><h2>First vertical</h2></section><section id="vertical-second"><h2>Second vertical</h2><p>Visible slide words.</p><aside class="notes"><h3>Private notes heading</h3>Secret speaking instructions.</aside></section>';
+      document.querySelector(".slides").appendChild(stack);
+      Reveal.sync();
+      Reveal.slide(Reveal.getHorizontalSlides().indexOf(stack), 0);
+    });
+    await bootLayer(page);
+    await page.keyboard.press("ArrowDown");
+    await expect.poll(async () => (await deckState(page)).v).toBe(1);
+    const expected = await expectedSlide(page);
+    await clickPageNote(page);
+    await page.keyboard.type("Change this slide.");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    const note = (await itemsIn(page)).find(item => item.kind === "note" && item.state === "ready");
+    expect(note.context.slide).toMatchObject(expected);
+    expect(note.context.slide.text).toContain("Visible slide words.");
+    expect(note.context.slide.text).not.toMatch(/Private|Secret/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("ordinary document page notes have no slide context", async ({ page }) => {
+  const server = await startStaticServer({ root: REPO_ROOT });
+  try {
+    await page.goto(server.urlFor("test/fixtures/css-reset.html"));
+    await bootLayer(page);
+    await clickPageNote(page);
+    await page.keyboard.type("A note about this document.");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    const note = (await itemsIn(page)).find(item => item.kind === "note" && item.state === "ready");
+    expect(note.context.slide).toBeUndefined();
+    expect(note.region.ref).toBeNull();
+  } finally {
+    await server.close();
+  }
+});
+
+test("whitespace does not capture a slide before the first note words", async ({ page }) => {
+  const server = await startStaticServer({ root: REPO_ROOT });
+  try {
+    await page.goto(server.urlFor(FIXTURE_REL));
+    await deckReady(page);
+    await bootLayer(page);
+    await clickPageNote(page);
+    await page.keyboard.type(" ");
+    await page.locator("#deck-title").click();
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(async () => (await deckState(page)).h).toBe(1);
+    const expected = await expectedSlide(page);
+    await clickPageNote(page);
+    await page.keyboard.type("Change this slide.");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    const note = (await itemsIn(page)).find(item => item.kind === "note" && item.state === "ready");
+    expect(note.context.slide).toMatchObject(expected);
+  } finally {
+    await server.close();
+  }
+});
+
+test("an active uncounted slide still supplies its id and words", async ({ page }) => {
+  const server = await startStaticServer({ root: REPO_ROOT });
+  try {
+    await page.goto(server.urlFor(FIXTURE_REL));
+    await deckReady(page);
+    await page.evaluate(() => {
+      document.getElementById("slide-three").setAttribute("data-visibility", "uncounted");
+      Reveal.sync();
+    });
+    await bootLayer(page);
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(async () => (await deckState(page)).h).toBe(2);
+    const expected = await expectedSlide(page);
+    await clickPageNote(page);
+    await page.keyboard.type("Replace this slide.");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    const note = (await itemsIn(page)).find(item => item.kind === "note" && item.state === "ready");
+    expect(note.context.slide).toMatchObject({ ...expected, uncounted: true });
+  } finally {
+    await server.close();
+  }
+});
+
+test("multiple active decks do not supply a guessed slide", async ({ page }) => {
+  const server = await startStaticServer({ root: REPO_ROOT });
+  try {
+    await page.goto(server.urlFor(FIXTURE_REL));
+    await deckReady(page);
+    await page.evaluate(async () => {
+      const root = document.createElement("div");
+      root.className = "reveal";
+      root.innerHTML = '<div class="slides"><section><h2>Another deck</h2></section></div>';
+      document.body.appendChild(root);
+      window.__secondDeck = new Reveal(root, { embedded: true, keyboard: false, transition: "none" });
+      await window.__secondDeck.initialize();
+    });
+    await bootLayer(page);
+    await clickPageNote(page);
+    await page.keyboard.type("Change this.");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    const note = (await itemsIn(page)).find(item => item.kind === "note" && item.state === "ready");
+    expect(note.context.slide).toBeUndefined();
+  } finally {
+    await server.close();
+  }
+});
+
 /** Nothing of the library's and nothing of the page's holds focus. */
 function blurEverything(page) {
   return page.evaluate(function () {

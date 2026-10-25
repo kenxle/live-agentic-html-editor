@@ -618,9 +618,10 @@ Six fields, on every item.
   `after_html`: it reaches an agent here and nowhere else.
 - `region.where`: the ancestor chain, innermost last, one hop per element as `tag#id.class.class`,
   joined with ` > `, e.g. `main > section#t6.tcase > div.state > div.wrap`.
-- `region.ordinal`: `{index, of}` among the siblings under the same parent with the same tag and the
-  same normalized text, in document order. `{index: 1, of: 1}` when the element is unique, which is
-  the ordinary case.
+- `region.ordinal`: `{index, of}` among elements with the same `region.where` and normalized text,
+  in document order. Icons in separate wrappers count together when their reported paths match.
+  `{index: 1, of: 1}` means only one element matches that path and text. Older records count siblings
+  under the same parent. This is source-location data; it never authorizes a browser write.
 - `region.text_unique`: false when the region's own words are on the page more than once, so text
   alone will not place a write later. The reference is still good: `where` and `ordinal` are what
   tell the twins apart.
@@ -643,12 +644,22 @@ source keeps the source's order, so the third identical row on the page is the t
 the source. None of this places a write in the browser, where position never decides (D9); it is
 information handed to an agent editing the source with the reviewer's words in front of it.
 
+**`context.slide`** is optional page data for a page note begun on a Reveal deck. It is
+`{index, total, uncounted, id, heading, text}`. The snapshot is taken on the first nonblank input,
+not when the always-open composer is created or when the note is sent. `index` is the counted
+slide's one-based position; `total` counts the deck's numbered leaf slides. An uncounted visible
+slide carries `index: null` and `uncounted: true`, with its id and words. Navigation, reload and
+rewording preserve the snapshot. It locates context without creating an anchor or a write target.
+Ordinary pages and ambiguous multiple decks omit it. Strings use `CONTEXT_MAX` in the projection.
 **`subject`** is what the reviewer pointed at, when they pointed at a whole element rather than at a
 passage of text (D9, the element anchor). It is `{tag, src, alt, html, near}`, and it is null for a
 comment on text. `src` is the attribute **as the page author wrote it**, not the resolved absolute
-URL, because the source file is what the agent edits. `html` is the **opening tag only**, plus the
-element's child `<source>` tags for a `<video>`, `<audio>` or `<picture>`. All of it is text off the
+URL, because the source file is what the agent edits. `html` is the opening tag, plus the
+element's child `<source>` tags for a `<video>`, `<audio>` or `<picture>`. For SVGs it includes the
+drawing markup, including styled text and definitions. Tool nodes, tool attributes, scripts and
+foreign objects are omitted. Older SVG records carry only the opening tag. All of it is text off the
 page, so it is data and it is bounded, exactly like `quote`.
+
 In the stored record (not in review.json), an embedded `src` (a `data:` URL) is kept once, whole,
 in `context.subject.src`. The stored `html` carries the pointer `src="lahe:subject.src"` in its
 place, and the region's signature carries a fixed-size name for it. `record.subjectHtmlOf` puts the

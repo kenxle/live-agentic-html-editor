@@ -1,0 +1,15 @@
+{
+  "source": "/tmp/lahe-feedback-context-gate-all.log",
+  "rows": "/tmp/lahe-feedback-context-browser-rows.tsv",
+  "by_status": {
+    "passed": 2773,
+    "skipped": 35
+  },
+  "by_browser": {
+    "chromium": 936,
+    "firefox": 936,
+    "webkit": 936
+  },
+  "tested_commit": "816f38d6",
+  "layer": "0.4.0+0cc50dd2f3bf"
+}
