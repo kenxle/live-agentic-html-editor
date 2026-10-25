@@ -1,0 +1,18 @@
+{
+  "source": "/tmp/lahe-feedback-context-final-main-observed-gate.log",
+  "rows": "/tmp/lahe-feedback-context-final-main-browser-rows.tsv",
+  "by_status": {
+    "passed": 928,
+    "skipped": 8
+  },
+  "by_browser": {
+    "chromium": 936
+  },
+  "reported_summaries": [
+    "\n  8 skipped",
+    "  928 passed (7.5m)"
+  ],
+  "tested_commit": "6a863620f3578e04f75bf6b49f18aeeb4511f0e9",
+  "ci": "https://github.com/kenxle/live-agentic-html-editor/actions/runs/40150724292",
+  "failure_diagnostics": "/tmp/lahe-observe-page-polls.js"
+}

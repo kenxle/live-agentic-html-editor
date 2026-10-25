@@ -1,6 +1,6 @@
 # Identify the icon the reviewer clicked
 
-Lahe gave the agent conflicting clues for a center-panel icon. The icon fix passed the full gate and live walkthrough. The related [slide-note fix](../20261024.02_slide_comment_context/01_spec_slide_comment_context.md) also passed the final integrated gate. No decision is needed from Ken.
+Fixed and installed. Icon comments now carry the local panel heading, the correct position among matching icons and the SVG drawing. New deck notes also retain the slide where typing began. Both fixes passed the full gate, independent review and live walkthroughs. No action is needed from Ken.
 
 ## Problem and intended behavior
 
@@ -19,15 +19,15 @@ Fix capture in the anchor engine and comment context. Preserve the write rule: a
 
 | Check | Owner | Status and evidence |
 | --- | --- | --- |
-| Regression fails before the fix | Codex | Passed against base fde019af. See /tmp/lahe-panel-icon-base-red.log. |
+| Regression fails before the fix | Codex | Passed against base fde019af. See [lahe-panel-icon-base-red.log](../../../../../../../../tmp/lahe-panel-icon-base-red.log). |
 | Heading, ordinal, drawing and reload regression | Codex | Passed the focused browser run. Added reorder, ambiguity, excluded-content and saved-signature coverage. |
-| Real click, agent drain, source change and rebuilt page | Codex | Passed in run panel-icon-accepted. Entry: comment-panel-icon in the verification map. Evidence: /tmp/lahe-panel-icon-accepted/commands.jsonl and source-edit.json. |
-| Full project gate | Codex | Passed on ac39ff4b with the configured Node. All browser lanes passed. Log: /tmp/lahe-panel-icon-gate-all-accepted.log. |
+| Real click, agent drain, source change and rebuilt page | Codex | Passed in run panel-icon-accepted. Entry: comment-panel-icon in the verification map. Evidence: [commands.jsonl](../../../../../../../../tmp/lahe-panel-icon-accepted/commands.jsonl) and [source-edit.json](../../../../../../../../tmp/lahe-panel-icon-accepted/source-edit.json). |
+| Full project gate | Codex | Passed on ac39ff4b with the configured Node. All browser lanes passed. Log: [lahe-panel-icon-gate-all-accepted.log](../../../../../../../../tmp/lahe-panel-icon-gate-all-accepted.log). |
 | Independent code and acceptance review | Independent Codex reviewer | Passed after fixes for styled SVG markup, excluded-only content and saved signatures. |
 
 ## Rollout and progress
 
-Work is isolated on `fix/panel-icon-fingerprint`. Ship only after the full gate and independent review pass. The existing deck review belongs to its original agent.
+Landed with the slide-note capture in [the feedback context change](https://github.com/kenxle/live-agentic-html-editor/pull/95). The updated review layer and slide instructions are installed. The existing deck review stays with its original agent. Older notes do not gain missing context retroactively.
 
 No cleanup removals are requested.
 
@@ -47,12 +47,16 @@ The run used the final source diff on base fde019af with layer version 0.4.0+91a
 
 The combined icon and slide-note code passed `npm run gate:all` on the configured Node. No failures or helper leaks remained. Existing optional skips were unchanged. See [the gate summary](gate-summary.json). [The summarizer](summarize_gate.py) produced the counts and one classified row per browser case; the summary names its source log and row file.
 
-The full gate inspected source commit 816f38d6 with layer 0.4.0+0cc50dd2f3bf. Final documentation changes do not change that runtime. Landing and the check on main are next.
+The full gate inspected source commit 816f38d6 with layer 0.4.0+0cc50dd2f3bf. The final main gate also passed after the monitor test correction. See [the final main summary](final-main-gate-summary.json) and [passing main CI](https://github.com/kenxle/live-agentic-html-editor/actions/runs/40150724292). The installed bundle matches main, and both host skill folders contain the updated slide instructions.
 
 ## Post-merge monitor test correction
 
 The context fix merged and passed the local gate on main. Main CI exposed a race in the monitor test: it wrote review endings after the watcher started, then expected the watcher to see both in the same scan. The watcher can read between those writes.
 
-The correction keeps the watcher-extension and added-session delivery checks. A separate coalescing test starts with both endings already pending. Independent review approved this test setup, and the focused monitor file passed. The follow-up full gate passed on source 1871abb3. CI and landing are next.
+The correction keeps the watcher-extension and added-session delivery checks. A separate coalescing test starts with both endings already pending. Independent review approved this test setup, and the focused monitor file passed. The full gate and GitHub check passed before [the monitor test correction](https://github.com/kenxle/live-agentic-html-editor/pull/96) merged. The full local gate and GitHub CI then passed on main commit 6a863620. Production code is unchanged by this correction.
 
-Evidence: [the monitor tests](../../../test/unit/codex_monitor.test.js), [the failed main CI run](https://github.com/kenxle/live-agentic-html-editor/actions/runs/40148717816), and the local logs at `/tmp/lahe-monitor-coalescing-target.log` and `/tmp/lahe-feedback-context-main-gate.log`.
+Evidence: [the monitor tests](../../../test/unit/codex_monitor.test.js), [the failed main CI run](https://github.com/kenxle/live-agentic-html-editor/actions/runs/40148717816), and the local logs at [lahe-monitor-coalescing-target.log](../../../../../../../../tmp/lahe-monitor-coalescing-target.log) and [lahe-feedback-context-main-gate.log](../../../../../../../../tmp/lahe-feedback-context-main-gate.log).
+
+## Reload timeout follow-up
+
+An earlier main gate timed out in the list-edit reload tests while waiting for the page check. Those tests passed alone, and the following full gate passed on unchanged source with failure diagnostics attached. The cause is not proven. The board records the reload timeout for follow-up. The original log is [lahe-feedback-context-final-main-gate.log](../../../../../../../../tmp/lahe-feedback-context-final-main-gate.log); the passing diagnostic run is [lahe-feedback-context-final-main-observed-gate.log](../../../../../../../../tmp/lahe-feedback-context-final-main-observed-gate.log).
