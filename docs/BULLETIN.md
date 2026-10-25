@@ -5,6 +5,7 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-10-25 LAHE-lahe-styles-three-styles-break-under-the-lahe-st -- **Lahe Styles: three styles break under the Lahe style switcher**
 - [ ] @anyone 2026-10-24 LAHE-list-edit-reload-page-check -- **List-edit reload tests intermittently time out waiting for the page check.** Seen in [the list-reload tests](../test/browser/free_writing_flow_fix_rail.spec.js) on main 6a863620 during the post-merge full gate. The tests passed alone and the next full gate passed on unchanged source. Cause not proven. A read-only window skips this check; ownership recovery does not retry it. Capture ownership state and browser errors before changing that logic. See [the verification record](features/20261024.01_panel_icon_fingerprint/01_spec_panel_icon_fingerprint.md#reload-timeout-follow-up).
 
 - [x] @codex 2026-10-24 LAHE-feedback-capture-context -- **Fixed and installed: icon picks carry their local panel and SVG drawing; new deck notes retain their viewed slide.** [The context fix](https://github.com/kenxle/live-agentic-html-editor/pull/95) and [the monitor test correction](https://github.com/kenxle/live-agentic-html-editor/pull/96) are on main. Full local checks, GitHub CI, independent review and live proof passed. See [the icon record](features/20261024.01_panel_icon_fingerprint/01_spec_panel_icon_fingerprint.md) and [the slide-note record](features/20261024.02_slide_comment_context/01_spec_slide_comment_context.md).
