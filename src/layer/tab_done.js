@@ -1455,6 +1455,7 @@
       if (reviewer.note) said.push(reviewer.note);
       if (reviewer.change && !runCard && reviewer.change !== reviewer.note) said.push(reviewer.change);
       if (said.length) appendTurn(turns, "You", said.join("\n"), reviewer.at, "reviewer");
+      appendPrevious(turns, round.agent);
       var agent = round.agent || {};
       var name = agent.agent || "agent";
       var answer = [];
@@ -1470,6 +1471,13 @@
     function applyRound(pair, open) {
       pair.setAttribute("data-lahe-open", open ? "true" : "false");
       return open;
+    }
+
+    function appendPrevious(host, reply) {
+      ((reply && reply.previous) || []).forEach(function (prior) {
+        var words = [prior.text, prior.reason !== prior.text ? prior.reason : null].filter(Boolean).join("\n\n");
+        appendTurn(host, prior.agent || "agent", words || STATUS_WORDS[prior.status] || prior.status || "", prior.at, "agent", prior.files);
+      });
     }
 
     function appendTurn(host, who, text, at, side, files) {
@@ -2246,6 +2254,7 @@
             })
           : [];
       }
+      next[record.FIELD.REPLY] = record.retainReplies(item, next[record.FIELD.REPLY]);
       var notOnPage = event.handled_not_on_page === true;
       next[record.FIELD.HANDLED_NOT_ON_PAGE] = notOnPage;
       // An accepted answer means no close stands at this revision.

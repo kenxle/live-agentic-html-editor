@@ -1381,7 +1381,19 @@
         return { block: sg && sg.block, from: sg && sg.from, to: sg && sg.to };
       });
     }
+    if (Array.isArray(reply.previous)) out.previous = reply.previous.map(copyReply);
     return out;
+  }
+
+  // Keep earlier answers on the current turn. Replayed folds must not add
+  // the answer the browser already holds a second time.
+  function retainReplies(item, reply) {
+    var prior = item[FIELD.REPLY];
+    var next = Object.assign({}, reply);
+    if (!prior) return next;
+    if (JSON.stringify(copyReply(Object.assign({}, prior, { previous: undefined }))) === JSON.stringify(copyReply(reply))) return prior;
+    next.previous = (prior.previous || []).concat([copyReply(Object.assign({}, prior, { previous: undefined }))]);
+    return next;
   }
 
   /** The completed current exchange, ready to become immutable history. */
@@ -2656,6 +2668,7 @@
     shortPath: shortPath,
     newItem: newItem,
     bumpRev: bumpRev,
+    retainReplies: retainReplies,
     threadOf: threadOf,
     chronologicalThread: chronologicalThread,
     completedRound: completedRound,

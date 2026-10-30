@@ -377,3 +377,28 @@ test.describe("one reply box at the bottom of a long thread", () => {
     });
   }
 });
+
+test("multiple agent replies remain visible after reload and follow up", async ({ page }) => {
+  const { app, helper, token } = await startBoth();
+  try {
+    await bootedPage(page, app, helper, token);
+    const item = await commentOnLede(page, "Please clarify this.");
+    await agentAnswers(page, helper, item.id, "question", "First agent response");
+    appendReply(helper, { item: item.id, rev: item.rev, status: "question", agent: "codex", text: "Second agent response" });
+    const bothVisible = async () => {
+      await pollPage(page, (id) => {
+        const rail = window.__lahe && window.__lahe.rail;
+        const card = rail && rail.cardNode(id);
+        if (!card) return false;
+        rail.selectTab(rail.getCard(id).pane);
+        return ["First agent response", "Second agent response"].every(text =>
+          Array.from(card.querySelectorAll(".bubble, .lahe-thread-text")).some(node => node.textContent.includes(text) && node.checkVisibility()));
+      }, item.id, { message: "both agent replies stay visible" });
+    };
+    await bothVisible();
+    await page.reload();
+    await bothVisible();
+    await reviewerFollowsUp(page, item.id, "Thank you, another question.");
+    await bothVisible();
+  } finally { await helper.stop(); await app.close(); }
+});

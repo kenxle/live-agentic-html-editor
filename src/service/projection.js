@@ -367,7 +367,7 @@ function foldEvents(state, events, options) {
       if (closedRev[id] === item[F.REV]) return;
       var applied = Object.assign({}, item);
       applied[F.STATE] = event.state || item[F.STATE];
-      applied[F.REPLY] = Object.assign({}, event.reply, { at: event[protocol.EVENT_FIELD.TS] || null });
+      applied[F.REPLY] = record.retainReplies(item, Object.assign({}, event.reply, { at: event[protocol.EVENT_FIELD.TS] || null }));
       // A handled claim the built page does not bear out. The state above is
       // the item's own, unchanged, so this is the only thing that says the
       // agent answered and the answer did not arrive.

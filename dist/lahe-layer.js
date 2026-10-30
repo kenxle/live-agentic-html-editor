@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.4.0+0cc50dd2f3bf
+ * version 0.4.0+6b537bf1bb5c
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.4.0+0cc50dd2f3bf";
+  g.LAHE.version = "0.4.0+6b537bf1bb5c";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -4297,7 +4297,19 @@
         return { block: sg && sg.block, from: sg && sg.from, to: sg && sg.to };
       });
     }
+    if (Array.isArray(reply.previous)) out.previous = reply.previous.map(copyReply);
     return out;
+  }
+
+  // Keep earlier answers on the current turn. Replayed folds must not add
+  // the answer the browser already holds a second time.
+  function retainReplies(item, reply) {
+    var prior = item[FIELD.REPLY];
+    var next = Object.assign({}, reply);
+    if (!prior) return next;
+    if (JSON.stringify(copyReply(Object.assign({}, prior, { previous: undefined }))) === JSON.stringify(copyReply(reply))) return prior;
+    next.previous = (prior.previous || []).concat([copyReply(Object.assign({}, prior, { previous: undefined }))]);
+    return next;
   }
 
   /** The completed current exchange, ready to become immutable history. */
@@ -5572,6 +5584,7 @@
     shortPath: shortPath,
     newItem: newItem,
     bumpRev: bumpRev,
+    retainReplies: retainReplies,
     threadOf: threadOf,
     chronologicalThread: chronologicalThread,
     completedRound: completedRound,
@@ -24198,6 +24211,17 @@
         p.badges.appendChild(row);
       });
 
+      if (!p.previousReplies) {
+        p.previousReplies = el("div", "agent-history");
+        p.agent.parentNode.insertBefore(p.previousReplies, p.agent);
+      }
+      p.previousReplies.textContent = "";
+      var currentReply = item[record.FIELD.REPLY];
+      ((currentReply && currentReply.previous) || []).forEach(function (prior) {
+        var turn = el("div", "agent");
+        fillTurn(turn, el, { side: "agent", who: prior.agent || "agent", at: prior.at, text: [prior.text, prior.reason !== prior.text ? prior.reason : null].filter(Boolean).join("\n\n") || prior.status, files: prior.files });
+        p.previousReplies.appendChild(turn);
+      });
       p.agent.textContent = "";
       p.agent.className = "agent";
       p.agent.removeAttribute("data-side");
@@ -30968,6 +30992,7 @@
       if (reviewer.note) said.push(reviewer.note);
       if (reviewer.change && !runCard && reviewer.change !== reviewer.note) said.push(reviewer.change);
       if (said.length) appendTurn(turns, "You", said.join("\n"), reviewer.at, "reviewer");
+      appendPrevious(turns, round.agent);
       var agent = round.agent || {};
       var name = agent.agent || "agent";
       var answer = [];
@@ -30983,6 +31008,13 @@
     function applyRound(pair, open) {
       pair.setAttribute("data-lahe-open", open ? "true" : "false");
       return open;
+    }
+
+    function appendPrevious(host, reply) {
+      ((reply && reply.previous) || []).forEach(function (prior) {
+        var words = [prior.text, prior.reason !== prior.text ? prior.reason : null].filter(Boolean).join("\n\n");
+        appendTurn(host, prior.agent || "agent", words || STATUS_WORDS[prior.status] || prior.status || "", prior.at, "agent", prior.files);
+      });
     }
 
     function appendTurn(host, who, text, at, side, files) {
@@ -31759,6 +31791,7 @@
             })
           : [];
       }
+      next[record.FIELD.REPLY] = record.retainReplies(item, next[record.FIELD.REPLY]);
       var notOnPage = event.handled_not_on_page === true;
       next[record.FIELD.HANDLED_NOT_ON_PAGE] = notOnPage;
       // An accepted answer means no close stands at this revision.
@@ -53522,7 +53555,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.4.0+0cc50dd2f3bf";
+  var VERSION = "0.4.0+6b537bf1bb5c";
 
   var protocol = ns.protocol;
   var record = ns.record;

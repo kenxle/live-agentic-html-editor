@@ -585,6 +585,7 @@ test("an agent answering the same revision twice: the older line replayed later 
   parts.done.applyReplies([foldEvent(item, early), foldEvent(item, late)]);
   const held = parts.store.readItem(REVIEW, "itm_twice")[record.FIELD.REPLY];
   assert.equal(held.at, late.at, "the later line is the one the record keeps");
+  assert.deepEqual(held.previous.map(reply => reply.text), [early.text]);
   // The reviewer reads it, then the page reloads and the helper replays both.
   parts.done.markRepliesSeen();
   const before = parts.rail.toastInfo().count;
@@ -592,6 +593,7 @@ test("an agent answering the same revision twice: the older line replayed later 
   assert.equal(results[0].kind, "superseded", "the older line is recognized as superseded");
   assert.equal(results[0].toast, false);
   assert.equal(parts.store.readItem(REVIEW, "itm_twice")[record.FIELD.REPLY].at, late.at, "and it does not roll the record back");
+  assert.deepEqual(parts.store.readItem(REVIEW, "itm_twice")[record.FIELD.REPLY].previous.map(reply => reply.text), [early.text]);
   assert.equal(parts.rail.toastInfo().count, before, "nothing toasts for an answer already read");
   assert.deepEqual(parts.done.unseenIds(), [], "and nothing is left unread");
 });

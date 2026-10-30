@@ -4611,6 +4611,17 @@
         p.badges.appendChild(row);
       });
 
+      if (!p.previousReplies) {
+        p.previousReplies = el("div", "agent-history");
+        p.agent.parentNode.insertBefore(p.previousReplies, p.agent);
+      }
+      p.previousReplies.textContent = "";
+      var currentReply = item[record.FIELD.REPLY];
+      ((currentReply && currentReply.previous) || []).forEach(function (prior) {
+        var turn = el("div", "agent");
+        fillTurn(turn, el, { side: "agent", who: prior.agent || "agent", at: prior.at, text: [prior.text, prior.reason !== prior.text ? prior.reason : null].filter(Boolean).join("\n\n") || prior.status, files: prior.files });
+        p.previousReplies.appendChild(turn);
+      });
       p.agent.textContent = "";
       p.agent.className = "agent";
       p.agent.removeAttribute("data-side");
