@@ -118,6 +118,9 @@ blockquote{
   color:var(--on-surface-soft);
 }
 hr{border:0;border-top:var(--line);margin:var(--section-gap-narrow) 0}
+/* A rule that ends a section would hang under it and fight the heavy bar
+   that opens the next one, so the section's own end is the only divider. */
+:is(.hero,.sheet) > hr:last-child{display:none}
 
 /* Stacked blocks carry their own room, so the markup needs no inline margins. */
 :is(.panel,.callout,.insight,.icon-line){margin-bottom:var(--block-gap)}
