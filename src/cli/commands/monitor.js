@@ -184,6 +184,8 @@ function actionLine(counts, drains, relaunch, codex) {
   var what = parts.length ? parts.join(", ") + " waiting" : "work waiting";
   var one = drains.length === 1;
   return ACTION_REQUIRED + ": " + what + ". Do not end this turn. " +
+    "This is your work even if you do not remember starting it (a cleared chat): " +
+    "load the lahe skill if it is not loaded, and do not ask first. " +
     (one ? "Drain: " : "Drain each: ") + drains.join(" and ") + ". " +
     "Handle every item it prints, rebuild and verify, reply, and drain again until " +
     (one ? "it prints" : "each prints") + " nothing. " +

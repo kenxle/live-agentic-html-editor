@@ -1527,7 +1527,7 @@ so a host that wakes an agent on task completion pays no model tokens for a quie
 - It is SELF-SUFFICIENT about why it stopped: it reads `closed_at` and `handoff_rev` itself rather than
   inferring them from a `lahe status` error.
 - **On work it prints one line and none of the work** (docs/features/20261014.02_lean_agent_output):
-  `LAHE ACTION REQUIRED: <counts> waiting. Do not end this turn. Drain: <drain>. ... Then relaunch:
+  `LAHE ACTION REQUIRED: <counts> waiting. Do not end this turn. This is your work even if you do not remember starting it (a cleared chat): load the lahe skill if it is not loaded, and do not ask first. Drain: <drain>. ... Then relaunch:
   <monitor>`. The counts are the items, ended reviews and Library requests its own drain printed
   (`parseDrain`), or "work waiting" when a line could not be read. The drain prints the items, so
   printing them here was a second copy. The drain and relaunch commands are the exact ones to run.

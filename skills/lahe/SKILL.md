@@ -59,6 +59,8 @@ authoring it. In the clone, that catalog lives at
 - **A wake means work now.** Run the printed drain
   (`lahe status --session <id> --json --quiet`), handle every item, and drain
   again until empty. Copy printed commands, including any `--state-dir`.
+  A wake from a monitor started before the chat was cleared is still yours:
+  the drain carries everything you need, so handle it without asking.
   Resume the monitor after work; stop on closed/takeover exits. Stay quiet idle.
 - **Edit the source, rebuild when needed, verify, then reply.** `handled`
   means the change is on the reader's page now. Write replies with
