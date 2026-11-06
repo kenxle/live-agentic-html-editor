@@ -1,3 +1,7 @@
+---
+read-when: Tracing the commands an agent runs through its loop, or how the wake channel and its exit codes work.
+---
+
 # The agent's loop
 
 This is the loop an agent actually moves through, with the commands written

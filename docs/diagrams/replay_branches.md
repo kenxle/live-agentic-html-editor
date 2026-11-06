@@ -1,3 +1,7 @@
+---
+read-when: Changing what happens to waiting records after a page repaints.
+---
+
 # The four-way compare after a repaint
 
 Live pages repaint themselves: dev servers hot-reload, frameworks rewrite parts of the page, and the agent's own landed changes arrive as a refresh. After any repaint, a single pass walks every committed record and compares its stored history against what the page says now. This one compare (`src/layer/replay.js`, function `compare`) is the whole mechanism that lets a reviewer keep editing live while an agent edits the source underneath them, without either one clobbering the other.

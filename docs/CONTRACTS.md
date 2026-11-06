@@ -1,3 +1,7 @@
+---
+read-when: Changing a shape that builders share, such as records, protocol messages or event names.
+---
+
 # Contracts
 
 Twenty-one files under `src/` cite this document. It is the one place the shapes every

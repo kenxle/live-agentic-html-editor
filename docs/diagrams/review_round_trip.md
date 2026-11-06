@@ -1,3 +1,7 @@
+---
+read-when: Tracing one comment from the reviewer's keystroke to the agent's answer on the page.
+---
+
 # One comment, end to end
 
 This is one comment or edit, traced from the reviewer's keystroke to the

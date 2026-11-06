@@ -1,4 +1,5 @@
 ---
+read-when: The whole page is highlighted after a reload, or a highlight covers the wrong text.
 title: A match rule that is right for replay is wrong for painting
 category: layer
 symptoms: [everything is highlighted, whole page highlighted after reload, highlight covers the wrong text, highlight goes away after a few seconds, page refresh highlights everything]

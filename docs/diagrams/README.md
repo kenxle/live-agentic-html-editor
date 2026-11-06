@@ -1,3 +1,7 @@
+---
+read-when: Finding which diagram shows a part of the system, or adding a diagram.
+---
+
 # Diagrams
 
 Standalone mermaid diagrams, so a fresh agent can get the shape of this repo

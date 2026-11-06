@@ -1,3 +1,7 @@
+---
+read-when: Changing installed styles, the style route or the style line on a page.
+---
+
 # Installed styles
 
 Read this before touching `src/service/styles.js`, `src/cli/commands/style.js`, the `.lahe-styles` route in `src/service/page_routes.js`, or the style line in `src/service/markdown.js`. The feature folder (`docs/features/20260930.01_style_switcher/`) is the history of why; this page is how it works now. Where the two differ, this page and the code win.

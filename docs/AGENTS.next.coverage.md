@@ -1,3 +1,7 @@
+---
+read-when: Checking where an old AGENTS.md rule now lives in the lahe skill.
+---
+
 # Coverage: AGENTS.md to the lahe skill
 
 What this is: a row for every distinct rule or instruction in `AGENTS.md` as it

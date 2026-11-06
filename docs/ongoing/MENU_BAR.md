@@ -1,3 +1,7 @@
+---
+read-when: Changing the menu bar app, the helper's summary or the read mark behind a new card.
+---
+
 # The menu bar app
 
 Read this before touching `src/service/summary.js`, `src/service/menubar.js`, the `reply.seen` event, the `AUTH.CLI_PROOF` auth mode, or anything under `macos/menubar/`. The feature folder (`docs/features/20261012.01_menu_bar_app/`) is the history of why; this page is how it works now. Where the two differ, this page and the code win.

@@ -1,3 +1,7 @@
+---
+read-when: Finding which doc in the docs folder covers a topic.
+---
+
 # Docs
 
 The README is the short version. Everything longer lives here.

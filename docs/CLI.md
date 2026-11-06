@@ -1,3 +1,7 @@
+---
+read-when: Looking up a lahe command, its options or what a person can say to their agent.
+---
+
 # Every invocation
 
 **Things a person says to their agent.** An agent that has never seen this tool

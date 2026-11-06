@@ -1,3 +1,7 @@
+---
+read-when: Changing choice groups, how a press is recorded or how the layer paints a group.
+---
+
 # Choice buttons
 
 ## Charter

@@ -1,4 +1,5 @@
 ---
+read-when: Lint passes but a Lua, Python or CSS file is broken, or a new non-JS file is not checked.
 title: npm run lint checks .js files only, so the Lua filter and every other non-JS file get no lint coverage
 category: testing
 symptoms: [lint passed but the lua filter is broken, npm run lint passes with a syntax error in lahe_render.lua, no lint for lua, lint does not check python or css, new non-js file not in manifest, lint passed 538 files, filter fails only when pandoc runs]

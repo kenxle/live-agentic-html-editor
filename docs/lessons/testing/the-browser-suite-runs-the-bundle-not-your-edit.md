@@ -1,4 +1,5 @@
 ---
+read-when: A browser test fails though the source looks right, or passes only after a rebuild.
 title: The browser suite runs the bundle on disk, not the source you just edited
 category: testing
 symptoms: [browser test fails but the source looks right, the failure does not move when I change the code, it passed after I rebuilt, stashing my change made it pass, gate:builder is green but gate is red, reverting the suspect commit fixed nothing, fails identically in all three lanes]
