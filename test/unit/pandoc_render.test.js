@@ -419,6 +419,7 @@ test("frontmatter and the style line still work under pandoc", { skip: NEEDS_PAN
   const page = renderWith("---\nname: example\n---\n\n# T\n");
   assert.match(page.html, /<summary>Document metadata<\/summary>/);
   assert.match(page.html, /<h1 id="t">T<\/h1>/);
+  assert.ok(page.html.indexOf("<h1 id=\"t\">") < page.html.indexOf("<summary>Document metadata</summary>"), "the box comes after the body");
 });
 
 // --- the fallback -----------------------------------------------------------

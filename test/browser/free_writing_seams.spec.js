@@ -740,7 +740,7 @@ test.describe("free writing seams", () => {
     await expectQuietlyHandled(page, world, ref.id);
   });
 
-  test("notes page with front matter: the page opens ready to type, the blocks sit below the metadata once, and the source keeps its front matter byte for byte", async ({
+  test("notes page with front matter: the page opens ready to type, the blocks sit above the metadata box (shown at the bottom) once, and the source keeps its front matter byte for byte", async ({
     page
   }) => {
     const front = "---\ntitle: Field notes\ndate: 2026-09-29\n---\n";
@@ -762,16 +762,17 @@ test.describe("free writing seams", () => {
     expect(src.startsWith(front), "the front matter is untouched, byte for byte").toBe(true);
     expect(src.slice(front.length).replace(/^\n+/, "")).toBe("First thought\n\nSecond thought\n");
     for (const t of ["First thought", "Second thought"]) expect(await countOnPage(page, t), t + " once").toBe(1);
-    // Below the metadata: the page's first typed block does not come before the
-    // block the front matter renders as.
+    // The metadata box is rendered at the bottom of the page, so the typed
+    // blocks come before it. In the source they still follow the front matter.
     const order = await page.evaluate(() => {
       const all = Array.from(document.querySelectorAll("main *, body > *"));
       const at = (t) => all.findIndex((n) => n.children.length === 0 && n.textContent.trim() === t);
       return { meta: all.findIndex((n) => /Field notes/.test(n.textContent) && n.children.length === 0), first: at("First thought"), second: at("Second thought") };
     });
     expect(order.first, "the first block is on the page").toBeGreaterThan(-1);
-    if (order.meta > -1) expect(order.meta, "the metadata comes before the typed blocks").toBeLessThan(order.first);
+    expect(order.meta, "the metadata box is on the page").toBeGreaterThan(-1);
     expect(order.first).toBeLessThan(order.second);
+    expect(order.second, "the metadata box comes after the typed blocks").toBeLessThan(order.meta);
     await reviewerReloads(page);
     await expectQuietlyHandled(page, world, ref.id);
   });
