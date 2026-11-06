@@ -114,13 +114,11 @@ function words(seed, count) {
 }
 
 /**
- * The shape of Seneschal's knowledge tree page: a hero, a few sections with a
- * heading each, and in every section a stack of nested <details> whose
+ * The shape of Seneschal's knowledge tree page: a hero, two sections with a
+ * heading each, and in every section a run of nested <details> whose
  * summaries hold spans and whose bodies hold a paragraph and the next level.
- * Few headings, many spans, deep nesting.
- *
- * @returns {{spec, body, target, count, depth}} `target` is a paragraph deep
- *   inside the third section, the one the speed test comments on.
+ * Few headings, many spans, deep nesting: far enough from a heading, the
+ * heading walk spends its whole budget, as it does on the real page.
  */
 function knowledgeTreeSpec() {
   let serial = 0;
@@ -145,9 +143,11 @@ function knowledgeTreeSpec() {
     };
   }
   const sections = [];
-  for (let s = 0; s < 4; s += 1) {
+  // The second section is long enough that its last stacks are more than
+  // HEADING_SCAN_CAP steps from its heading.
+  [12, 40].forEach((stackCount, s) => {
     const stacks = [];
-    for (let k = 0; k < 13; k += 1) stacks.push(level(1, 11));
+    for (let k = 0; k < stackCount; k += 1) stacks.push(level(1, 11));
     sections.push({
       tag: "section",
       attrs: { class: "sheet", id: "sheet-" + s },
@@ -160,7 +160,7 @@ function knowledgeTreeSpec() {
         { tag: "div", attrs: { class: "tree" }, children: stacks }
       ]
     });
-  }
+  });
   return {
     tag: "body",
     children: [
@@ -173,14 +173,29 @@ function knowledgeTreeSpec() {
   };
 }
 
+// Child indexes from <body> to the speed test's target: main, the second
+// section, its tree, the sixth stack, six levels down through each level's
+// body, then that level's paragraph. A browser spec follows the same indexes
+// on the same page written out as HTML.
+const TARGET_PATH = [1, 1, 2, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0];
+
+function follow(body, indexes) {
+  let node = body;
+  for (let i = 0; i < indexes.length; i += 1) node = node.children[indexes[i]];
+  return node;
+}
+
+/**
+ * The knowledge tree page over the simulated DOM.
+ *
+ * @returns {{spec, body, target, count, depth}} `target` is the paragraph at
+ *   TARGET_PATH, the one the speed test comments on.
+ */
 function knowledgeTree() {
   const spec = knowledgeTreeSpec();
   const body = build(spec);
   const shape = countAndDepth(body, 0);
-  // Third section, sixth stack, seven levels down: the paragraph of that level.
-  let node = body.children[1].children[2].children[2].children[5];
-  for (let i = 1; i < 7; i += 1) node = node.children[1].children[1];
-  const target = node.children[1].children[0];
+  const target = follow(body, TARGET_PATH);
   return { spec: spec, body: body, target: target, count: shape.count, depth: shape.depth };
 }
 
@@ -192,5 +207,7 @@ module.exports = {
   setText: setText,
   countAndDepth: countAndDepth,
   knowledgeTreeSpec: knowledgeTreeSpec,
-  knowledgeTree: knowledgeTree
+  knowledgeTree: knowledgeTree,
+  TARGET_PATH: TARGET_PATH,
+  follow: follow
 };
