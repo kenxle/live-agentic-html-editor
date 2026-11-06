@@ -1,3 +1,5 @@
+// read-when: Changing how a review holds more than one Markdown source, or when its tests fail.
+
 // A review can hold more than one Markdown source. One review per file adds a
 // linked document to the linking review that holds a comment on it
 // (`lahe review far.md --session S` runs add --review L --source far.md). That

@@ -1,3 +1,5 @@
+// read-when: Changing how `lahe review` serves a Markdown document's local links as rendered documents, or when its tests fail.
+
 "use strict";
 
 const test = require("node:test");

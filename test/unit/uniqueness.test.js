@@ -1,3 +1,5 @@
+// read-when: Changing the uniqueness predicate in src/shared/uniqueness.js, or when its tests fail.
+
 // The uniqueness predicate, judged against the fixture corpus Task 1C is also
 // judged against.
 

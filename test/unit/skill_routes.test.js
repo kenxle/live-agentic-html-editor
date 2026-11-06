@@ -1,3 +1,5 @@
+// read-when: Changing the installed skill routes that point at shipped references (install-skills.js), or when its tests fail.
+
 "use strict";
 
 const test = require("node:test");

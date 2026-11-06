@@ -1,3 +1,5 @@
+// read-when: Changing the name registry for stable addresses (src/service/sites.js): name rules, clashes, reserved names, loss and worktree records, or when its tests fail.
+
 // The name registry for stable addresses (src/service/sites.js).
 //
 // Plan rows: V1 (name rule), V2 (clash), V3 (reserved), V4 (registry loss),

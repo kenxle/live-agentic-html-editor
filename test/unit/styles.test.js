@@ -1,3 +1,5 @@
+// read-when: Changing installed document styles (id, stylesheet and metadata rules, install and list) in src/service/styles.js, or when its tests fail.
+
 // Installed document styles: the id rule, the stylesheet rule, the metadata
 // rule, reading a style folder, installing it, and the installed list.
 //

@@ -1,3 +1,5 @@
+// read-when: Changing how the Library picks the main-repo copy of a gone worktree's document, or when its tests fail.
+
 "use strict";
 
 // The worktree candidate (Library fix round, SEC2 and SEC5): the main-repo copy

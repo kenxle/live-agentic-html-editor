@@ -1,3 +1,5 @@
+// read-when: Changing how wide the rail may be dragged and what is remembered about it, or when its tests fail.
+
 // How wide the rail is allowed to be, and what is remembered about it.
 //
 // Ken: "some of these responses are getting quite thorough and long, so the

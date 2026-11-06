@@ -1,3 +1,5 @@
+// read-when: Changing scripts/catalog_opens.py, the script that counts Library Opens from the log, or when its tests fail.
+
 "use strict";
 
 // scripts/catalog_opens.py, the Library's count script. LAHE Library plan,

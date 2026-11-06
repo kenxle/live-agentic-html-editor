@@ -1,3 +1,6 @@
+// read-when: Changing the rule that a document inside an iframe does not boot the layer (src/layer/index.js), or when its tests fail.
+// not-for: The browser half; see test/browser/framed_boot.spec.js.
+
 // The framed decision: a document inside an iframe does not boot.
 //
 // The bug it stands for is reveal.js's speaker-notes window, which embeds the

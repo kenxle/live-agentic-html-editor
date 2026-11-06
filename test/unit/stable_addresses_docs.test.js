@@ -1,3 +1,5 @@
+// read-when: Editing the skill, contract, CLI doc, serving docs or diagrams where they describe stable addresses or the login-item helper, or when this scripted grep fails.
+
 // V38 (R12, agents are told): the skill, the contract and its copies, the CLI
 // doc, the serving docs, the diagrams and the manifest describe stable
 // addresses and the always-on helper, and none of them still describes

@@ -1,3 +1,5 @@
+// read-when: Changing how a review follows its document out of a removed worktree, or when its tests fail.
+
 // A review follows its document out of a removed worktree (spec
 // docs/features/20261015.02_review_follows_document/01_spec_review_follows_document.md).
 //

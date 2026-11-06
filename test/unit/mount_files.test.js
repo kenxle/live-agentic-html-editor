@@ -1,3 +1,5 @@
+// read-when: Changing which files a mount serves for a site's pages (linked folder scope), or when its tests fail.
+
 // A mount serves only the files a site's pages link to, plus their images
 // (docs/features/20261019.03_linked_folder_scope). The rows are the spec's
 // verification table: V1 to V3, V5 to V8, V10, V14, V15, V17 to V19. V4 is in

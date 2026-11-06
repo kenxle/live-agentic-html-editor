@@ -1,3 +1,6 @@
+// read-when: Changing the pure parts of the first round of editing fixes for free writing, or when its tests fail.
+// not-for: The browser half; see test/browser/f1_editing_fixes.spec.js.
+
 // Free writing, fix round F1 (editing): the parts of the fixes that are pure
 // functions, so they are held by a unit test. The browser half is
 // test/browser/f1_editing_fixes.spec.js.

@@ -1,3 +1,5 @@
+// read-when: Changing the helper's path safety rules: symlinks in the data directory, unsafe review ids and reply filenames, writes outside the data directory, or when its tests fail.
+
 // Ranked test 36: the helper refuses a symlink inside its data directory, an
 // unsafe review id, an unsafe agent segment in a reply filename, and a write
 // outside its data directory.

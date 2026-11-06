@@ -1,3 +1,5 @@
+// read-when: Changing how the helper stops itself once nothing needs it (src/service/self_stop.js), or when its tests fail.
+
 // The helper stops itself once nothing needs it (src/service/self_stop.js).
 //
 // WHY. The last `lahe session close` leaves the helper running when a review

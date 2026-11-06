@@ -1,3 +1,5 @@
+// read-when: Changing cleanBlock, the allowlist every new block passes at capture, at the helper and before a page write, or when its tests fail.
+
 // cleanBlock: the one allowlist every new block passes, at capture, at the
 // helper, and before every page write (free-writing architecture, Security &
 // Privacy Notes, "One allowlist, three places").

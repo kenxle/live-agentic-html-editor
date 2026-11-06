@@ -1,3 +1,6 @@
+// read-when: Changing which kinds the Edits tab holds and what each row reads as (src/layer/tab_edits.js), or when its tests fail.
+// not-for: How the tab is judged on screen; see test/browser/edits_tab.spec.js.
+
 // 3D: what a row SAYS, as pure functions.
 //
 // The browser spec (test/browser/edits_tab.spec.js) is the done bar and is where

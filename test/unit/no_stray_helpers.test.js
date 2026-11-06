@@ -1,3 +1,5 @@
+// read-when: Changing the check that no test leaves a helper running (test/helpers/temp_helpers.js), or when it reports a survivor.
+
 // The survivor check counts only its own run (test/helpers/temp_helpers.js).
 //
 // Each test run gets its own TMPDIR folder, and the check counts only helpers

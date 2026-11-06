@@ -1,3 +1,5 @@
+// read-when: Changing which files a mount serves and links, including hidden folders such as worktrees, or when its tests fail.
+
 // Hidden files get no special handling: they are served and linked like any
 // other file (Ken's rule, commit dd710f5 on main). Worktrees usually live in a
 // hidden folder (repo/.claude/worktrees/<name>/), so refusing hidden segments

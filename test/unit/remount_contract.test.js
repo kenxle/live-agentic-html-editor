@@ -1,3 +1,5 @@
+// read-when: Changing the rules for remounting the layer when the page is morphed, restored or loses its root, or when its tests fail.
+
 // The remount contract's rules, unit level.
 //
 // Owner: 2D (living in the page).

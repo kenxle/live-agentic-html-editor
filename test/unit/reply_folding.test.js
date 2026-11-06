@@ -1,3 +1,5 @@
+// read-when: Changing how the helper reads reply files and folds replies into the log and projection, or when its tests fail.
+
 // Reply folding: the helper reading replies*.jsonl and folding what it finds
 // into the log and the projection.
 //

@@ -1,3 +1,5 @@
+// read-when: Changing when a withdrawal of a ready item (back to draft) is flushed to the helper, or when its tests fail.
+
 // A ready comment or edit that the reviewer starts rewording again goes back
 // to draft on its first changing keystroke (spec 20260922.01 requirement 6).
 // That write must reach the helper on the ordinary debounce, not wait behind

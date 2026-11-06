@@ -1,3 +1,5 @@
+// read-when: Changing Markdown rendering through pandoc, its house components or the fallback to marked, or when its tests fail or skip.
+
 "use strict";
 
 // Markdown through pandoc (docs/features/20261017.02_pandoc_render): fenced

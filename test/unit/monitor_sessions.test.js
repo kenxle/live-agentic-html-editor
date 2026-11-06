@@ -1,3 +1,6 @@
+// read-when: Changing `lahe monitor` with more than one --session, or when its tests fail.
+// not-for: Single-session monitor behavior; see test/unit/monitor_command.test.js.
+
 // `lahe monitor --session a --session b`: one monitor watching several sessions
 // (LAHE Library, Task 1.4, architecture "Watching several sessions").
 //

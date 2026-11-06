@@ -1,3 +1,5 @@
+// read-when: Changing what the monitor, the drain and `lahe reply` print into an agent's context, or when its tests fail.
+
 // Lean agent output (docs/features/20261014.02_lean_agent_output).
 //
 // One plain comment used to put about 1,320 tokens into the agent's context:

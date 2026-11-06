@@ -1,3 +1,5 @@
+// read-when: Changing how a page gets its tab icon (src/service/tab_icon.js), or when its tests fail.
+
 "use strict";
 
 const test = require("node:test");

@@ -1,3 +1,5 @@
+// read-when: Changing how `lahe review` reuses a file's existing review instead of making a second, or when its tests fail.
+
 // One review per file (each_page_its_own_comments.md, Part 1). `lahe review`
 // of a file that already has a review opens that review and never makes a
 // second one. In another agent session's review it prints the address and

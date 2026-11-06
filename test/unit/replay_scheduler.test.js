@@ -1,3 +1,5 @@
+// read-when: Changing how replay schedules a deferred pass, or when replay does not run in a tab that is not painting, or when its tests fail.
+
 // Replay's scheduler: a deferred pass must not depend on the page painting.
 //
 // Owner: CP2-mid. 2B found this the hard way and wrote it up as an open

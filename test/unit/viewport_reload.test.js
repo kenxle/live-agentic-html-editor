@@ -1,3 +1,5 @@
+// read-when: Changing how LAHE's own reload keeps the reviewer's viewport, or when its tests fail.
+
 // LAHE's own reload keeps the reviewer's viewport without taking over native
 // anchor or back/forward restoration.
 

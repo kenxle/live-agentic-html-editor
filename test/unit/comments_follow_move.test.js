@@ -1,3 +1,5 @@
+// read-when: Changing how a file's comments move with it when the file is moved to another folder, or when its tests fail.
+
 // A file's comments move with it (spec
 // docs/features/20261017.01_comments_follow_moved_file/01_spec_comments_follow_moved_file.md).
 //

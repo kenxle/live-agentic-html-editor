@@ -1,3 +1,5 @@
+// read-when: Changing `lahe install` or `lahe uninstall` (src/cli/commands/install.js), or when its tests fail.
+
 // `lahe install` and `lahe uninstall` (src/cli/commands/install.js).
 //
 //   V48  No terminal, or running as root: refused. More than one user on the

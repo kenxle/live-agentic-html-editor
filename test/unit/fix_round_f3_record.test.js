@@ -1,3 +1,5 @@
+// read-when: Changing the helper's checks on run records, take-backs, and the Use the fixes refusal for from_anchor blocks, or when its tests fail.
+
 // Fix round F3, record side (free writing, reviews_impl/FIX_ROUND.md):
 // take-backs carry the old tag, the helper checks every markup field of a run
 // record, the parse runs after the size checks, "Use the fixes" refuses

@@ -1,3 +1,5 @@
+// read-when: Changing how an agent's reply is applied, refused or folded into the reviewer's own records in the Done tab, or when its tests fail.
+
 // What a folded reply does to the reviewer's own records, headless.
 //
 // Owner: 3A. The DOM half of the Done tab (the rows, the question treatment,

@@ -1,3 +1,6 @@
+// read-when: Changing the rule for whether an answer is worth a toast and what it says, or when its tests fail.
+// not-for: How the toast is drawn; see test/browser/reply_toast.spec.js.
+
 // Whether an answer is worth interrupting the reviewer for, and what it says.
 //
 // Owner: 3A. The toast itself is drawn by the rail and asserted in the browser

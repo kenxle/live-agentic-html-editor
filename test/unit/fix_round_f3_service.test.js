@@ -1,3 +1,5 @@
+// read-when: Changing how the projection re-checks run records it folds from the log, or how a proofread reply's fields survive the fold, or when its tests fail.
+
 // Fix round F3, service side (free writing, reviews_impl/FIX_ROUND.md): the
 // projection re-checks run records it folds from the log, a proofread reply's
 // fields survive the fold, and the reply line's suggestions are bounded.

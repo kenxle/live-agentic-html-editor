@@ -1,3 +1,5 @@
+// read-when: Adding a wait to a test, or when this check reports a sleep in test code.
+
 // The no-arbitrary-sleeps rule, enforced rather than documented.
 //
 // Plan Task 0c: "No arbitrary sleeps. Every wait is a condition poll or a

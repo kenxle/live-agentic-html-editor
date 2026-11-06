@@ -1,3 +1,5 @@
+// read-when: Changing Host dispatch and the helper's listeners for stable addresses, or when its tests fail.
+
 // Host dispatch and the listeners (stable addresses, Task 1.2).
 //
 // Plan rows: V7 (Host closed set), V8 (grammar), V9 (dispatch order), V10

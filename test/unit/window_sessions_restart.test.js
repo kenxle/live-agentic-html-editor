@@ -1,3 +1,5 @@
+// read-when: Changing how the window session table survives a helper restart, or when its tests fail.
+
 // A helper restart must be invisible to the page somebody has open.
 //
 // WHAT HAPPENED, THREE TIMES IN TWO DAYS. The shared helper is replaced

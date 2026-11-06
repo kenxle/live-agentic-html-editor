@@ -1,3 +1,5 @@
+// read-when: Changing how choice button presses are held in the outbox and sent together, or when its tests fail.
+
 // Presses travel together (choice buttons, plan Task 2.2, V10).
 //
 // Every event of a choice item is held in the outbox until 3 seconds after the

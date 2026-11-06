@@ -1,3 +1,5 @@
+// read-when: Changing how large files are streamed to a response, or when an aborted transfer leaves a file open.
+
 // An aborted transfer of a large file left the file open: the read stream was
 // piped with .pipe(), which does not close the source when the response
 // closes early. It is now piped with stream.pipeline, which does.

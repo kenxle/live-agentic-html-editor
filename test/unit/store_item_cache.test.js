@@ -1,3 +1,5 @@
+// read-when: Changing the in-memory cache of parsed items in the layer store, or when its tests fail.
+
 // The item bucket stops being parsed out of browser storage on every keystroke.
 //
 // The 2026-09-16 memory audit, finding 2: store.write reads every item and

@@ -1,3 +1,5 @@
+// read-when: Changing how the outbox replaces a queued item.content with the next one, or when the log grows per keystroke.
+
 // The outbox stops growing one entry per keystroke.
 //
 // The 2026-09-16 memory audit counted 144,724 item.content lines across 383

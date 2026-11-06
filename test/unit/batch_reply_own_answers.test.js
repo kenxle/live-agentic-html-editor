@@ -1,3 +1,5 @@
+// read-when: Changing `lahe reply --batch`, or what `lahe status --json --quiet` hands an agent back, or when its tests fail.
+
 // Batch reply, and no echo of the agent's own answers
 // (docs/features/20261015.01_batch_reply_own_answers).
 //

@@ -1,3 +1,5 @@
+// read-when: Changing the rail's saved preferences (collapse, follow-up drafts, pill corner), or when its tests fail.
+
 "use strict";
 
 const test = require("node:test");

@@ -1,3 +1,5 @@
+// read-when: Changing when review.json is rewritten or skipped as unchanged, or when its tests fail.
+
 // review.json is rewritten only when something an agent can see changed.
 //
 // Owner: 3A. The spec is

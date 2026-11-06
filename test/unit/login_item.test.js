@@ -1,3 +1,5 @@
+// read-when: Changing the login item for each system (src/service/login_item.js): the file it writes and the commands that load, start and remove it, or when its tests fail.
+
 // The login item per system (src/service/login_item.js): what file it writes,
 // what that file starts, and the commands that load, start, and remove it.
 //

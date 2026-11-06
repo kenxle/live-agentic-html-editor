@@ -1,3 +1,5 @@
+// read-when: Changing the layer store's one-key-per-item storage layout, or when its tests fail.
+
 // One storage key per item, so a keystroke writes one item and not the list.
 //
 // Owner: 1B. The spec is

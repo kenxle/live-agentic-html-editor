@@ -1,3 +1,5 @@
+// read-when: Changing the menu bar's summary routes and their signed CLI proof auth, or when its tests fail.
+
 // The menu bar's two routes and their signed auth mode (AUTH.CLI_PROOF).
 //
 // Menu bar plan, Task 1.4. The rows this file proves:

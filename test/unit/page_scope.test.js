@@ -1,3 +1,5 @@
+// read-when: Changing which records belong to the page in front of the reviewer (record.samePage) or the elapsed-time phrase, or when its tests fail.
+
 // Which records belong to the page in front of the reviewer, and the elapsed
 // phrase the helper and the rail both say.
 //

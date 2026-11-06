@@ -1,3 +1,5 @@
+// read-when: Changing how `lahe session close` leaves a login-item (installed) helper running, or when its tests fail.
+
 // `lahe session close` leaves an always-on helper running (stable addresses,
 // Step 3). An installed helper serves every page at its stable address, so
 // stopping it on the last close would take every page down until the login

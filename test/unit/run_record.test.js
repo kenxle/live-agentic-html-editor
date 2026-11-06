@@ -1,3 +1,5 @@
+// read-when: Changing the run record: its fields, validation, change text, history, take-back and size ceilings, or when its tests fail.
+
 // The run record: its fields, validation, change text, history, take-back,
 // size ceilings, and accepted proofreading fixes (free-writing plan Task 1.4).
 

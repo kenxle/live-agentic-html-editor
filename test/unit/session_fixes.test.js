@@ -1,3 +1,5 @@
+// read-when: Changing the origin-versus-unreachable decision, the pointer-outside commit rule or the PATH-stable installer, or when its tests fail.
+
 // The review-session fixes, at the level each one is decidable without a
 // browser: the origin-versus-unreachable decision, the pointer-outside commit
 // rule, and the PATH-stable installer.

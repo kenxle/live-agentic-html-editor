@@ -1,3 +1,5 @@
+// read-when: Changing the review.json projection or the copy and export text (src/shared/review_format.js), or when its tests fail.
+
 // The review.json projection and the human-readable copy/export text.
 //
 // Owner: 0A-wire. Reworked from the fencing-era file: fences are gone (D6, the

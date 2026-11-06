@@ -1,3 +1,5 @@
+// read-when: Changing the error `lahe serve` prints when a port is taken, or when it names the wrong port.
+
 // When the pages port was taken, `lahe serve` said the API port was taken,
 // which sent the reader after the wrong port. It now names the pages port.
 

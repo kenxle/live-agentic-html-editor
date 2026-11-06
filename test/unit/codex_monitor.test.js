@@ -1,3 +1,5 @@
+// read-when: Changing how the monitor delivers work to a Codex agent, or when a Codex delivery retry or takeover test fails.
+
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert/strict");

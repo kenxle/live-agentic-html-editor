@@ -1,3 +1,5 @@
+// read-when: Changing how a review is bound to a site and which review answers on a page (src/service/sites.js), or when its tests fail.
+
 // Binding a review to a site, and which review answers on a page (stable
 // addresses, Task 1.4).
 //

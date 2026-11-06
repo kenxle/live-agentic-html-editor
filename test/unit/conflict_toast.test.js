@@ -1,3 +1,5 @@
+// read-when: Changing the conflict toast that tells a reviewer their edit is safe on a card, or when its tests fail.
+
 // The conflict toast: telling a reviewer their edit is safe on a card.
 //
 // Ken asked the agent for a new module in his article and kept writing in the

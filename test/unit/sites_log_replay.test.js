@@ -1,3 +1,5 @@
+// read-when: Changing how the site registry replays sites.log over sites.json on load, or when its tests fail.
+
 // A name is appended to sites.log and then written to sites.json. A crash
 // between the two left sites.json parseable but missing the name, and load()
 // never read the log past a good sites.json, so a printed address went dead

@@ -1,3 +1,5 @@
+// read-when: Changing how the helper puts the lahe script line back after a rebuild removes it (src/service/heal.js), or when its tests fail.
+
 // The helper putting the script line back after a rebuild stripped it out.
 //
 // Owner: 1A. The failure this covers happened twice in live use on 2026-08-18:

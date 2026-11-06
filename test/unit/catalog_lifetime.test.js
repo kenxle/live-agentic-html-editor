@@ -1,3 +1,5 @@
+// read-when: Changing whether the helper stays up after the last session closes while the Library is open, or when its tests fail.
+
 // The helper's lifetime with the Library open (LAHE Library 2.1, architecture
 // "Helper lifetime (R10a)").
 //

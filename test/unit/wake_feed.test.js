@@ -1,3 +1,5 @@
+// read-when: Changing the wake feed that tells a session's monitor about ready transitions (src/service/wake_feed.js), or when its tests fail.
+
 "use strict";
 
 const test = require("node:test");
