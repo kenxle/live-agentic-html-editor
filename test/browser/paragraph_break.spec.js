@@ -1,3 +1,7 @@
+/*
+read-when: Changing how Enter and Shift-Enter in an edit are recorded, or when a typed break is lost on a later edit.
+*/
+
 // A break the reviewer types survives: the record keeps it, the page keeps it,
 // and a rebuild that applies it does not lose the item.
 //

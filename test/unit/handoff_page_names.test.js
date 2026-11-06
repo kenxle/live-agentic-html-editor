@@ -1,3 +1,5 @@
+// read-when: Changing how a session name taken from a page title is kept out of hand-off messages, or when its tests fail.
+
 // SEC1 (Library fix round): a session named after a page's own title, by
 // `lahe session name <id> --from-review <review>`, carries text the page chose.
 // A hand-off message is the first prompt a NEW agent reads, so a page-derived

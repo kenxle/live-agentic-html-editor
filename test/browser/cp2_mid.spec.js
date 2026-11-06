@@ -1,3 +1,7 @@
+/*
+read-when: Changing how a human edit and an agent change coexist, or when typing in one region and a rewrite of another interfere.
+*/
+
 // CP2-mid: ranked test 2, end to end, with REAL edit records.
 //
 // The headline property (D7): a human and an agent edit at once and nothing

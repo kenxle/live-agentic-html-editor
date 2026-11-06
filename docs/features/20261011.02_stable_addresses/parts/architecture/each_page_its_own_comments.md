@@ -1,3 +1,7 @@
+---
+read-when: Changing which review answers on a page, or asking why each page carries its own comments.
+---
+
 # Each page carries its own comments
 
 **Status:** Ken approved this design, and it is built on `unit/sa-core`. Both security passes are folded in ([first](../reviews/each_page_its_own_comments_security.md), [second](../reviews/each_page_its_own_comments_security_pass2.md)). The text below says what the build does.

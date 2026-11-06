@@ -1,3 +1,7 @@
+/*
+read-when: Changing the quoted passage on a card that opens out, or when a long quote cannot be expanded.
+*/
+
 // The quoted passage on a card opens out.
 //
 // Ken, 2026-10-12, on a card whose passage was cut to two lines: "i should be

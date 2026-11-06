@@ -1,3 +1,7 @@
+---
+read-when: Handling comments, edits and replies that arrive from a review.
+---
+
 # Handle feedback
 
 Work each item against this checklist.

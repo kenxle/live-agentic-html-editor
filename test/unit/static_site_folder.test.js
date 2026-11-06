@@ -1,3 +1,5 @@
+// read-when: Changing how `lahe review <folder>` treats a folder of HTML pages as a static site rather than a dev server, or when its tests fail.
+
 // A folder of HTML pages is a static site, not somebody's dev server.
 //
 // WHY THIS EXISTS. `lahe review <folder>` used to fall into the app-in-dev row

@@ -1,3 +1,7 @@
+---
+read-when: Read when you want what was fixed in the editing side of the free writing flow-walk fixes, or the test that proves each fix.
+---
+
 # Phase 7 flow-walk fixes, group G1 (editing side)
 
 Branch `free-writing-g1`. Summary: all eight items are fixed. Each has a test that failed before the fix and passes after it. One item came with a trade-off Ken should see: the bar placement (item 4). The other trade-off, how a split tail is recorded (item 2), was decided by the coordinator and is built that way.

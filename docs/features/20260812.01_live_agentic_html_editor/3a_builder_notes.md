@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the projection, the review file the agent reads, the replies path or the done tab.
+---
+
 # 3A builder notes: the agent loop
 
 Branch `task/3a`, worktree `../lahe-worktrees/3a`. Owns `src/service/projection.js`,

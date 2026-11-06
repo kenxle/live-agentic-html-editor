@@ -1,3 +1,5 @@
+// read-when: Changing how `lahe review` renders Markdown without touching the source, serves its assets, and reuses ownership, or when its tests fail.
+
 "use strict";
 
 const test = require("node:test");

@@ -1,3 +1,7 @@
+---
+read-when: Read when changing how an answered comment can take a follow-up, or reopen, as a conversation.
+---
+
 # Answered-comment follow-up specification
 
 ## Problem

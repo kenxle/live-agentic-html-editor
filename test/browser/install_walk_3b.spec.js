@@ -1,3 +1,7 @@
+/*
+read-when: Changing the documented install path, or when a clean clone cannot add the library and complete a review.
+*/
+
 // 3B's done bar: a clean clone in a temporary HOME with no existing state runs
 // the ONE documented command path, adds the library to a page, and completes a
 // review that lands in events.jsonl.

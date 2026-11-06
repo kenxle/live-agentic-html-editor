@@ -1,3 +1,5 @@
+// read-when: Changing how paths are made real (realpathSync versus the native form) for the state-folder check and site roots, or when its tests fail.
+
 // Two kinds of real path were in use: fs.realpathSync keeps the case a path
 // was given in, and fs.realpathSync.native returns the case on disk. Roots are
 // made with .native (site.bind, the Library), so the state-folder check, made

@@ -1,3 +1,7 @@
+---
+read-when: Finding where the card edges change stands and what shipped.
+---
+
 # Card edges: progress
 
 **Done.** Rail cards no longer have the curved blue left stripe or the green wash on handled cards, and the README hero shows the new cards. Nothing is waiting on you. [PR #68](https://github.com/kenxle/live-agentic-html-editor/pull/68), merged 2026-10-14. Closed 2026-10-16 17:32 EDT.

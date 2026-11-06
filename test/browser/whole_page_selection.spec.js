@@ -1,3 +1,7 @@
+/*
+read-when: Changing comments on a whole-page selection, or when selecting everything does not highlight everything.
+*/
+
 // A reviewer who selects the whole page gets the whole page highlighted.
 //
 // The owner's rule: "if *I* highlighted the entire page, then that's the

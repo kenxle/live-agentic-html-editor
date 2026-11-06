@@ -1,3 +1,5 @@
+// read-when: Changing the lint check that compiles the Lua filter (lint_lua.js), or when its tests fail.
+
 "use strict";
 
 // LAHE-lint-non-js-files: lint checked .js files only, so the pandoc filter

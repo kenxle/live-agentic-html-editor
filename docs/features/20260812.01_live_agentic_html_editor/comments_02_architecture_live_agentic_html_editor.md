@@ -1,3 +1,8 @@
+---
+read-when: "Read only for a saved export of Ken's comments on the architecture page."
+not-for: How they were handled; see 02_architecture_live_agentic_html_editor_reviews.md.
+---
+
 # Review comments: Architecture: Live Agentic HTML Editor
 
 _Doc: 02_architecture_live_agentic_html_editor.html · saved 2026-08-12T16:54:48 · 27 comment(s)_

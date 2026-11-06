@@ -1,3 +1,7 @@
+/*
+read-when: Changing what clicking a rail card does, or when a card does not scroll to its passage.
+*/
+
 // Clicking a card to find its place on the page.
 //
 // A card in the rail is a pointer at a passage, and the reviewer's question in

@@ -1,3 +1,7 @@
+---
+read-when: Reading Ken's comments on the pandoc render spec and how each was handled.
+---
+
 # Review log: r1d9eb1f2d31a
 
 **Pages reviewed:** /01_spec_pandoc_render.html, /01_spec_pandoc_render.md

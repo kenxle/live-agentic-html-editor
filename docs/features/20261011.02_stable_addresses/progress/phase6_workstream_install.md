@@ -1,3 +1,7 @@
+---
+read-when: Looking up how the login-item install workstream was built, tested and fixed.
+---
+
 # Workstream install: progress
 
 ## Summary

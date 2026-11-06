@@ -1,3 +1,7 @@
+---
+read-when: "Read when changing the page layer's store, sync client or overlay, or to learn why they were built that way."
+---
+
 # 1B builder notes: the library shell
 
 Worktree `../lahe-worktrees/1b`, branch `task/1b`. Owns `src/layer/store.js`,

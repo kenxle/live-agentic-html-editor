@@ -1,3 +1,7 @@
+---
+read-when: Changing the verify-lahe skill, or asking how Lahe is verified end to end and on a schedule.
+---
+
 # Verification skill for Lahe
 
 Updated: 2026-10-19T21:52-04:00

@@ -1,4 +1,5 @@
 ---
+read-when: The unit test run does not finish, or its output stops growing.
 title: npm run test:unit has no timeout, so one stuck test hangs the whole run until someone kills it
 category: testing
 symptoms: [npm run test:unit never finishes, unit run hung for hours, node --test test/unit sits there, test output stopped growing, "did not start the helper within 20 seconds", login item test hangs, always_on test failed after 444 seconds, no_stray_helpers waits forever, lahe serve left running from a test run]

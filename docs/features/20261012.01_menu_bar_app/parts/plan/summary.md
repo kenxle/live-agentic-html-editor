@@ -1,3 +1,7 @@
+---
+read-when: Building or checking the step that adds the helper's summary answer.
+---
+
 ## Step 1: The summary (workstream summary, PR 1)
 
 ::: xref

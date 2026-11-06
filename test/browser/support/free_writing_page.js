@@ -1,3 +1,7 @@
+/*
+read-when: Writing or debugging a free-writing editing spec that needs the shared page set-up.
+*/
+
 // Shared set-up for the free-writing editing specs (plan Tasks 2.1 to 2.4).
 //
 // The layer arrives the way it does on a reviewed page: one script tag, the

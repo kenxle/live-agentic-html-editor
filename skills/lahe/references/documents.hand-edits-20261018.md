@@ -1,3 +1,8 @@
+---
+read-when: Seeing how the reviewer reworded the document guidance in a hand edit.
+not-for: Current document guidance; see skills/lahe/references/documents.md.
+---
+
 # Hand edits from the document guidance review
 
 Source: [documents.md](documents.md). The entries below record the reviewer’s wording before and after each hand edit.

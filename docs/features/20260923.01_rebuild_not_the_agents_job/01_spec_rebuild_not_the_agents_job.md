@@ -1,3 +1,7 @@
+---
+read-when: "Read when changing how a Markdown review's page is re-rendered when the source moves, or how a handled hand edit is checked."
+---
+
 # The rebuild is not the agent's job
 
 Two changes, shipped together, so an agent forgetting to rebuild stops costing

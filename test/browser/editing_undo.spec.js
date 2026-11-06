@@ -1,3 +1,7 @@
+/*
+read-when: Changing per-record undo, undo of a delete, or formatting-only edits, or when undo touches the wrong record.
+*/
+
 // Ranked test 16: per-record undo, plus the two record kinds that are not an
 // ordinary edit.
 //

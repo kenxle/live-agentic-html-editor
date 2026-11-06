@@ -1,3 +1,5 @@
+// read-when: Changing the test helpers that start, suspend and kill the service, or when a durability test races.
+
 // Self-test for the service helpers: start, readiness, per-review credentials,
 // suspend, and kill -9.
 //

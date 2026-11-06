@@ -1,3 +1,7 @@
+---
+read-when: Reading Ken's comments on the stable addresses brief page.
+---
+
 # Review log: r903ce60ad715
 
 **Pages reviewed:** /01_brief_stable_addresses.html

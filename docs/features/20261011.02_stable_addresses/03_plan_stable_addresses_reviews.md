@@ -1,3 +1,7 @@
+---
+read-when: Reading what the plan reviewer found in the stable addresses plan.
+---
+
 # Plan review: Stable addresses
 
 Reviewer: review-plan (orchestration and test plan). Reviewed: `03_plan_stable_addresses.md` and its four leaves, against the brief, the architecture, the combined architecture review file, CLAUDE.md, and the code on `feat/stable-addresses` at `1665e7f`.

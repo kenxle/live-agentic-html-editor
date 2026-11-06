@@ -1,3 +1,7 @@
+---
+read-when: Checking which questions about choice buttons were settled and how.
+---
+
 No open questions. Ken said the rest should be straightforward and he does not need to be asked, so every call below was made by the brief; he can overrule any of them in review.
 
 Settled with Ken in the crucible (details on [the questions page](00_crucible_questions.md)):

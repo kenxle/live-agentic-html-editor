@@ -1,3 +1,5 @@
+// read-when: Changing the Library page's view model (sections, cards, rows, button states and strings), or when its tests fail.
+
 "use strict";
 
 // The Library page's view model: a list response plus the page's own state in,

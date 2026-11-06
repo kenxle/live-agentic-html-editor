@@ -1,3 +1,8 @@
+---
+read-when: Read only to see reviews of an earlier, discarded brief draft shaped as a workflow tool.
+not-for: The current brief reviews; see 01_brief_live_agentic_html_editor_reviews.md.
+---
+
 # Brief reviews
 
 ## review-pm Review (Round 1)

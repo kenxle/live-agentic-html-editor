@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// read-when: Re-measuring what clearing the lesson queue costs an agent with presses against comments.
+//
 // What clearing the lesson queue costs the agent: presses against comments.
 //
 // Plan Task 4.2, verification row V12 (brief R15 and R13). Two runs over the

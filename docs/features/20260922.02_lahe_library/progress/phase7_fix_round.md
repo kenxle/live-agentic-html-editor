@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the review findings on the integrated Library branch and who fixed each.
+---
+
 # Phase 7 fix round
 
 Five reviews of the integrated branch (code reviewer, security, code lead, testing, Codex). Each finding below has an owner. Every fix gets a test that fails first. Ids: CR = code reviewer, SEC = security, CL = code lead, T = testing, CX = Codex.

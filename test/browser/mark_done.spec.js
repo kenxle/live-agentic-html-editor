@@ -1,3 +1,7 @@
+/*
+read-when: Changing how a reviewer closes a card themselves, or when a refused comment cannot be marked done.
+*/
+
 // Mark as done: the reviewer closes a card themselves.
 //
 // Ken, 2026-10-12: "you should always be able to move a card to done when i

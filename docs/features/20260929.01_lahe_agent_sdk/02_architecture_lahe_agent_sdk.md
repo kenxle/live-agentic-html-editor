@@ -1,3 +1,7 @@
+---
+read-when: Read before reviving the parked auto-answer agent, or to learn how it was designed to run one background agent per review.
+---
+
 # Architecture: LAHE starts your agent when a comment is ready
 
 Status: DRAFT, revision 2. The owner rejected the first version, which started a new headless agent for every batch of comments. Every new agent pays its whole start-up cost again. This revision keeps one headless agent running per review, owned by LAHE. The second spike (`spike_persistent_run.md`) showed that this works. The architect and code lead reviewed this revision, and their findings are folded in. Both rounds' tables are at the end. Every guess made on the owner's behalf is listed under Assumptions.

@@ -1,3 +1,5 @@
+// read-when: Changing how Markdown is rendered into a page (blocks, sections, headings, links, Mermaid), or when its tests fail.
+
 "use strict";
 
 const test = require("node:test");

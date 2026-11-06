@@ -1,3 +1,7 @@
+---
+read-when: Finding where the style switcher stands, what shipped and what follow-ups are left.
+---
+
 # Progress: Style switcher
 
 **Done.** The style switcher is live on main: pull request 26 merged it, and pull request 28 gave it its own button in the rail. You approved it on 2026-10-06. Nothing is waiting on you. Last updated 2026-10-06 19:16.

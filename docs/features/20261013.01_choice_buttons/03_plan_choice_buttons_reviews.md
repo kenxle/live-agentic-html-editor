@@ -1,3 +1,7 @@
+---
+read-when: Reading what the plan reviewer found in the choice buttons plan.
+---
+
 ## Plan Review (Round 1)
 
 Reviewer: review-plan (orchestration and test plan). Read: the plan, the brief, the architecture and its review, CLAUDE.md, the menu bar plan, feature-forge `agent-contracts.md` and `implementation-slices.md`, the Step 0 commit `d6e08e0b` on `feat/choice-buttons`, and the code each ownership claim names.

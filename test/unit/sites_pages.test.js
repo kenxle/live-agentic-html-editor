@@ -1,3 +1,5 @@
+// read-when: Changing how the helper serves pages (hidden files, dot segments, resource policy, unknown names, gone files), or when its tests fail.
+
 // Pages served by the helper (stable addresses, Task 1.3).
 //
 // Plan rows: V14 (hidden files and dot segments), V15 (notes page-only), V17

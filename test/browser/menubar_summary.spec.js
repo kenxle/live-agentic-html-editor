@@ -1,3 +1,7 @@
+/*
+read-when: Changing the menu bar's count of what needs attention, or when it shows a question late or a routine reply at all.
+*/
+
 // The menu bar's count against a real review page (menu bar plan, V19 and V5).
 //
 // The summary is read the way the Mac app reads it: a GET signed with the CLI

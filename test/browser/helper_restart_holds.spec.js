@@ -1,3 +1,7 @@
+/*
+read-when: Changing what the page does when the helper is replaced mid-session, or when a restart closes the reviewer's open box.
+*/
+
 // The helper gets replaced under a reviewer who is mid-sentence.
 //
 // One helper serves the whole machine, and any command that needs a helper

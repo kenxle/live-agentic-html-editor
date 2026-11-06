@@ -1,4 +1,7 @@
-"""Linked HTML pages under mounts, what they reference, and the src images.
+"""
+read-when: Listing linked HTML pages under mounts and what they reference, from measurement CSVs.
+
+Linked HTML pages under mounts, what they reference, and the src images.
 
 Usage: python3 html_detail.py refs.csv [refs2.csv ...]
 """

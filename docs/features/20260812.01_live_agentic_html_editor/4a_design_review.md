@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the first design review of the rail, with the states it looked at and what it found.
+---
+
 # 4A design review: the rail, judged as a shipping surface
 
 A staff-designer pass over the built library, driven in a real Chromium against 0C's app

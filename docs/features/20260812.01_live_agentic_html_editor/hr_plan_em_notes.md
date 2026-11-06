@@ -1,3 +1,7 @@
+---
+read-when: "Read when you want the review of whether the plan's tasks could be handed to separate builders and stitched back together."
+---
+
 # EM review: plan v2, orchestratability and integration
 
 Reviewed: `03_plan_live_agentic_html_editor.md` against `02_architecture_live_agentic_html_editor.md`,

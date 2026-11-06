@@ -1,3 +1,5 @@
+// read-when: Changing the drain's catalog_requests section and how a pending Library request wakes the monitor, or when its tests fail.
+
 // The drain's catalog_requests section (LAHE Library, Task 1.4, architecture
 // "The drain section"): a pending Library request is work for the session it
 // is `for`, it wakes the monitor once per request per handoff rev, and the

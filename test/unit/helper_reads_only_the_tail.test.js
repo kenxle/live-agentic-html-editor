@@ -1,3 +1,5 @@
+// read-when: Changing how page loads, `lahe status` and reply polls read the event log, or when the log is folded more than once, or when its tests fail.
+
 // Nothing reads the whole event log twice.
 //
 // Owner: 3A. The brief is

@@ -1,3 +1,5 @@
+// read-when: Changing the menu bar's summary, its one-review reader or its cache (src/service/summary.js), or when its tests fail.
+
 // The menu bar's summary: the one-review reader (Task 1.2) and the summary
 // with its cache (Task 1.3).
 //

@@ -1,3 +1,7 @@
+---
+read-when: Read when changing helper enforcement for free writing, the draft floor, refused events or lahe write.
+---
+
 # Phase 2, helper workstream (2C): progress
 
 **Summary.** Tasks 2.8 to 2.12 are built on `free-writing-2c`, in five commits. `npm run gate:unit` is green: 1647 tests, 1645 pass, 0 fail, 2 todo (the base's 2 todo). None of these tasks names a browser spec, so no browser spec ran, and no full suite ran. `dist/` was not rebuilt or committed.

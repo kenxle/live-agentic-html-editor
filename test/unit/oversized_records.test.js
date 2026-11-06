@@ -1,3 +1,5 @@
+// read-when: Changing what records store (text after a spot, and the other records that grew too large), or when its tests fail.
+
 // Three records that stored far more than they identify.
 //
 // docs/features/20260928.03_oversized_records/NOTES.md has the story of each,

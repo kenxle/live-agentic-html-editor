@@ -1,3 +1,7 @@
+---
+read-when: Changing the Delete button for a bullet, or when it shows the wrong label.
+---
+
 # Delete block on a bullet
 
 ## Decided

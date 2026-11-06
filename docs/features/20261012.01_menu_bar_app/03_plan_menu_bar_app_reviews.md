@@ -1,3 +1,7 @@
+---
+read-when: Reading what the plan reviewer found in the menu bar app plan.
+---
+
 # Plan review: Menu bar app
 
 Reviewer: review-plan (orchestration and test plan). Read: the plan and its three leaves, the brief, the architecture, `CLAUDE.md`, and the code named below.

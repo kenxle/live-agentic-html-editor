@@ -1,3 +1,5 @@
+// read-when: Changing how page identity treats a page's different address spellings as one page, or when its tests fail.
+
 // With the port-80 forward one page has two origins: <name>.lahe.localhost
 // and <name>.lahe.localhost:<pages port>. With .lahe names it has a third,
 // <name>.lahe. They did not match, so a comment made at one spelling was

@@ -1,3 +1,7 @@
+---
+read-when: Finding which small board rows were fixed together on that day and how.
+---
+
 # Progress: Small board fixes
 
 **Building.** Five board rows Ken asked for on 2026-10-19, shipped as one whetstone change. Nothing is waiting on you. Last updated 2026-10-19 06:20 UTC.

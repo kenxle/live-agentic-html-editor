@@ -1,3 +1,5 @@
+// read-when: Changing when a stale helper is left running because a reviewer is using it, or when its tests fail.
+
 // A helper with a reviewer on it is not replaced under them.
 //
 // The shared helper is stopped and started again whenever a command finds the

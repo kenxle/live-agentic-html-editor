@@ -1,3 +1,7 @@
+---
+read-when: Read when changing how the layer boots from its script tag and survives page changes, or to learn how it lives inside a page.
+---
+
 # 2D: living in the page
 
 Branch `task/2d`, worktree `../lahe-worktrees/2d`. Ranked tests 4, 23 and 24.

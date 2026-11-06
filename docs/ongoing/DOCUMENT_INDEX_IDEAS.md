@@ -1,3 +1,7 @@
+---
+read-when: Asking why the Library exists, or what options were weighed for finding old reviews.
+---
+
 # A document index for LAHE
 
 **Short version:** nothing is actually lost. The helper already keeps a record of every review, including the file path and the page title. What's missing is a page that lists them, at an address you can bookmark. My recommendation: build a "Library" page served by the helper at one fixed address, with a "bring it back" button on each row.

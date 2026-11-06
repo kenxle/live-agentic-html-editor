@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the reviewer findings on the free writing brief and how they were answered.
+---
+
 # Reviews: Free writing brief
 
 Brief under review: `01_brief_free_writing.md`. Inputs read: the accepted crucible, the questions page with Ken's answers, `CLAUDE.md`, the diagrams index plus item lifecycle, replay branches, protected region and finding the region, `skills/lahe/SKILL.md`, `docs/CONTRACTS.md`, and the board (`docs/BULLETIN.md`).

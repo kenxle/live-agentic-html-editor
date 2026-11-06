@@ -1,3 +1,7 @@
+---
+read-when: Read when adding or changing a side stripe or edge rule on a rail element, or to learn when one is kept.
+---
+
 # Side stripes: when they mean something, and when they are just noise
 
 ## The rule

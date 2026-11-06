@@ -1,3 +1,5 @@
+// read-when: Changing the environment a test-spawned helper gets, or when a test binds the real pages port.
+
 // A helper a test spawns never binds the real pages port 1483, even when the
 // test file is run on its own, outside `npm run gate:unit` (which sets
 // LAHE_PAGES_PORT=0 for the whole run).

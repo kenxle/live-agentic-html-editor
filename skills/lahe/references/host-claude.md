@@ -1,3 +1,7 @@
+---
+read-when: Setting up the comment monitor in Claude Code, or reading its exit codes.
+---
+
 # Monitor in Claude Code
 
 ## Claude Code

@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the free writing seam spec, notes pages or what an old agent does with new blocks.
+---
+
 # Phase 3, seams workstream: progress
 
 **Summary.** The replay bug is fixed, plan Task 3.4 is built, and two product fixes came out of it. Everything is on `free-writing-seams`, in five commits (`6b00065` to `fd1218d`). `npm run gate:unit` is green: 1712 tests, 1710 pass, 0 fail, 2 todo. The named specs pass in Chromium: `free_writing_seams` (21), `edits_tab` (14) and `free_writing_r14` (6), 41 passed, 0 failed. No full browser suite ran. `dist/` was rebuilt locally and is not staged.

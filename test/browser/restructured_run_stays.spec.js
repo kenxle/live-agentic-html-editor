@@ -1,3 +1,7 @@
+/*
+read-when: Changing how lines the agent restructured stay handled, or when replay writes lines back into a table.
+*/
+
 // The hackathon case: loose lines the agent placed, then turned into a table on
 // request. Spec docs/features/20261011.01_stuck_replayed_blocks.
 //

@@ -1,3 +1,5 @@
+// read-when: Changing the caps on remembered Host names and helper.log lines for refused hosts, or when its tests fail.
+
 // Any web page can make the browser ask for random *.lahe.localhost names or
 // send random Host headers. Each one used to add a key to a map and a line to
 // helper.log, with no limit, so a page could grow the helper's memory and its

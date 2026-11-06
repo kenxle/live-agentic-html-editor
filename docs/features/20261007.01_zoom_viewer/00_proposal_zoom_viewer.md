@@ -1,3 +1,7 @@
+---
+read-when: Asking why graphs and images can be zoomed on a reviewed page, or what was proposed and left out.
+---
+
 # Zoom into graphs and images
 
 **Status, 2026-10-11 09:51 EDT:** done. All three PRs are merged and the cleanup is finished.

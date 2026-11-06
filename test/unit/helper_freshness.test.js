@@ -1,3 +1,5 @@
+// read-when: Changing how the CLI notices a running helper is older than the code on disk and restarts it, or when its tests fail.
+
 // The helper that outlived the code it is running.
 //
 // THE SCAR, TWICE. The predecessor tool wore it first (human-review's 8bb9ce4:

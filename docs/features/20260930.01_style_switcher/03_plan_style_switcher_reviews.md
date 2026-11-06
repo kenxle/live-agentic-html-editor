@@ -1,3 +1,7 @@
+---
+read-when: Reading what the plan and design reviewers found in the style switcher plan.
+---
+
 # Plan reviews: Style switcher
 
 Both reviews read the first plan draft. Their findings are integrated; the summary tables in the plan say what changed. V row numbers below are the draft's.

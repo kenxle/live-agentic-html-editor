@@ -1,3 +1,7 @@
+/*
+read-when: Changing when a rewording bumps the revision, or when rev moves on every keystroke.
+*/
+
 // One rewording is ONE revision.
 //
 // The walk on 2026-08-14 reworded a single sentence and watched rev go 1 -> 29:

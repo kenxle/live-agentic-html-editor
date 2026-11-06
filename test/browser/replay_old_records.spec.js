@@ -1,3 +1,7 @@
+/*
+read-when: Changing replay for edit records made before run records, or when an old-shape record lands wrongly.
+*/
+
 // Old records keep today's replay path (free-writing plan Task 2.5).
 //
 // After the editing workstream lands, Enter makes a run record, so the specs

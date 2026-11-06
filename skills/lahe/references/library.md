@@ -1,3 +1,8 @@
+---
+read-when: Handling a request the Library page sends to the agent.
+not-for: Changing the Library itself; see docs/ongoing/LIBRARY.md.
+---
+
 # The Library
 
 Part of the `lahe` skill. Read [SKILL.md](../SKILL.md) first; this file is the detail for the

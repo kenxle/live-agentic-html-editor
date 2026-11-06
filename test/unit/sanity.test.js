@@ -1,3 +1,5 @@
+// read-when: Checking that the unit test harness is wired up.
+
 // Trivial passing unit test. Proves the unit test harness (node:test, Node's
 // built-in test runner) is wired up. Replace/extend once real modules land.
 

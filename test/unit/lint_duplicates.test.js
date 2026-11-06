@@ -1,3 +1,5 @@
+// read-when: Changing the lint check for a function declared twice in one file (lint_duplicates.js), or when its tests fail.
+
 "use strict";
 
 // LAHE-lint-duplicate-functions: node --check accepts a function declared twice

@@ -1,3 +1,5 @@
+// read-when: Changing how a full browser storage is handled while typing, or when its tests fail.
+
 // A full browser storage stops being a thrown exception in a keystroke handler.
 //
 // The 2026-09-16 memory audit, finding 1: with the helper down the outbox grows

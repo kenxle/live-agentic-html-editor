@@ -1,3 +1,7 @@
+---
+read-when: Read when running or changing the one-time script that shrinks bloated draft history in review logs.
+---
+
 # Compact draft history
 
 A one-time repair for log bloat the tool caused. Before the draft write-cost fix ([spec 20260922.01](../20260922.01_draft_write_cost/01_spec_draft_write_cost.md)), the browser posted the whole record on about every keystroke. The result is long runs of `item.content` events marked `draft: true`, each one replaced by the next. `scripts/compact_draft_history.js` drops those and keeps everything else byte for byte, in order.

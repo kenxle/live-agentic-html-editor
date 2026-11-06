@@ -1,3 +1,5 @@
+// read-when: Changing the sync client's minting, queueing, failure naming or flush policy reading (src/layer/sync.js), or when its tests fail.
+
 // The parts of the sync client that are decidable without a browser: what it
 // mints, what it queues, how it names a failure, and that it reads the flush
 // policy from protocol.js rather than restating it.

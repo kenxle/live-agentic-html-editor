@@ -1,3 +1,5 @@
+// read-when: Changing Hold, the toggle that queues comments and releases them to the agent at once, or when its tests fail.
+
 // Hold: queue several comments, release them to the agent at once.
 //
 // docs/features/20260917.01_hold_toggle/01_spec_hold_toggle.md. Hold gates

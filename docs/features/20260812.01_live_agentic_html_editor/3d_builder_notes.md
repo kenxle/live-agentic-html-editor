@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the Edits tab in the rail or its list export.
+---
+
 # 3D builder notes: the Edits tab
 
 Branch `task/3d`, worktree `../lahe-worktrees/3d`, cut after CP2.

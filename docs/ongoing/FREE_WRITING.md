@@ -1,3 +1,7 @@
+---
+read-when: Changing free writing in the layer, blocks, replay or the run fields in a record.
+---
+
 # Free writing
 
 Shipped in PR #20 (merge 6f3bc6b). Read this before touching `src/layer/editing.js`, `blocks.js`, `replay.js`, or the run fields in `src/shared/record.js`. The feature folder (`docs/features/20260928.01_free_writing/`) is the history of why; this page is how it works now. Where the two differ, this page and the code win.

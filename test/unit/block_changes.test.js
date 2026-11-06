@@ -1,3 +1,6 @@
+// read-when: Changing how the layer compares page blocks to find what changed, or the cap on page size for that snapshot, or when its tests fail.
+// not-for: How a change is painted; see test/browser/change_highlight.spec.js.
+
 // What counts as a change, and what the snapshot refuses to carry.
 //
 // The paint itself is a browser thing (test/browser/change_highlight.spec.js).

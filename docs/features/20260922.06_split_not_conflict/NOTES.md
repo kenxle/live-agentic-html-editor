@@ -1,3 +1,7 @@
+---
+read-when: Read when a multi-paragraph edit shows a conflict card it should not, or when changing how replay reads a split block.
+---
+
 # A split is not a conflict
 
 Summary: when the reviewer types several paragraphs into one block and the

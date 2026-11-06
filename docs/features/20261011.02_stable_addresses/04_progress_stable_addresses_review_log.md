@@ -1,3 +1,7 @@
+---
+read-when: Reading Ken's comments across the stable addresses documents and how each was handled.
+---
+
 # Review log: r5c67aef9754a
 
 **Pages reviewed:** /.lahe-source/14448304a8a22068/parts/architecture/each_page_its_own_comments.md, /04_progress_stable_addresses-c1ca63646095f216.html, /04_progress_stable_addresses.md

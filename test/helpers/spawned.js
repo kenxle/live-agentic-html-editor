@@ -1,3 +1,7 @@
+/*
+read-when: Writing a test that spawns a helper process and has to stop it by pid.
+*/
+
 // Helper processes a test spawned itself, stopped by pid in teardown.
 //
 // WHY. stopTempHelpers finds a helper by the pid its state folder's

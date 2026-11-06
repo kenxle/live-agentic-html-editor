@@ -1,3 +1,5 @@
+// read-when: Changing region label rules or the gesture table (src/shared/regions.js, gestures.js), or when its tests fail.
+
 // Region label rules and the gesture table.
 //
 // The regions half is unchanged. The gestures half follows D3's vocabulary.

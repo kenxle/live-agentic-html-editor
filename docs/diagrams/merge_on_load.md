@@ -1,3 +1,7 @@
+---
+read-when: Changing how the browser and the helper's store settle a disagreement about one item.
+---
+
 # Merge on load
 
 When the browser and the helper's store reconnect, they can disagree about one item, and this diagram shows how that gets resolved. The rule (decision D5 in the architecture doc, and `src/shared/merge.js`) is short: the browser wins on content until the helper has acknowledged it, and the store wins on lifecycle, but only for the revision it is actually talking about. The worked case below is the one the rule exists to protect: an offline reword that must not get swallowed by a stale "handled."

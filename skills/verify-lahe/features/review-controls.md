@@ -1,3 +1,7 @@
+---
+read-when: Verifying closing a card, holding messages and ending a review.
+---
+
 # Review controls
 
 The reviewer manages the review from the rail: closing a card themselves,

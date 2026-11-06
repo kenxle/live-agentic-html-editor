@@ -1,3 +1,7 @@
+---
+read-when: Changing how a review moves with its document out of a removed worktree, or when comments stay behind.
+---
+
 # Spec: a review follows its document out of a worktree
 
 ## Summary

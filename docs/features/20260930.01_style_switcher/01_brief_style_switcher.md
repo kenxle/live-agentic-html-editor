@@ -1,3 +1,7 @@
+---
+read-when: Checking what the style switcher is meant to do, for whom, and what is out of scope.
+---
+
 # Feature Brief: Style switcher
 
 ## Problem, User, and Context

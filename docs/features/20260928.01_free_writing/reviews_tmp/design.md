@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the design review of the free writing plan against the wireframes.
+---
+
 ## Design Review (Round 1)
 
 Reviewed: `03_plan_free_writing.md`, against the brief, the architecture, wireframe direction A (`wireframes/a-block-menu/`), and `wireframes/DECISION.md`. Ken's constraint for this review: editing existing text and writing new text look the same in the editor, and one sitting is one edit.

@@ -1,3 +1,7 @@
+---
+read-when: Finding what the lean agent output change shipped and how its cost was measured.
+---
+
 # Progress: Lean agent output
 
 **Done.** One reviewer comment now costs the agent about 326 tokens instead of 1,320, a 75.3% drop. Nothing is waiting on you. Shipped in [PR #69](https://github.com/kenxle/live-agentic-html-editor/pull/69). Last updated 2026-10-17 12:35.

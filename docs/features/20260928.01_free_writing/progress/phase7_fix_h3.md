@@ -1,3 +1,7 @@
+---
+read-when: Read when the Write here line lingers after an edit ends or drifts off its block.
+---
+
 # Phase 7, fix H3: "+ Write here" never outlives its edit
 
 Summary: the "+ Write here" line now shows only while an edit is open and the pointer is in a gap. When edit state ends, the line is taken out of the layer's shadow root, not just hidden. While it shows, it follows its block, so a scroll or a growing paragraph no longer leaves it over text. The new spec has 14 tests. 11 failed before the change, and all 14 pass now in Chromium, Firefox and WebKit.

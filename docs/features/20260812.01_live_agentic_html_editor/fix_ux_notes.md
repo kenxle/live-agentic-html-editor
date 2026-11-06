@@ -1,3 +1,7 @@
+---
+read-when: Read when changing undo of a single edit, or the other reviewer-facing fixes found in the first real browser walks.
+---
+
 # Two reviewer-facing UX fixes, from the 2026-08-14 real-browser walks
 
 Branch `task/fix-ux`. One commit per bug, each with its failing-then-green run pasted

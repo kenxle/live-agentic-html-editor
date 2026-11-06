@@ -1,3 +1,5 @@
+// read-when: Changing how a review tab polls the helper and sends heartbeats when focused, hidden or idle, or when its tests fail.
+
 // A review tab nobody is looking at stops asking the helper anything.
 //
 // Owner: 1B. The spec is

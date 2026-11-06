@@ -1,3 +1,7 @@
+/*
+read-when: Changing the Playwright fixtures every browser test imports.
+*/
+
 // Playwright's `test` extended with the harness fixtures.
 //
 // Import from here instead of from @playwright/test and the fixture server is

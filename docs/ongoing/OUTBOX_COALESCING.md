@@ -1,3 +1,7 @@
+---
+read-when: Changing how edits are queued for the helper, or when keystrokes produce too many outbox entries.
+---
+
 # One outbox entry per item, not one per keystroke
 
 Written 2026-09-16, alongside the fix. This is the design note the

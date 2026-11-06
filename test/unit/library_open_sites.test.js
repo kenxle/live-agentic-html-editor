@@ -1,3 +1,5 @@
+// read-when: Changing how the Library opens documents with stable addresses switched on, or when its tests fail.
+
 // The Library with stable addresses on (stable addresses, Task 4.1, rows V39
 // to V42).
 //

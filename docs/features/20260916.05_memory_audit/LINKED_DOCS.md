@@ -1,3 +1,7 @@
+---
+read-when: Read when you want to know why a link to a document outside the served folder opens with no editor, and what was proposed to change it.
+---
+
 # Keeping the editor when you follow a link
 
 **Short version:** clicking a link to a document in another folder opens it read-only, with no editor. That was a deliberate security choice. I propose two changes, and the first one does not touch security at all. I need a yes or no on each.

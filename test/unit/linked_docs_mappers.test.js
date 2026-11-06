@@ -1,3 +1,5 @@
+// read-when: Changing how a linked document reloads and is handled-checked against the linked file, or how a Markdown render lists the files behind its links, or when its tests fail.
+
 // Linked-document behavior that is still live, restored from the retired
 // test/retired/unit/linked_docs_rail.test.js for stable addresses: the reload
 // and the handled check for a linked page read the linked file, a Markdown

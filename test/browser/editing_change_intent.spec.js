@@ -1,3 +1,7 @@
+/*
+read-when: Changing the change field an edit commit sends the agent, or when an edit record carries no intent.
+*/
+
 // Finding 7 (cluster C2): the edit commit populates the `change` intent field.
 //
 // The tool's primary gesture is "fix this sentence". Before this fix, a

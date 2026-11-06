@@ -1,3 +1,5 @@
+// read-when: Changing the Library's API routes (list, Open, Star, Launch) or their log lines, or when its tests fail.
+
 // The Library's API routes, wired (LAHE Library, Task 2.1).
 //
 // Plan: "Routes, lifetime, drain text and log (2.1)" in the Test List.

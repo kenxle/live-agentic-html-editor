@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the measurements and findings behind the performance and token work, or the hub that links every document from it.
+---
+
 # LAHE: performance and token work, one page to follow
 
 Ken asked on 2026-09-16, after Claude Code killed several background monitors for low memory and a sibling session blamed Chrome. His point: a leak in the injected layer would show up as Chrome, not as a LAHE process. This is what was measured and what was found. Numbers come from `ps`, a Playwright soak test, and a Python pass over the event logs on disk.

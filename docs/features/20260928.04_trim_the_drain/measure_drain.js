@@ -1,3 +1,6 @@
+/*
+ * read-when: Measuring what the drain prints and repeats, or checking that a change to it saved bytes.
+ */
 // Measure what the drain prints, and what it repeats.
 //
 //   node docs/features/20260928.04_trim_the_drain/measure_drain.js [repo-root]

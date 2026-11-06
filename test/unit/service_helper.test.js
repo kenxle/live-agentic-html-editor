@@ -1,3 +1,5 @@
+// read-when: Changing the helper's durability across a kill, session takeover after a stale heartbeat, or repeated serve, or when its tests fail.
+
 // The helper's own promises: durability across a kill -9, one session per
 // review with a takeover after a stale heartbeat, and an idempotent serve.
 //

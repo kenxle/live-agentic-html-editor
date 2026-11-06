@@ -1,3 +1,5 @@
+// read-when: Changing `lahe status`, the agent-facing read path, or when its tests fail.
+
 // `lahe status`: the one agent-facing read path.
 //
 // These tests build a review's log on disk directly and read it back through

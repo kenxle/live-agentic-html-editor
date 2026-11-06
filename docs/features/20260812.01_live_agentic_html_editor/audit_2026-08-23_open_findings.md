@@ -1,3 +1,7 @@
+---
+read-when: "Read when you want to know which of the architecture review's open suggestions, cuts and questions had been settled in the code at the time of the audit."
+---
+
 # Audit: the review document's tail, open findings
 
 **Scope audited:** `docs/features/20260812.01_live_agentic_html_editor/02_architecture_live_agentic_html_editor_reviews.md`, lines 713 to 943. That is Suggestions S1 to S10, Cuts C1 and C2, Questions Q-A to Q-E, the R26 note in the requirement sweep, the four "Reuse claims" bullets, the two "Alternatives considered: honesty check" gaps, the six "Cross-check against the research" bullets, and the five-item `## Cleanup needed` list at line 930. **35 items.**

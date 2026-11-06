@@ -1,3 +1,7 @@
+---
+read-when: Weighing a different way to feed or build the menu bar app, or asking why an option was rejected.
+---
+
 ### Approaches Ken ruled out in the crucible
 
 A SwiftBar script (no real Lahe icon) and a Dock badge on the Library (he keeps the Dock hidden). See [the crucible](../../00_crucible_menu_bar_app.md).

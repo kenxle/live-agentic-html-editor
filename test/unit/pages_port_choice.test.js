@@ -1,3 +1,5 @@
+// read-when: Changing how the helper chooses its pages port when given a free API port, or when a test binds the real pages port.
+
 // A test that ran `serve({port: 0})` directly, without the test runner's
 // LAHE_PAGES_PORT=0, bound the real pages port 1483. A helper asked for a free
 // API port now takes a free pages port too, unless it is given one. Pure: this

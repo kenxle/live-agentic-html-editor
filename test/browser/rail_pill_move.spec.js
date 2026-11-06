@@ -1,3 +1,7 @@
+/*
+read-when: Changing dragging the collapsed pill, or when a drag opens the rail or a press does not.
+*/
+
 // Moving the collapsed pill out of the page's way.
 //
 // The pill sits bottom-right, which is out of the way of most pages and not out

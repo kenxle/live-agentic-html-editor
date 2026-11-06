@@ -1,3 +1,7 @@
+---
+read-when: Reading Ken's comments on the verification skill page and how each was handled.
+---
+
 # Review log: r392cae6d0416
 
 **Pages reviewed:** /.worktrees/verification-skill/docs/ongoing/VERIFICATION_SKILL.md

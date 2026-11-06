@@ -1,3 +1,5 @@
+// read-when: Changing helperLog's handling of control characters and line length, or when a value from a page could forge a log line.
+
 // Finding 8: helper.log is what AC8 ("outside cannot get in") rests on, so an
 // attacker-controlled value that reaches it must not be able to forge a line.
 // A review id with a newline wrote forged refusal lines (confirmed live). The

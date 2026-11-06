@@ -1,3 +1,7 @@
+---
+read-when: Read when changing where or how often unsent comments are saved, or to learn what that cost before the fix.
+---
+
 # Where unsent comments are saved, and what it costs
 
 Written 2026-09-21. An analysis, not a change. No code was touched.

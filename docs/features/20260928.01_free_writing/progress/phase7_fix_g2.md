@@ -1,3 +1,7 @@
+---
+read-when: Read when you want what was fixed in the replay and rail side of the free writing flow-walk fixes, or the test that proves each fix.
+---
+
 # Phase 7 fix round, G2: replay and rail side of the flow walk
 
 **Summary.** Items 1 to 5 are fixed, each with a test that failed before the fix and passes after. Item 6 waits on G1's description of the split record. `npm run gate:unit` is green. The named Chromium specs pass, and the new specs pass in WebKit and Firefox. Screenshots are in `flow_fix_g2/`.

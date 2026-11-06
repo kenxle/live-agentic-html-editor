@@ -1,3 +1,7 @@
+---
+read-when: Finding what the review-follows-document change shipped and where it stands.
+---
+
 # Progress: a review follows its document out of a worktree
 
 ## Status

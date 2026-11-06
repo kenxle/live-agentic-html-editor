@@ -1,3 +1,7 @@
+/*
+read-when: Changing replay of run records for retagged anchors and the other free-writing fix-round cases.
+*/
+
 // Replay of a run record: the free-writing fix round, group F2
 // (docs/features/20260928.01_free_writing/reviews_impl/FIX_ROUND.md).
 //

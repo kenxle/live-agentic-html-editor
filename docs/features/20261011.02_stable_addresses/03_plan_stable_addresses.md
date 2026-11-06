@@ -1,3 +1,7 @@
+---
+read-when: Seeing how the stable addresses work was split into workstreams and pull requests.
+---
+
 # Plan: Stable addresses
 
 ## Summary

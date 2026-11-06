@@ -1,3 +1,7 @@
+---
+read-when: Changing how documents get lasting addresses or names, or tracing the decisions behind them.
+---
+
 # Stable addresses for documents
 
 ::: callout-note

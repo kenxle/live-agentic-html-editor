@@ -1,3 +1,5 @@
+// read-when: Changing `lahe session` and `lahe review` re-entry (inferred session, final close, takeover), or when its tests fail.
+
 "use strict";
 
 const test = require("node:test");

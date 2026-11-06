@@ -1,3 +1,6 @@
+// read-when: Changing how a comment finds its place again after the page is edited, or when an anchor case here fails.
+// not-for: The anchor engine's own mechanics; see test/unit/anchor_engine.test.js.
+
 // THE CASES A COMMENT HAS TO SURVIVE. This is the list, and it is the test.
 //
 // Ken, after a long argument about fingerprinting: "there's a few use cases and

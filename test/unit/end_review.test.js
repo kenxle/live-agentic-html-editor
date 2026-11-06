@@ -1,3 +1,5 @@
+// read-when: Changing End review (the confirm text, what the helper is told, and the order the two happen in), or when its tests fail.
+
 // End review: what the reviewer is told, what the helper is told, and the order
 // the two happen in.
 //

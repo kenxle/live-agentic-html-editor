@@ -1,3 +1,7 @@
+---
+read-when: Changing how the CLI waits for a starting helper, or when it hides an early helper exit.
+---
+
 # Helper start: report an early exit, and wait as long as add.js
 
 Route: whetstone. Found on PR #92's CI run 39725490547.

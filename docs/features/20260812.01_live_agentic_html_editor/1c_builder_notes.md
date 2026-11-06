@@ -1,3 +1,7 @@
+---
+read-when: Read when changing how comments find their place in the page again, or to learn why anchors match as they do.
+---
+
 # 1C builder notes: the anchor engine
 
 Branch `task/1c`, worktree `../lahe-worktrees/1c`. Implements plan section "1C: Anchor engine" and

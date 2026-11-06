@@ -1,3 +1,6 @@
+// read-when: Changing the zoom viewer's rules (which graphs and images get the button, fit and zoom arithmetic), or when its tests fail.
+// not-for: The viewer in a browser; see test/browser/zoom_viewer.spec.js.
+
 // The zoom viewer's pure rules (src/layer/zoom.js): which graphs and images get
 // the button, and the arithmetic of fit, zoom toward a point, and the wheel.
 // The DOM half is test/browser/zoom_viewer.spec.js.

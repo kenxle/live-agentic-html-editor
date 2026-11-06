@@ -1,3 +1,5 @@
+// read-when: Changing the write-epoch rule in src/shared/epoch.js that keeps replay's own edits from retriggering replay, or when its tests fail.
+
 // The write-epoch rule: replay's own mutations must not retrigger the observer
 // that schedules replay.
 //

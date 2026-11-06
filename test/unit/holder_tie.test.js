@@ -1,3 +1,5 @@
+// read-when: Changing how holderOfFile picks between two live reviews on one file, or when its tests fail.
+
 "use strict";
 
 // LAHE-holder-tie-same-millisecond: two live reviews that hold one file with

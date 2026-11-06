@@ -1,3 +1,5 @@
+// read-when: Changing the pinned words and numbers for the editing workstream in src/layer/editing.js, or when its tests fail.
+
 // Free writing, editing workstream (plan Tasks 2.1 to 2.4): the words and
 // numbers the plan pins, spelled once in src/layer/editing.js, and the one
 // page-level rule highlight.js adds for the editing host.

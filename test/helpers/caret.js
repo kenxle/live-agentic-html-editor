@@ -1,3 +1,7 @@
+/*
+read-when: Writing or debugging a test that compares caret or selection by node identity.
+*/
+
 // Caret and selection helpers.
 //
 // The design choice that matters, and the reason this is a helper rather than a

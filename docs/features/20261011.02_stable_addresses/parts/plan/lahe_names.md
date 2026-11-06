@@ -1,3 +1,7 @@
+---
+read-when: Building or checking the workstream for port-free and .lahe names on macOS.
+---
+
 ### Workstream: lahe-names (Step 6)
 
 **Outcome:** on macOS, `lahe install --port-80` makes addresses print without a port, and `lahe install --lahe-names` makes every site also answer at `<name>.lahe`. Each takes effect only after the helper proves it works. Linux and Windows get written steps for both in `docs/INSTALL.md`.

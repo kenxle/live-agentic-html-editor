@@ -1,3 +1,8 @@
+/*
+read-when: Changing the Playwright global setup and teardown that fails the run when a helper is left running.
+not-for: How tests stop their own helpers; see test/helpers/temp_helpers.js.
+*/
+
 // Playwright global setup and teardown: the browser suite fails if a helper or
 // page server it started on a temp state dir is still running at the end.
 //

@@ -1,3 +1,7 @@
+/*
+read-when: Changing how a stable address outlives its session or the helper, or when an old address stops loading.
+*/
+
 // A stable address outlives the session and the helper (stable addresses
 // Step 3, Task 3.1).
 //

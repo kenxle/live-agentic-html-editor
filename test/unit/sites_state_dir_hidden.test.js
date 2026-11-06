@@ -1,3 +1,5 @@
+// read-when: Changing which files the page handler refuses when they sit inside the state folder, or when its tests fail.
+
 // A site root that is an ancestor of a non-hidden state folder used to serve
 // the state folder: the CLI secret, each review's meta.json (with its token),
 // and every event log. rootProblem refuses a root equal to or inside the

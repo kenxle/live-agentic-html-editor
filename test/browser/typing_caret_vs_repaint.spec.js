@@ -1,3 +1,7 @@
+/*
+read-when: Changing how a repaint of another block affects the caret, or when typed text lands at the front of a paragraph.
+*/
+
 // The reviewer's caret outlives a repaint that did not touch their block.
 //
 // The failure this exists to keep out, seen on CI on 2026-09-15 as cp2_walk

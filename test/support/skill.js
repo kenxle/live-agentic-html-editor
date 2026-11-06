@@ -1,3 +1,7 @@
+/*
+read-when: Writing a test that checks the shipped skill and its references together.
+*/
+
 "use strict";
 
 const fs = require("node:fs");

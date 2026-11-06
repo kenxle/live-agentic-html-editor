@@ -1,3 +1,8 @@
+---
+read-when: Finishing or checking the fingerprinting build steps.
+not-for: How fingerprinting works; see docs/ongoing/FINGERPRINTING.md.
+---
+
 # Fingerprinting: the build
 
 The plan for finishing what `FINGERPRINTING.md` describes. That doc is the

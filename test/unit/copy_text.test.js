@@ -1,3 +1,5 @@
+// read-when: Changing the shared copy-to-clipboard function and its field fallback, or when its tests fail.
+
 // The shared copy function (stable addresses, Task 4.2, the unit half of V44).
 //
 // The browser half is library_address.spec.js, which removes the clipboard API

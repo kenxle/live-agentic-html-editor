@@ -1,3 +1,5 @@
+// read-when: Changing the helper's own page serving, the behaviors carried over from the old page server, or when its tests fail.
+
 // The page-server behaviors that stay, carried over to the helper's own page
 // serving (stable addresses Step 3). Their page-server versions are in the
 // retired test/retired/unit/static_servers.test.js.

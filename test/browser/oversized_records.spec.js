@@ -1,3 +1,8 @@
+/*
+read-when: Changing how big records are bounded in a real browser, or when a comment stores far more page text than it needs.
+not-for: The simulated-DOM half of this; see test/unit/oversized_records.test.js.
+*/
+
 // The three oversized records, against a real browser and a real page.
 //
 // The unit half is test/unit/oversized_records.test.js, over the simulated

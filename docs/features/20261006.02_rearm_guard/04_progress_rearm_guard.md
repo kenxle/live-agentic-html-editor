@@ -1,3 +1,7 @@
+---
+read-when: Finding where the re-arm guard stands and what shipped.
+---
+
 # Progress: Re-arm guard
 
 **Done.** Claude agents restart their Lahe watcher without having to remember: a Stop hook blocks the end of a turn while one of the agent's reviews has nobody watching. Shipped in https://github.com/kenxle/live-agentic-html-editor/pull/31. The leaked test helpers found along the way are fixed in PR 35, merged 2026-10-07. Nothing is waiting on you. Last updated 2026-10-07 18:52.

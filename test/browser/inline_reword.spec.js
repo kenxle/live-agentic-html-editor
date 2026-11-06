@@ -1,3 +1,7 @@
+/*
+read-when: Changing rewording a comment in its own card, or when typing in a card does not change its state.
+*/
+
 // The comment's own words are the editable surface. There is no Reword button.
 //
 // Ken, after using the rail for real: "do we really need a button for 'reword'?

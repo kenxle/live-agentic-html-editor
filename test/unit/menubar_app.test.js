@@ -1,3 +1,5 @@
+// read-when: Changing the menu bar app itself, checked against the fake helper, or when its tests skip or fail.
+
 // The menu bar app against the fake helper: every look and every change
 // between looks (plan V29), the squatter case (V34, the app's half), opening
 // through the allowlist (V30), and Stop and Start (V31).

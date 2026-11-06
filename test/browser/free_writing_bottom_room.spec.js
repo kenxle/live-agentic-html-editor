@@ -1,3 +1,7 @@
+/*
+read-when: Changing scroll room at the bottom of the page during free writing, or when the caret's line hides behind the edit bar.
+*/
+
 // Free writing at the bottom of the page (phase 7, fix H2).
 //
 // Ken, on a real notes page: at the bottom of the page he could not scroll, the

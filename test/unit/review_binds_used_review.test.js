@@ -1,3 +1,5 @@
+// read-when: Changing which review `lahe review` binds the site to and stamps as served, or when a page answers for the wrong review.
+
 // `lahe review` binds the site to a review and stamps it as served. It used to
 // pick the session's newest review that recorded the file, by created_at,
 // while `add` may have reused a different one (`--review`, or a script line

@@ -1,3 +1,7 @@
+---
+read-when: Changing which link types a rendered Markdown page keeps, or when a link renders as plain text.
+---
+
 # Progress: Markdown link allow list
 
 **Building.** Rendered Markdown carries only web, email and phone links, plus relative and in-page ones; every other link type renders as plain text. Nothing is waiting on you. Last updated 2026-10-19 05:55 UTC.

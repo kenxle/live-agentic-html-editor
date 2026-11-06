@@ -1,3 +1,7 @@
+/*
+read-when: Changing edit state boundaries, or when two neighboring edited blocks merge into one record.
+*/
+
 // Ranked test 15: two neighbouring regions never merge into one record.
 //
 // Two REAL Cmd-Shift-E sessions in the browser, on two paragraphs with nothing

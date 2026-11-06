@@ -1,3 +1,7 @@
+---
+read-when: Read when changing what the agent docs, contract and diagrams say about the Library.
+---
+
 # Phase 3, Tasks 3.1 and 3.4: agent docs, contract, and diagrams
 
 **Summary.** Done on branch `task/lib-docs`, off `feat/lahe_library` at `8b0c544`. The skill, the contract (all three copies), `docs/CONTRACTS.md` and `docs/CLI.md` now teach the Library. Three diagrams are updated and two new ones are added. `npm run gate:unit`: 1587 tests, 1585 pass, 0 fail, 2 todo. The two todos are the older `anchor_cases.test.js` ones. The review-format test proves the contract copies are identical.

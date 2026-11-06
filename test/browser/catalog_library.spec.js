@@ -1,3 +1,7 @@
+/*
+read-when: Changing the Library's Open, Pick this up or Move actions end to end, or when a Library row does not do what its button says.
+*/
+
 // The Library, end to end. LAHE Library plan, Task 3.2, "End to end and
 // cross-site (3.2)" in the Test List.
 //

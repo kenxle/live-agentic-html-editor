@@ -1,3 +1,5 @@
+// read-when: Changing choice buttons at the kernel level (the record, its checker, the drain line, the export text, the merge rule), or when its tests fail.
+
 // Choice buttons, the kernel half (docs/features/20261013.01_choice_buttons,
 // plan Step 1).
 //

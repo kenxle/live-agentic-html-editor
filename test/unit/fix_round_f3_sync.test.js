@@ -1,3 +1,5 @@
+// read-when: Changing how the layer refuses an older helper, shows a refused run after reload, or receives the notes flag, or when its tests fail.
+
 // Fix round F3, the layer's sync side (free writing, reviews_impl/FIX_ROUND.md):
 // the layer refuses an older helper (design call 9), a refused run still reads
 // "Not sent" after a reload (code lead 5), and the notes flag reaches the

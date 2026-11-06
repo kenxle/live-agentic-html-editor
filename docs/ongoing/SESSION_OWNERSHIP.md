@@ -1,3 +1,7 @@
+---
+read-when: Changing what the tool keeps true when an agent session changes hands.
+---
+
 # What the tool guarantees when a session changes hands
 
 A LAHE agent session can move from one agent to another. The human asks for it,

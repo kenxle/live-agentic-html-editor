@@ -1,3 +1,7 @@
+---
+read-when: Read when you need to know what free writing should let a reviewer do, or when judging a change against its requirements.
+---
+
 # Feature Brief: Free writing
 
 ## Summary

@@ -1,3 +1,5 @@
+// read-when: Changing how the helper accepts the `.lahe` ending and the port-free address in Host and Origin checks, or when its tests fail.
+
 // The `.lahe` ending and the port-free address, as the core sees them
 // (stable addresses Step 3, with lahe-names 6.0 to 6.2).
 //

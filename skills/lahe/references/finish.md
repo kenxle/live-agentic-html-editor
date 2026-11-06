@@ -1,3 +1,7 @@
+---
+read-when: Making a PDF of a reviewed page, ending a review, or taking the tool back out.
+---
+
 # Finish a review
 
 ## Save as PDF

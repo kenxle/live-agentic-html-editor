@@ -1,3 +1,7 @@
+---
+read-when: Read when you want how the parked auto-answer agent was to be built, in phases, if the work is revived.
+---
+
 # Plan: LAHE starts your agent when a comment is ready
 
 Status: DRAFT, revision 2. Reworked for one background agent per review, kept running, after the owner rejected one new agent per batch. Findings from two review rounds are folded in: the first round's four reviews, and this revision's architect and code lead reviews. The biggest change from the second round is that every agent starts fresh, and nothing is resumed in the first version. The review tables are at the end, and the full prose is in `03_plan_lahe_agent_sdk_reviews.md`.

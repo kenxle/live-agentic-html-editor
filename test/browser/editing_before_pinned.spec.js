@@ -1,3 +1,7 @@
+/*
+read-when: Changing how an edit's before text is pinned, or when a second edit session changes the original wording.
+*/
+
 // Ranked test 17: `before` is pinned at FIRST TOUCH.
 //
 // Enter edit state, type, commit, re-enter, type again, commit. One record, one

@@ -1,3 +1,6 @@
+// read-when: Changing `lahe monitor` (when it prints, waits and exits), or when its tests fail.
+// not-for: Watching several sessions at once; see test/unit/monitor_sessions.test.js.
+
 "use strict";
 
 const test = require("node:test");

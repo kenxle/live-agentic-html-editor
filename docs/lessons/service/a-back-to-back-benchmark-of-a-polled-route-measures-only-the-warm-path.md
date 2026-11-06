@@ -1,4 +1,5 @@
 ---
+read-when: A benchmark of a polled route looks fast but the helper's processor time keeps climbing.
 title: A back-to-back benchmark of a polled route measures only the warm path
 category: service
 symptoms: [the cache is fast in the benchmark but the helper's processor time keeps climbing, ms per request looks fine but ps time per 10 minutes does not, V18 fails while the warm median passes, idle cost is five times the benchmark, a poll every 5 seconds costs more than the same request back to back, light when idle claim does not match ps, first read after start is slow and every spaced poll is slow too]

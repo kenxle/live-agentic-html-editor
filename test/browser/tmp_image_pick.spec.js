@@ -1,3 +1,7 @@
+/*
+read-when: Changing how picking an image with a data URI source opens a comment box.
+*/
+
 "use strict";
 
 const fs = require("node:fs");

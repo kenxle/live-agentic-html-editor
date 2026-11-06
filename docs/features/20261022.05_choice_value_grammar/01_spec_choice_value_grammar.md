@@ -1,3 +1,7 @@
+---
+read-when: Changing which names and values a choice group accepts, or when an agent's choice markup is rejected.
+---
+
 # Spec: Choice names and values as agents write them
 
 **Shipped with this change.** Ken hit it on 2026-10-22 on a bake-off page. Whetstone route. Nothing is waiting on you.

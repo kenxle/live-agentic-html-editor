@@ -1,3 +1,7 @@
+/*
+read-when: Changing choice buttons on a document, or when a press, its state or its reply does not show correctly.
+*/
+
 // Choice buttons on a document (docs/features/20261013.01_choice_buttons).
 //
 // The real walk: `lahe review` on a copy of a fixture, with this worktree's

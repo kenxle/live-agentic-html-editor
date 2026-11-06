@@ -1,3 +1,8 @@
+---
+read-when: "Read only for a saved export of Ken's comments on the brief."
+not-for: How the comments were handled; see 01_brief_live_agentic_html_editor_reviews.md.
+---
+
 # Review comments: Feature Brief: Live Agentic HTML Editor
 
 _Doc: 01_brief_live_agentic_html_editor.html · saved 2026-08-12T15:40:45 · 65 comment(s)_

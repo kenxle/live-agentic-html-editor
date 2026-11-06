@@ -1,3 +1,7 @@
+/*
+read-when: Changing how a login-item helper is replaced while a review window is open, or when the page stops working after a helper upgrade.
+*/
+
 // V51: a stale always-on helper is replaced at a quiet moment with a review
 // window open, and the page keeps working.
 //

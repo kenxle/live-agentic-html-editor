@@ -1,3 +1,5 @@
+// read-when: Changing how the helper launches a new agent itself from a Library row (src/service/catalog_launch.js), or when its tests fail.
+
 "use strict";
 
 // The helper launching a new agent itself (src/service/catalog_launch.js).

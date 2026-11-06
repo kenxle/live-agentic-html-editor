@@ -1,3 +1,5 @@
+// read-when: Changing how a window's goodbye is handled against requests already on the wire, or when a reload leaves the window read-only.
+
 // The goodbye, and the requests that were already on the wire when it went out.
 //
 // WHAT HAPPENED. reload_claim.spec.js's "reloading the page over and over never

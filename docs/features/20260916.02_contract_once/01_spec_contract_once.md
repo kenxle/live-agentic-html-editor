@@ -1,3 +1,7 @@
+---
+read-when: Read when changing how often the agent contract is printed by the status command, or when an agent seems to miss it.
+---
+
 # Stop repeating the agent contract on every drain
 
 A whetstone-size change. Ken approved it on 2026-09-16 after seeing the numbers. Progress is at the bottom of this page; it updates as the work lands.

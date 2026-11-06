@@ -1,3 +1,8 @@
+---
+read-when: "Read only for the log of Ken's review comment on the Library progress page."
+not-for: The progress page itself; see 04_progress_lahe_library.md.
+---
+
 # Review log: re32b5abb8196
 
 **Pages reviewed:** /04_progress_lahe_library-fdf092f7193a770f.html

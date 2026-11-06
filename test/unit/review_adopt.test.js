@@ -1,3 +1,5 @@
+// read-when: Changing how a legacy review without a session is adopted into an agent session, or when its tests fail.
+
 "use strict";
 
 // Adopting a pre-session (legacy) review into an agent session. A review that

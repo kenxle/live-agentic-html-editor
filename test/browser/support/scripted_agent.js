@@ -1,3 +1,7 @@
+/*
+read-when: Writing or debugging a seam spec that needs a scripted agent answering from review.json.
+*/
+
 // The scripted agent for the seam specs (plan Task 3.4).
 //
 // It follows the contract in review.json, and it knows only two things: the

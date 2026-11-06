@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the evidence from the first acceptance run of the built tool, criterion by criterion.
+---
+
 # 4A: Acceptance scorecard
 
 Scored by an evaluator agent that did not build the code, on the running tool in a real browser,

@@ -1,3 +1,7 @@
+---
+read-when: Read when changing how replay places a run of new blocks after an anchor.
+---
+
 # Phase 2, replay workstream (2B): progress
 
 **Summary.** Tasks 2.5 to 2.7 are built on `free-writing-2b` in commit `51bb8d6`. `npm run gate:unit` is green: 1621 tests, 1619 pass, 0 fail, 2 todo (the same 2 as the base). The four new browser specs pass (53 tests), and the five existing specs the plan names pass unchanged (40 tests). No full browser suite ran. `dist/` was rebuilt locally for the existing specs and screenshots, then put back; it is not committed.

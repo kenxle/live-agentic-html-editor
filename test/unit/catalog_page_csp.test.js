@@ -1,3 +1,5 @@
+// read-when: Changing the Library page's content security policy header, or its inline style, or when its tests fail.
+
 "use strict";
 
 // The Library page's content policy (Library fix round, SEC6). It used to set

@@ -1,3 +1,6 @@
+// read-when: Changing the refresh trigger that reloads a page when the reviewed file's modified time changes, or when its tests fail.
+// not-for: The page actually reloading; see test/browser/auto_reload.spec.js.
+
 // R36's refresh trigger, at the level it is decidable without a browser: the
 // helper reporting the reviewed file's mtime on the reply poll, and the layer
 // deciding from a sequence of those values whether to reload.

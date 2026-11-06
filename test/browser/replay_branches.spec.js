@@ -1,3 +1,8 @@
+/*
+read-when: Changing replay's decision branches, idempotence or lost anchors, or when replay rewrites a page it should leave alone.
+not-for: The simulated-DOM half of this; see test/unit/replay_pass.test.js.
+*/
+
 // Replay's four branches, its idempotence, and its lost anchors, in a real
 // browser, on a page that actively reverts what the tool writes.
 //

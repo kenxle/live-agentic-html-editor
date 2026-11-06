@@ -1,3 +1,6 @@
+// read-when: Changing the anchor engine in src/layer/anchor.js, or when its tests fail.
+// not-for: The list of cases a comment has to survive; see test/unit/anchor_cases.test.js.
+
 // The anchor engine (task 1C), judged against the SAME corpus as the shared
 // uniqueness predicate (test/fixtures/uniqueness_corpus.js), plus the
 // transformation set the plan names.

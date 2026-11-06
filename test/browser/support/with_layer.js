@@ -1,3 +1,7 @@
+/*
+read-when: Writing or debugging a spec that needs the real library on a page the fixtures do not serve.
+*/
+
 // Putting the real library on a page the library's own fixtures do not serve.
 //
 // Owner: 2D (living in the page). Not a harness file: it is support for 2D's

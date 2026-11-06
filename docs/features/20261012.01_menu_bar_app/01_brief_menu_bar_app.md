@@ -1,3 +1,7 @@
+---
+read-when: Checking what the menu bar app is meant to do, for whom, and what is out of scope.
+---
+
 # Feature Brief: Menu bar app
 
 ## Summary

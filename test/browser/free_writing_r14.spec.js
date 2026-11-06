@@ -1,3 +1,7 @@
+/*
+read-when: Changing how bold and italic in new blocks survive the agent's rebuild, or when a placed run loses its formatting.
+*/
+
 // Brief R14 (bold and italic edits survive the rebuild), on a real
 // `lahe review post.md`.
 //

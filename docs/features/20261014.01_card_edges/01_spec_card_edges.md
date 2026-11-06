@@ -1,3 +1,7 @@
+---
+read-when: Changing the border or background of rail cards, or when a card edge looks curved or tinted.
+---
+
 # Card edges: no curved left stripe, no green wash
 
 **Summary.** Two rail card styles go. The blue stripe down a card's left edge, which bends round the rounded corner, is replaced by the card's own border turning blue. The green wash on handled cards is replaced by the plain white card; the green HANDLED chip still says done.

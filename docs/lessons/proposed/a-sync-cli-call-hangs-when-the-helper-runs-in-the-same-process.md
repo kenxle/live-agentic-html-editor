@@ -1,4 +1,5 @@
 ---
+read-when: A test hangs on a synchronous lahe call, or stray helpers pile up in a test's state folder.
 title: A synchronous CLI call hangs when the helper runs in the same test process
 category: testing
 symptoms: [test hangs, spec times out, lahe review never returns, CLI waits forever on the helper, helpers pile up in the test's temp state folder, stray helper count goes up, execFileSync hangs]

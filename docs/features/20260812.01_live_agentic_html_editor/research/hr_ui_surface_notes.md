@@ -1,3 +1,7 @@
+---
+read-when: Read when you want to know what a person can do in the page in the human-review tool, as research for the design.
+---
+
 # human-review: feature spec of the browser surface
 
 Extracted read-only from `/Users/kennethstclair/.claude/tools/human-review/` (clone of

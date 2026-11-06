@@ -1,3 +1,7 @@
+---
+read-when: Reading the first security review of the plan to let each page carry its own comments.
+---
+
 # Security review: each page carries its own comments (option c)
 
 Reviewed: [each_page_its_own_comments.md](../architecture/each_page_its_own_comments.md), against `src/service/page_routes.js` (`pickReview`, `reviewAnswersOnSite`, `recordsForPage`, `fileForPage`), the `records.read` route in `src/service/routes.js`, `siteOriginAllowed` in `src/service/index.js`, and `docs/CONTRACTS.md`.

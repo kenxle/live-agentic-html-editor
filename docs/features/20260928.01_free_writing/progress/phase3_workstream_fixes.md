@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the integration fixes made after the first free writing workstreams were merged.
+---
+
 # Phase 3, integration fixes: progress
 
 **Summary.** The five fixes are built on `free-writing-fix`, in four code commits plus this page. `npm run gate:unit` is green: 1693 tests, 1691 pass, 0 fail, 2 todo (the base's 2). The named browser specs pass in Chromium: 73 tests, 0 failed, after a local `dist/` rebuild that is not committed. No full browser suite ran.

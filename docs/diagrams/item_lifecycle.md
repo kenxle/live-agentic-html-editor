@@ -1,3 +1,7 @@
+---
+read-when: Changing the states a comment or edit moves through, or when an item sits in the wrong state.
+---
+
 # Item lifecycle
 
 Every comment you leave and every edit you make is one "item," and at any moment it sits in exactly one of four states. This diagram is `src/shared/lifecycle.js`'s transition table drawn as a picture; every arrow below also names who is allowed to draw it, because that rule is the whole reason the diagram exists.

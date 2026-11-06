@@ -1,3 +1,7 @@
+/*
+read-when: Writing or debugging a menu bar test that needs a pretend Mac.
+*/
+
 // A Mac, played, for the menu bar tests (test/unit/menubar*.test.js and the
 // menu bar half of install_command.test.js). No real xcrun, swiftc or
 // launchctl runs.

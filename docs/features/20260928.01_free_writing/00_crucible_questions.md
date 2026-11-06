@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the questions put to Ken about free writing and his answers, including the Tiptap decision.
+---
+
 # Free writing in LAHE: the crucible
 
 Date: 2026-09-28

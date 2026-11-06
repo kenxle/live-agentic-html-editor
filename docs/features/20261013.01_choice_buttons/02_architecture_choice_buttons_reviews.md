@@ -1,3 +1,7 @@
+---
+read-when: Reading the architect and other findings on the choice buttons design.
+---
+
 ## Architect Review (Round 1)
 
 Reviewer: review-architect. Read against the brief (R1 to R19), `docs/ongoing/ARCHITECTURE.md`, `docs/CONTRACTS.md`, the diagrams named in the task, `docs/ongoing/OUTBOX_COALESCING.md`, and the code at the lines cited below. Nothing in the architecture or the brief was edited.

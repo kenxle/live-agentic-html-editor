@@ -1,3 +1,7 @@
+/*
+read-when: Changing who rebuilds the page after a source edit, or when a handled claim the page does not bear out is not caught.
+*/
+
 // The rebuild is not the agent's job, and a handled claim is checked.
 //
 // The report, 2026-09-23: "i just had a really annoying set of edits where i

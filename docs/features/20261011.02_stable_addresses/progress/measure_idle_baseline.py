@@ -1,3 +1,6 @@
+"""
+read-when: Re-measuring what Lahe processes cost while idle, the baseline for stable addresses.
+"""
 import subprocess, time, json, os, sys
 HOME=os.path.expanduser('~')
 STATE=HOME+'/.local/state/lahe'

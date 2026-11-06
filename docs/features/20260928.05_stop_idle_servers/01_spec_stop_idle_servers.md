@@ -1,3 +1,7 @@
+---
+read-when: "Read when changing when the helper stops a session's page servers, or when a page server is gone after a quiet spell."
+---
+
 # Stop page servers nobody is looking at
 
 Whetstone-size. Part 2 of [GitHub issue 16](https://github.com/kenxle/live-agentic-html-editor/issues/16) (idle reviews cost too much). Part 1, quiet tab polling, is `docs/features/20260928.01_quiet_tab_polling/`, and this branch is cut from it because it reads that change's heartbeat. Progress is at the bottom.

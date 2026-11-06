@@ -1,3 +1,7 @@
+---
+read-when: Verifying the agent's drain, reply and monitor loop.
+---
+
 # The agent's loop
 
 The agent's side of Lahe is the CLI. It drains what the reviewer sent, answers

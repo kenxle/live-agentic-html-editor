@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the review of the tests written for free writing.
+---
+
 ## Testing Review (implemented tests)
 
 **Summary.** The built tests close most of the round 1 findings, and several are strong:
