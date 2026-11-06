@@ -1,3 +1,7 @@
+---
+read-when: "Read when changing the helper's state folder, event log, request checks or token minting, or to learn why they work as they do."
+---
+
 # 1A builder notes: helper core, review creation, and token minting
 
 Branch `task/1a`, worktree `../lahe-worktrees/1a`. Everything below was run with Node 20.19.0.

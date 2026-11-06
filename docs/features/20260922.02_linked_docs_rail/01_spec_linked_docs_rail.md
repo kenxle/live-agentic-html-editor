@@ -1,3 +1,7 @@
+---
+read-when: Read when changing how the editor stays on a page reached by a link, or when a followed link opens with no rail.
+---
+
 # Keep the editor when you follow a link
 
 ## Status

@@ -1,3 +1,7 @@
+---
+read-when: Read when you need to know what the Library page is for and what it should let Ken do, or when judging a change against its requirements.
+---
+
 # Feature Brief: LAHE Library
 
 **Summary:** A page that lists every document ever reviewed in LAHE, so Ken can browse them, bring one back with its comments and rail, and close tabs without worrying. Open and Star act directly from the page. Picking a document up, or launching a fresh agent on it, goes through an agent.

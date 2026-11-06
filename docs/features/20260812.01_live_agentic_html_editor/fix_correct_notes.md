@@ -1,3 +1,7 @@
+---
+read-when: Read when changing replay, epoch or record correctness, or the conflict card, or to learn which review findings were fixed there.
+---
+
 # fix-correct notes (Phase 5 review wave)
 
 Branch: `task/fix-correct`. Owns replay/epoch/record correctness fixes and the conflict-card

@@ -1,3 +1,7 @@
+---
+read-when: Read when you want where the Library stood when it was handed over before a context compaction, with the open pull request and preview rounds.
+---
+
 # Handoff: where the Library stands (2026-09-29, before a context compaction)
 
 ## State

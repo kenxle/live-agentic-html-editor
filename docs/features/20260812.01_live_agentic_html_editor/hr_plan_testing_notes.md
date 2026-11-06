@@ -1,3 +1,7 @@
+---
+read-when: "Read when you want the review of whether the plan's tests would fail if the mechanism were missing."
+---
+
 # Test review: the plan's Test List and Acceptance Criteria
 
 Reviewed: `03_plan_live_agentic_html_editor.md` (Tests ranked, Acceptance criteria, per-task Done-when),

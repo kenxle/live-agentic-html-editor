@@ -1,3 +1,7 @@
+---
+read-when: Read when changing rail visuals the design review flagged, or to see how each finding was fixed and re-photographed.
+---
+
 # 4B design fixes: the rail made shippable
 
 Answers the 4A design review (`4a_design_review.md`, F1-F13) and the acceptance

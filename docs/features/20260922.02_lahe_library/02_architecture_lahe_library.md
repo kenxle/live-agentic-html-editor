@@ -1,3 +1,7 @@
+---
+read-when: Read before changing how the Library page, its routes, its request queue or its checks are designed, or to learn why a choice was made.
+---
+
 # Architecture: LAHE Library
 
 ## Summary

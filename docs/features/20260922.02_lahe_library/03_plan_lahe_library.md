@@ -1,3 +1,7 @@
+---
+read-when: Read when you want how the Library build was split into phases and tasks, or why a test was written.
+---
+
 # Plan: LAHE Library
 
 Four phases. Phase 0 is one orchestrator commit that spells every shared name before anyone forks. Phase 1 is four pieces built in parallel. Phase 2 wires them into the routes and builds the page, in parallel. Phase 3 closes out the agent docs, the browser proof, the count script, the diagrams, and the walk through every user story.

@@ -1,3 +1,7 @@
+---
+read-when: "Read when the helper is slow to start or answer after a restart, or when changing how and when it rebuilds each review's summary file."
+---
+
 # The helper stops re-reading every log
 
 Ken said go on 2026-09-16 (fix 2 on the memory audit page, board row LAHE-helper-boot-storm). This is the brief. Progress is at the bottom and updates as the work lands.

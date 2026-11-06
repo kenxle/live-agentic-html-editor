@@ -1,3 +1,7 @@
+---
+read-when: Read when you need to know what the live agentic HTML editor was first meant to do and for whom, or when judging a change against the original requirements.
+---
+
 # Feature Brief: Live Agentic HTML Editor
 
 ## Context

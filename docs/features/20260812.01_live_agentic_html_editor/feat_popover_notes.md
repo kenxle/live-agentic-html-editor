@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the popover that appears after a selection, or its comment and edit buttons.
+---
+
 # The selection popover
 
 Ken, from real use: "when i highlight things, i no longer get the button popup with the comment button.

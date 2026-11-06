@@ -1,3 +1,7 @@
+---
+read-when: "Read when a reviewer's paragraphs appear twice after replay, or when changing how replay writes a multi-paragraph edit."
+---
+
 # The reviewer's words, once
 
 Summary: replay was writing every paragraph of a multi-paragraph edit into the

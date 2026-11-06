@@ -1,3 +1,7 @@
+---
+read-when: Read when changing how a block goes into edit state and how typed edits become records.
+---
+
 # 2A builder notes: editing
 
 Worktree `../lahe-worktrees/2a`, branch `task/2a`. Owns `src/layer/editing.js` and

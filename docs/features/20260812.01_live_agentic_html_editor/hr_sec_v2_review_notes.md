@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the security review of the second architecture draft and the weaknesses it named.
+---
+
 # Security review: architecture v2 (Live Agentic HTML Editor)
 
 Artifact under review: `02_architecture_live_agentic_html_editor.md`.

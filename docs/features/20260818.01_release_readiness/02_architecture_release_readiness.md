@@ -1,3 +1,7 @@
+---
+read-when: Read when changing how reviews, browser windows and agent sessions are told apart, or to learn why the release hardening was designed as it was.
+---
+
 # Release-hardening architecture
 
 ## Boundaries

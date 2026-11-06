@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the record shapes, lifecycle states or the merge rule, or to learn why they were rewritten.
+---
+
 # 0A-kernel builder notes
 
 Task: the contract half of Phase 0. Branch `feat/live_agentic_html_editor`, main checkout.

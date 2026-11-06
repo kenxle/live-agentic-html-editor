@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the Library page, its view model or its page script.
+---
+
 # Phase 2, Task 2.2: the Library page
 
 **Summary.** The Library page is built: a pure view model with 95 unit tests, the page script, the template body and its style, and a browser spec of 12 tests. It is built against `test/fixtures/catalog_list.json` because Task 2.1's routes still answer 501. Results:
