@@ -1,6 +1,4 @@
----
-read-when: Introducing Lahe to a newcomer, or finding what it does, how to start, and which agents it works with.
----
+<!-- read-when: Introducing Lahe to a newcomer, or finding what it does, how to start, and which agents it works with. -->
 
 # Live Agentic HTML Editor (Lahe)
 

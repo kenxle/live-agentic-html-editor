@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.4.0+6b537bf1bb5c
+ * version 0.4.0+6a3749ffc3e2
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,9 +12,13 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.4.0+6b537bf1bb5c";
+  g.LAHE.version = "0.4.0+6a3749ffc3e2";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
+/*
+ * read-when: Changing the attributes and classes that mark page nodes the tool added.
+ */
+
 // Markers: the attribute and class names that identify DOM the tool added.
 //
 // Owner: Task 0a (shared kernel). Imported by: normalize (cleanMarkup strips
@@ -185,6 +189,10 @@
 })(typeof globalThis !== "undefined" ? globalThis : this);
 
 /* ---- src/shared/normalize.js  (owner: 0A-kernel) ---- */
+/*
+ * read-when: Changing how text and markup are normalized for recording or comparing, or when a region fails to match its record.
+ */
+
 // The one normalizer.
 //
 // Owner: 0A-kernel. Imported by: the edit recorder (2A) when it mints a
@@ -2151,6 +2159,10 @@
 });
 
 /* ---- src/shared/failures.js  (owner: 0A-wire) ---- */
+/*
+ * read-when: Adding or changing a failure code, or finding what a failure shown in the rail means.
+ */
+
 // The failure code enum.
 //
 // Owner: 0A-wire. Imported by: the sync client and the rail's failures list
@@ -2839,6 +2851,10 @@
 })(typeof globalThis !== "undefined" ? globalThis : this);
 
 /* ---- src/shared/style_rules.js  (owner: Style switcher 1.1) ---- */
+/*
+ * read-when: Changing what counts as a valid style id, colour or name.
+ */
+
 // Style rules: the style id, the hex colour and the style name, spelled once.
 //
 // Owner: Style switcher 1.1. Imported by: src/service/styles.js (install,
@@ -2914,6 +2930,10 @@
 })(typeof globalThis !== "undefined" ? globalThis : this);
 
 /* ---- src/shared/record.js  (owner: 0A-kernel) ---- */
+/*
+ * read-when: Adding or renaming an item field, or when an item record fails validation.
+ */
+
 // The item record: the single place every field name in this tool is spelled.
 //
 // Owner: 0A-kernel. Imported by: the store (1B), the sync client (1B), the
@@ -5683,6 +5703,10 @@
 });
 
 /* ---- src/shared/lifecycle.js  (owner: 0A-kernel) ---- */
+/*
+ * read-when: Changing the item states and who may move an item between them.
+ */
+
 // The item lifecycle transition table, and who may make each transition.
 //
 // Owner: 0A-kernel. Imported by: the store (1B), the helper's projection (3A),
@@ -6088,6 +6112,10 @@
 });
 
 /* ---- src/shared/merge.js  (owner: 0A-kernel) ---- */
+/*
+ * read-when: Changing how browser storage and the helper's store are reconciled for one item, or when a comment reverts after a reconnect.
+ */
+
 // The merge rule: what happens when browser storage and the helper's store
 // disagree about one item.
 //
@@ -6321,6 +6349,10 @@
 });
 
 /* ---- src/shared/regions.js  (owner: 0A-kernel) ---- */
+/*
+ * read-when: Changing how a region is labeled for display.
+ */
+
 // Region label rules.
 //
 // Owner: Task 0a (shared kernel). Imported by: the anchor engine (1C), the edit
@@ -6555,6 +6587,10 @@
 });
 
 /* ---- src/shared/uniqueness.js  (owner: 0A-kernel) ---- */
+/*
+ * read-when: Changing the rule that decides whether an anchor match is safe to write to.
+ */
+
 // The uniqueness predicate: architecture D3, Law 1.
 //
 // Owner: Task 0a (shared kernel). Imported by: the anchor engine (1C) and
@@ -6787,6 +6823,10 @@
 });
 
 /* ---- src/shared/gestures.js  (owner: 0A-kernel) ---- */
+/*
+ * read-when: Changing the keyboard shortcuts and gesture table, or the hint lines built from them.
+ */
+
 // The gesture table.
 //
 // Owner: 0A-kernel. Imported by: the rail's hint lines (1B), the comment
@@ -7557,6 +7597,10 @@
 })(typeof globalThis !== "undefined" ? globalThis : this);
 
 /* ---- src/shared/epoch.js  (owner: 0A-kernel) ---- */
+/*
+ * read-when: Changing how replay's own page writes are kept from retriggering replay, or when replay loops.
+ */
+
 // The write epoch: how replay's own mutations stop retriggering the observer
 // that schedules replay.
 //
@@ -7751,6 +7795,10 @@
 })(typeof globalThis !== "undefined" ? globalThis : this);
 
 /* ---- src/shared/elapsed.js  (owner: 0A-kernel) ---- */
+/*
+ * read-when: Changing how elapsed time is worded for a reader.
+ */
+
 // How long something has been going on, in words a person reads.
 //
 // Owner: 0A-kernel.
@@ -7813,6 +7861,10 @@
 })(typeof globalThis !== "undefined" ? globalThis : this);
 
 /* ---- src/shared/protocol.js  (owner: 0A-wire) ---- */
+/*
+ * read-when: Changing the wire between page, helper and agent, such as routes, event lines, reply shapes or the script tag.
+ */
+
 // The wire: every byte that leaves this repo.
 //
 // Owner: 0A-wire. Imported by: the helper's router and per-request check block
@@ -10079,6 +10131,11 @@
 });
 
 /* ---- src/shared/review_format.js  (owner: 0A-wire, FROZEN at CP0) ---- */
+/*
+ * read-when: Changing what review.json says, the Copy and Export text, or the agent contract text.
+ * not-for: Where review.json is written; see src/service/review_writer.js.
+ */
+
 // The two things the reviewer's work turns into: the `review.json` projection
 // the helper writes for the agent, and the human-readable text the library's
 // Copy and Export produce from its own records.
@@ -11171,6 +11228,10 @@
 });
 
 /* ---- src/shared/record_fixtures.js  (owner: 0A-kernel) ---- */
+/*
+ * read-when: Writing a browser test that needs a realistic edit record.
+ */
+
 // The record fixture generator.
 //
 // Owner: 0A-kernel. Imported by: 2B (protection) and 2C (replay), which have to
@@ -11705,6 +11766,10 @@
 });
 
 /* ---- src/layer/listeners.js  (owner: 2D) ---- */
+/*
+ * read-when: Changing the layer's event listener registry, or when handlers pile up after the page re-renders.
+ */
+
 // The listener registry.
 //
 // Owner (from Phase 1 on): Task 2C, living in the page. Phase 0 ships it
@@ -11862,6 +11927,10 @@
 })(typeof globalThis !== "undefined" ? globalThis : this);
 
 /* ---- src/layer/selection.js  (owner: 0A-kernel, FROZEN at CP0) ---- */
+/*
+ * read-when: Needing the caret or selection position in the page, or changing how it is read.
+ */
+
 // The caret and selection accessor.
 //
 // Owner: 0A-kernel, and FROZEN AT CP0. 2A (editing) and 2B (protection) both
@@ -12033,6 +12102,10 @@
 });
 
 /* ---- src/layer/blocks.js  (owner: free-writing kernel) ---- */
+/*
+ * read-when: Changing how the layer reads or writes a block of text in the live page, or when a written block differs from its record.
+ */
+
 // The DOM block rules, in one copy.
 //
 // Owner: free-writing kernel (docs/features/20260928.01_free_writing, plan
@@ -12400,6 +12473,10 @@
 });
 
 /* ---- src/layer/store.js  (owner: 1B) ---- */
+/*
+ * read-when: Changing the browser draft store, or when a draft or unsent event is lost on reload.
+ */
+
 // The draft store: browser storage, written synchronously on every change.
 //
 // Owner: 1B.
@@ -14033,6 +14110,10 @@
 });
 
 /* ---- src/layer/anchor.js  (owner: 1C) ---- */
+/*
+ * read-when: Changing how a comment or edit finds its place after the page changes, or when an anchor resolves to the wrong spot.
+ */
+
 // The anchor engine: mint a region reference, resolve it in a changed document.
 //
 // Owner: 1C. Implements architecture D9 (anchors match by uniqueness, not
@@ -15852,6 +15933,11 @@
 });
 
 /* ---- src/layer/pointing.js  (owner: 1C) ---- */
+/*
+ * read-when: Changing where a comment points once its words are gone from the page.
+ * not-for: Deciding where an edit is written; see anchor.js.
+ */
+
 // Where a comment POINTS when its words are gone.
 //
 // This module exists because of one sentence in anchor.js, which is still true
@@ -16309,6 +16395,10 @@
 });
 
 /* ---- src/layer/protect.js  (owner: 2B) ---- */
+/*
+ * read-when: Changing how an edited block is protected from the page's own repaints, or when the caret jumps during a repaint.
+ */
+
 // The protection API: mark, veto, snapshot, restore, release.
 //
 // Owner: 2B. D7's first half, and it ships with ALL THREE LAYERS or not at all.
@@ -17506,6 +17596,10 @@
 });
 
 /* ---- src/layer/highlight.js  (owner: 1D) ---- */
+/*
+ * read-when: Changing how comment highlights are painted, or when a highlight is missing or alters the page.
+ */
+
 // Highlights that do not change the page, and the library's one contact
 // surface with the page's own document.
 //
@@ -18656,6 +18750,10 @@
 });
 
 /* ---- src/layer/style_switch.js  (owner: Style switcher 2.1) ---- */
+/*
+ * read-when: Changing the page side of the style switcher, or when a previewed style does not apply or stick.
+ */
+
 // The document style switcher, page side: try an installed style on this page
 // with no reload, keep the choice per page, and know when the agent has been
 // asked to make it permanent.
@@ -19598,6 +19696,11 @@
 });
 
 /* ---- src/layer/overlay.js  (owner: 1B) ---- */
+/*
+ * read-when: Changing the rail's chrome, status line, failure chips or card API, or when the rail redraws and loses focus.
+ * not-for: What a tab shows; see tab_active.js, tab_done.js and tab_edits.js.
+ */
+
 // The rail: the chrome, the card API, the status line, and the failure chips.
 //
 // Owner: 1B.
@@ -28316,6 +28419,10 @@
 });
 
 /* ---- src/layer/tab_active.js  (owner: 1D) ---- */
+/*
+ * read-when: Changing the rail's Active tab, or when outstanding comments show wrongly.
+ */
+
 // The Active tab's contents: outstanding comments and notes, newest visible,
 // and the open note box at the foot.
 //
@@ -29535,6 +29642,10 @@
 });
 
 /* ---- src/layer/tab_done.js  (owner: 3A) ---- */
+/*
+ * read-when: Changing the rail's Done tab, or how an agent's answer or question appears on a card.
+ */
+
 // The Done tab's contents, what an agent's answer does to a card, and the
 // treatment a question gets.
 //
@@ -32204,6 +32315,10 @@
 });
 
 /* ---- src/layer/tab_edits.js  (owner: 3D) ---- */
+/*
+ * read-when: Changing the hand-edit rows inside rail cards.
+ */
+
 // The hand-edit rows: every hand edit as a before-and-after row inside its
 // rail card.
 //
@@ -33058,6 +33173,10 @@
 });
 
 /* ---- src/layer/conflict_toast.js  (owner: conflict-toast) ---- */
+/*
+ * read-when: Changing when the conflict toast shows or what it says, or when a clash goes unannounced.
+ */
+
 // The conflict toast: "your edit clashed, nothing is lost, go choose".
 //
 // Owner: conflict-toast (2026-09-22). The toast itself is the rail's
@@ -33396,6 +33515,10 @@
 });
 
 /* ---- src/layer/export.js  (owner: 3C) ---- */
+/*
+ * read-when: Changing the rail's Copy and Export controls, or when the text they produce is wrong.
+ */
+
 // Copy and Export: the reviewer's way out, with or without a helper.
 //
 // Owner: 3C.
@@ -34042,6 +34165,10 @@
 });
 
 /* ---- src/layer/sync.js  (owner: 1B) ---- */
+/*
+ * read-when: Changing how the layer sends events to the helper and polls for replies, or when comments do not reach the helper or replies do not arrive.
+ */
+
 // The sync client, and the reply poll loop.
 //
 // Owner: 1B. 3A (agent loop) reads replies through this file rather than
@@ -37834,6 +37961,10 @@
 });
 
 /* ---- src/layer/choices.js  (owner: choice-buttons layer) ---- */
+/*
+ * read-when: Changing the choice buttons an agent puts in a document, or when a choice press is refused.
+ */
+
 // Choice buttons: arm the choice groups an agent wrote into a document page,
 // mint a press, and raise the refusal chip.
 //
@@ -38333,6 +38464,10 @@
 });
 
 /* ---- src/layer/comments.js  (owner: 1D) ---- */
+/*
+ * read-when: Changing comment boxes, element-pick mode or the note box, or when a comment attaches to the wrong passage.
+ */
+
 // Comment boxes, element-pick mode, and the untethered note.
 //
 // Owner: 1D. Implements architecture D3 (the gesture vocabulary, browse is the
@@ -41769,6 +41904,10 @@
 });
 
 /* ---- src/layer/editing.js  (owner: 2A) ---- */
+/*
+ * read-when: Changing hand editing in the page, or when an edit is lost, commits wrong, or moves the caret.
+ */
+
 // Edit state: one block at a time, entered deliberately, committed once.
 //
 // Owner: 2A. Implements architecture D3 (edit is entered deliberately, per
@@ -47833,6 +47972,10 @@
 });
 
 /* ---- src/layer/zoom.js  (owner: zoom viewer) ---- */
+/*
+ * read-when: Changing the zoom viewer for diagrams and images, or when the magnifier does not appear or will not pan.
+ */
+
 // The zoom viewer: a magnifier button on graphs and large images, and the
 // full-screen view it opens to zoom and pan.
 //
@@ -48925,6 +49068,10 @@
 });
 
 /* ---- src/layer/replay.js  (owner: 2C) ---- */
+/*
+ * read-when: Changing how saved edits are re-applied after the page reloads or morphs, or when a replay overwrites or skips an edit.
+ */
+
 // The replay engine: entry point, pass ordering, counters, and the four-branch
 // compare.
 //
@@ -53089,6 +53236,10 @@
 });
 
 /* ---- src/layer/inject.js  (owner: 2D) ---- */
+/*
+ * read-when: Changing how the layer re-mounts after the page replaces its body, or when the rail vanishes after a navigation.
+ */
+
 // Living in the page: the remount contract, route detection, and the CSP
 // refusal watcher.
 //
@@ -53476,6 +53627,10 @@
 });
 
 /* ---- src/layer/index.js  (owner: 2D) ---- */
+/*
+ * read-when: Changing how the review layer boots and wires its parts together, or when the rail does not appear.
+ */
+
 // The review layer's entry point: boot, the version stamp, and the one place
 // the library's pieces are wired to each other.
 //
@@ -53555,7 +53710,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.4.0+6b537bf1bb5c";
+  var VERSION = "0.4.0+6a3749ffc3e2";
 
   var protocol = ns.protocol;
   var record = ns.record;
