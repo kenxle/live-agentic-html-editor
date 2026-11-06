@@ -114,8 +114,11 @@
   /** The same one-sided containment the strict predicate uses for context. */
   function contextAgrees(stored, found) {
     var a = textish(stored);
+    // Nothing stored on this side: say so before normalizing what was found,
+    // which at the edge of a long list is every sibling's text joined.
+    if (!a) return false;
     var b = textish(found);
-    if (!a || !b) return false;
+    if (!b) return false;
     return a === b || a.indexOf(b) !== -1 || b.indexOf(a) !== -1;
   }
 

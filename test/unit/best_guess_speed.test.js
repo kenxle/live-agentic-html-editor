@@ -43,3 +43,29 @@ test("the best guess for a lost comment on a 4,000-element page stays under budg
   assert.equal(guess.element, built.target, "and the guess still points at the rewritten passage");
   assert.ok(ms < BUDGET_MS, "best guess took " + ms.toFixed(0) + " ms, budget " + BUDGET_MS + " ms");
 });
+
+// A comment on the first item of a long list is minted with an empty prefix,
+// and on the last with an empty suffix. Every candidate's context on that side
+// is then every sibling's text joined, and it must not be normalized only to be
+// compared with nothing.
+for (const which of ["first", "last"]) {
+  test("the best guess for a lost comment on the " + which + " item of a 4,000-item list stays under budget", () => {
+    const rows = [];
+    for (let i = 0; i < 4000; i += 1) {
+      rows.push({ tag: "li", attrs: { class: "row" }, text: "row number " + i + " with some words in it" });
+    }
+    const body = page.build({ tag: "body", children: [{ tag: "h2", text: "List" }, { tag: "ul", children: rows }] });
+    const list = body.children[1].children;
+    const target = which === "first" ? list[0] : list[list.length - 1];
+    const ref = anchor.mint({ element: target, root: body });
+    assert.equal(ref.ok, true, "mint should succeed: " + JSON.stringify(ref.failure));
+    assert.equal(which === "first" ? ref.prefix : ref.suffix, "", "the outer side has no context");
+    page.setText(target, "Rewritten by the agent so nothing matches the stored words.");
+
+    const started = process.hrtime.bigint();
+    pointing.bestGuess(ref, body);
+    const ms = Number(process.hrtime.bigint() - started) / 1e6;
+
+    assert.ok(ms < BUDGET_MS, "best guess took " + ms.toFixed(0) + " ms, budget " + BUDGET_MS + " ms");
+  });
+}
