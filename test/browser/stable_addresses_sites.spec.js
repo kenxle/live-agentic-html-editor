@@ -1,3 +1,7 @@
+/*
+read-when: Changing pages served at their stable addresses, or when relative assets, Markdown or links fail there.
+*/
+
 // Pages at their stable addresses, in a real browser (stable addresses, Task
 // 1.3 and 1.4).
 //

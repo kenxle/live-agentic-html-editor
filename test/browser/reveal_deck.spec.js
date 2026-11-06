@@ -1,3 +1,7 @@
+/*
+read-when: Changing support for reveal.js decks, or when keys, slide context or speaker notes collide with the library.
+*/
+
 // The real reveal.js deck, not a stand-in for one.
 //
 // Four collisions with reveal came out of one week of Ken reviewing and

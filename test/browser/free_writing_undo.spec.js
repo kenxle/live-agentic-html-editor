@@ -1,3 +1,7 @@
+/*
+read-when: Changing undo inside a writing session or of a committed run, or when Cmd-Z gives back the wrong step.
+*/
+
 // Free writing, plan Task 2.4: undo inside a session, and undo of a committed
 // run record.
 //

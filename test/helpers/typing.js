@@ -1,3 +1,7 @@
+/*
+read-when: Writing a test that types with real key events.
+*/
+
 // Typing with real key events.
 //
 // Real key events matter here more than in most projects. The editing surface is

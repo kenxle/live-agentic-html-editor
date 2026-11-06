@@ -1,3 +1,7 @@
+/*
+read-when: Changing how the library boots when the helper is down, or when a page opened offline shows no rail.
+*/
+
 // R10, the offline half: there is always a way to take the work elsewhere,
 // with nothing running.
 //

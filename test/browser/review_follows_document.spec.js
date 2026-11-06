@@ -1,3 +1,7 @@
+/*
+read-when: Changing how a review follows its document out of a removed worktree, or when the main copy shows no earlier cards.
+*/
+
 // A review follows its document out of a removed worktree, in a real browser
 // (docs/features/20261015.02_review_follows_document/01_spec_review_follows_document.md).
 //

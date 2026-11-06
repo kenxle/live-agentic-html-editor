@@ -1,3 +1,7 @@
+/*
+read-when: Writing a test that starts the local service or kills it the way a lid close does.
+*/
+
 // Starting the local service, and killing it the way a laptop lid does.
 //
 // `kill -9` is the interesting half. A graceful shutdown proves nothing about

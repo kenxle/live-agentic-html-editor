@@ -1,3 +1,7 @@
+/*
+read-when: Changing undo of an edit, or when an undone edit still shows as ready work to the agent.
+*/
+
 // An undo the reviewer presses has to reach the helper, and on a handled edit it
 // has to reach the source file.
 //

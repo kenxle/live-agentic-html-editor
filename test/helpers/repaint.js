@@ -1,3 +1,7 @@
+/*
+read-when: Writing a test that drives the fixture page's own repaint machinery.
+*/
+
 // Repaint control: driving the fixture page's own re-render machinery.
 //
 // This talks to window.__lahe.fixture, which is the FIXTURE's code (the stand-in

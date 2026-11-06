@@ -1,3 +1,7 @@
+/*
+read-when: Changing the Undo button on hand-edit rows, or when a row cannot take its edit back.
+*/
+
 // R28 from the REVIEWER's side: every hand edit can be undone on its own,
 // with a button they can actually press.
 //

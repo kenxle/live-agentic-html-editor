@@ -1,3 +1,7 @@
+/*
+read-when: Changing how a rendered Markdown file carries its named style, or when a saved file loses the style's colors or font.
+*/
+
 "use strict";
 
 // A rendered Markdown file that names an installed style carries the style's

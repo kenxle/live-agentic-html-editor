@@ -1,3 +1,7 @@
+/*
+read-when: Writing or debugging a style switcher spec that needs the made-up installed styles.
+*/
+
 // Installed styles for the switcher specs, on a real review (lahe_world.js).
 //
 // Two made-up styles under test/fixtures/styles/, never a paid one: `sample`

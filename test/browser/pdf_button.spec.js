@@ -1,3 +1,7 @@
+/*
+read-when: Changing the PDF button's tray in the rail head, or when Save as PDF does not send its note.
+*/
+
 // The PDF button in the rail's head (docs/features/20261008.01_pdf_button).
 //
 // It does not make a PDF. It opens a small tray with one item, "Save as PDF",

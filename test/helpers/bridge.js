@@ -1,3 +1,7 @@
+/*
+read-when: Changing the page-side utilities the harness installs, or when a failure message describes a node oddly.
+*/
+
 // The page side bridge.
 //
 // A handful of small utilities have to run inside the page: describing a node,

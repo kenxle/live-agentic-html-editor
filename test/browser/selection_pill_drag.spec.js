@@ -1,3 +1,7 @@
+/*
+read-when: Changing when the selection pill appears during a drag, or when it shows before release.
+*/
+
 // The selection pill while the reviewer is still dragging.
 //
 // Ken, highlighting a passage from the bottom line upward: the pill appeared as

@@ -1,3 +1,7 @@
+/*
+read-when: Changing failure chips on the rail, or when a chip is lost across a remount, navigation or dismissal.
+*/
+
 // Ranked test 33: failure chips. A chip appears, survives a remount, a
 // navigation and a replay pass, and stays gone once dismissed.
 //

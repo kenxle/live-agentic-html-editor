@@ -1,3 +1,7 @@
+/*
+read-when: Checking the nothing-is-taken-back stressors (reload, kill, suspend, re-render, navigation, backgrounding) against a review's items.
+*/
+
 // AC4, nothing is taken back. A 4A EVALUATOR PROBE, not a checked-in acceptance
 // spec: ranked test 39 names AC1, AC2 and AC3 as the scripted walks, and this
 // file exists so the evaluator drove AC4's five stressors themselves rather than

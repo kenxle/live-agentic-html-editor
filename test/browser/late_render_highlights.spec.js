@@ -1,3 +1,7 @@
+/*
+read-when: Changing highlight painting while a page builds its blocks after load, or when the whole page is washed at once.
+*/
+
 // A page that arrives as one blob and becomes blocks a moment later, and the
 // highlight that used to cover the whole thing while that was true.
 //

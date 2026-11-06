@@ -1,3 +1,7 @@
+/*
+read-when: Checking the free-writing branches working together on real reviews, or when placement, special characters or rebuilds misbehave.
+*/
+
 // Plan Task 3.4: the tests that need every free-writing branch together.
 //
 // Each test is a real review: `lahe review` or `lahe write` from this checkout,

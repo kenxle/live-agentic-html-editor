@@ -1,3 +1,7 @@
+/*
+read-when: Changing how comments follow a file that moved folders, or when a moved page loses its cards.
+*/
+
 // A file's comments move with it, in a real browser
 // (docs/features/20261017.01_comments_follow_moved_file/01_spec_comments_follow_moved_file.md).
 //

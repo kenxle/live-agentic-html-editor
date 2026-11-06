@@ -1,3 +1,7 @@
+/*
+read-when: Changing undo after a page reload, or when an undone run still shows as ready work to the agent.
+*/
+
 // Flow walk fail 1 (docs/features/20260928.01_free_writing/reviews_impl/
 // flow_walk.md): undo after a page reload never reached the helper.
 //

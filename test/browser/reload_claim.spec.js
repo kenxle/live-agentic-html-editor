@@ -1,3 +1,7 @@
+/*
+read-when: Changing the second-window guard around self-reloads, or when a reloaded page is refused as another window.
+*/
+
 // A page that reloads itself must not trip its own second-window guard.
 //
 // R36's auto-reload starts a new document in the same tab, and the new document

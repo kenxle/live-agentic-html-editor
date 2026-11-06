@@ -1,3 +1,7 @@
+/*
+read-when: Changing free-writing editing rules for an empty page or a sitting that ends with no new blocks.
+*/
+
 // Free writing, fix round F1 (editing): one test per finding, each written red
 // against the code before its fix.
 //

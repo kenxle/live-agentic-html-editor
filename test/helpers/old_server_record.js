@@ -1,3 +1,7 @@
+/*
+read-when: Writing a Library test that needs the leftover record of a retired page server.
+*/
+
 // What an old review had: the record of the page server that served its
 // folder, in <state>/agent-sessions/<session>/static-servers/. Page servers
 // are retired, so no test starts one; the record is what is left of one, and

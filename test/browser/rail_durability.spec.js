@@ -1,3 +1,7 @@
+/*
+read-when: Changing how typed words are saved, or when a keystroke or draft is lost across a reload, tab close or kill.
+*/
+
 // Ranked test 6 (nothing is lost across a reload, a tab close and a kill -9)
 // and ranked test 19 (a draft survives a reload mid-sentence and reaches the
 // helper marked draft).

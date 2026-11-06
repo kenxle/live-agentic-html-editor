@@ -1,3 +1,7 @@
+/*
+read-when: Changing how the library behaves inside an iframe, or when an embedded copy fights the real window for the review.
+*/
+
 // A framed document does not boot, and the window that framed it is untouched.
 //
 // The case is reveal.js's speaker-notes window: pressing S opens a second

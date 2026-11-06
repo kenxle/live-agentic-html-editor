@@ -1,3 +1,7 @@
+/*
+read-when: Changing replay's insert path for run records, or when a run is placed, swapped or held wrongly.
+*/
+
 // Replay's insert path for a run record (free-writing plan Task 2.6).
 //
 // One test per row of the architecture's presence table, then the placement

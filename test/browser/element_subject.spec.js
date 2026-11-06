@@ -1,3 +1,7 @@
+/*
+read-when: Changing how a comment on an image or other element is named, or when a comment on one of several look-alike elements names the wrong one.
+*/
+
 // The reviewer's exact failure, as a test: three images in a row, each in its
 // own wrapper, and a comment on the middle one.
 //

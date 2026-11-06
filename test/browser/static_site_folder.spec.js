@@ -1,3 +1,7 @@
+/*
+read-when: Changing review of a folder of pages, or when a page in the folder comes up without the rail.
+*/
+
 // A folder of pages is one review, and every page our own server hands out
 // carries the rail.
 //

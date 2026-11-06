@@ -1,3 +1,7 @@
+/*
+read-when: Changing the layers that keep typed text from reverting, or when a repaint overwrites what the reviewer typed.
+*/
+
 // RANKED TEST 1: typed text does not revert. Three layers, scored separately,
 // in both fixture flavors.
 //

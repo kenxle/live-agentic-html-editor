@@ -1,3 +1,7 @@
+/*
+read-when: Writing a test that waits on replay or protection counters instead of a timer.
+*/
+
 // Counter readers.
 //
 // The counters are the harness's substitute for waiting. Instead of sleeping

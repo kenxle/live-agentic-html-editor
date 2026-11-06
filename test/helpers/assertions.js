@@ -1,3 +1,7 @@
+/*
+read-when: Using or changing the harness's hard assertions for caret survival and second writes.
+*/
+
 // The two hardest assertions in the project, written once.
 //
 // These are here rather than inline in a test because if either is subtly wrong,

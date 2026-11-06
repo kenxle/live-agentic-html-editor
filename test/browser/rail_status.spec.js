@@ -1,3 +1,7 @@
+/*
+read-when: Changing the status line's transitions and suspended-helper handling, or when the line says stored while work is unsent.
+*/
+
 // Ranked test 21 (the status line tells the truth) and ranked test 22 (a
 // suspended helper never blocks the reviewer).
 //

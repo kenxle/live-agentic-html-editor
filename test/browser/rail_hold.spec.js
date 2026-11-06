@@ -1,3 +1,7 @@
+/*
+read-when: Changing Hold, which queues comments until released, or when a held item leaks to the agent.
+*/
+
 // Hold: queue several comments, release them to the agent at once.
 //
 // docs/features/20260917.01_hold_toggle/01_spec_hold_toggle.md. Requirement 4

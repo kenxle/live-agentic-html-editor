@@ -1,3 +1,7 @@
+/*
+read-when: Changing the write ladder's refusals around data-lahe-id stamps, or when a wrong stamp writes to the wrong place.
+*/
+
 // THE GRACEFUL-FAILURE NET: every way the stamp can be confidently wrong.
 //
 // Ken, 2026-09-11: "I would much rather have graceful failures than quiet

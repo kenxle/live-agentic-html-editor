@@ -1,3 +1,7 @@
+/*
+read-when: Changing the brief mark on text the agent changed, or when the mark appears on the wrong text or stays on.
+*/
+
 // What the agent changed, lit up for a moment.
 //
 // The reviewer asks for something, the agent edits the source, the page

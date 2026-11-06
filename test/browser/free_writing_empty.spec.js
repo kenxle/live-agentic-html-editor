@@ -1,3 +1,7 @@
+/*
+read-when: Changing the Write here line, starting in empty space, or the empty-page start in free writing.
+*/
+
 // Free writing, plan Task 2.3: starting in empty space, and the empty page.
 //
 // While any edit is open, a gap between blocks shows "+ Write here". Clicking

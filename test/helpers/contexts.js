@@ -1,3 +1,7 @@
+/*
+read-when: Writing a test that needs two browser contexts on one target.
+*/
+
 // Two browser contexts on one target.
 //
 // Separate contexts, not two tabs in one context, because separate contexts have

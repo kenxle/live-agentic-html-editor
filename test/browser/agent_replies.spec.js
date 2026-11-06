@@ -1,3 +1,7 @@
+/*
+read-when: Changing how an agent's reply file reaches the rail, or when a reply, a stale answer or a question card looks wrong.
+*/
+
 // 3A: the agent loop, on a real page, with a real helper and real reply files.
 //
 // Ranked tests 10, 32 and 35, plus the question treatment.

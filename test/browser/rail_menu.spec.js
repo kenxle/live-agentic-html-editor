@@ -1,3 +1,7 @@
+/*
+read-when: Changing the rail head's menu for Copy and Export, or when the menu fails to open or close.
+*/
+
 // Copy and Export live in the rail's header menu, not in the footer.
 //
 // D10 was revised from real use: the two review-level actions stayed reachable

@@ -1,3 +1,7 @@
+/*
+read-when: Changing Copy or Export of a review, or when the exported text differs with the helper running and stopped.
+*/
+
 // Ranked test 34: Copy and Export, read through the real controls.
 //
 // The plan's done bar for 3C, word for word:

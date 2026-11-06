@@ -1,3 +1,7 @@
+/*
+read-when: Changing how helper modules map pages to files at a stable address, or when an edit reloads the wrong page.
+*/
+
 // Every helper module agrees on page-to-file mapping at a stable address
 // (stable addresses, Step 2), in a real browser.
 //

@@ -1,3 +1,7 @@
+/*
+read-when: Changing dragging the rail wider, or when the chosen width is lost or the page shifts.
+*/
+
 // Dragging the rail wider, and everything that has to get out of its way.
 //
 // Ken: "some of these responses are getting quite thorough and long, so the

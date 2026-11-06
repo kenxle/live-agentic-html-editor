@@ -1,3 +1,7 @@
+/*
+read-when: Changing how the rail repaints, or when a card with focus is rebuilt and loses typed text.
+*/
+
 // Ranked test 12: a focused card is never re-created.
 //
 // Node identity, activeElement, and the typed characters, all intact through

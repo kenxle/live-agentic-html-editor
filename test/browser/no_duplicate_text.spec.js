@@ -1,3 +1,7 @@
+/*
+read-when: Changing how replay lands a reviewer's words, or when their text appears twice on the page.
+*/
+
 // The reviewer's words are on the page exactly once.
 //
 // The report, 2026-09-22: "multiple agents have now duplicated my written
