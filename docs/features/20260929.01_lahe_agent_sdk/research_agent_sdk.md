@@ -1,3 +1,7 @@
+---
+read-when: Read when you want research on building a dedicated Lahe agent on the Claude Agent SDK, including auth and long-running behaviour.
+---
+
 # Claude Agent SDK Research: Building a Dedicated LAHE Agent
 
 ## Overview

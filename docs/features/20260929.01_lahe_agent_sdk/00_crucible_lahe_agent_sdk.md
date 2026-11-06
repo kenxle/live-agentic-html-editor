@@ -1,3 +1,7 @@
+---
+read-when: Read when you want to know why a Lahe agent that answers comments itself was proposed, and the assumptions made without the owner.
+---
+
 # Crucible: a LAHE agent that cannot forget
 
 Date: 2026-09-29

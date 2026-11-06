@@ -1,3 +1,7 @@
+---
+read-when: Read when changing how often an open review tab asks the helper for news, or when idle tabs cost too much.
+---
+
 # Quiet tabs: a tab nobody is looking at stops asking
 
 Whetstone-size. Part 1 of [GitHub issue 16](https://github.com/kenxle/live-agentic-html-editor/issues/16) (idle reviews cost too much). Part 2 of that issue, page servers that are never cleaned up, is not in this change. Progress is at the bottom.

@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the reviewer findings on the auto-answer agent architecture, including the live security runs.
+---
+
 # Reviews: LAHE starts your agent when a comment is ready, architecture
 
 Architecture under review: `02_architecture_lahe_agent_sdk.md`, first draft (commit a400367). Both reviewers read the brief, the spike, the crucible, D11 and D12, the contract, and the code the draft names. The security reviewer also ran two live `claude -p` runs (Haiku, about $0.03 at list price) to test the file limits. Its test files are under `/private/tmp`, so nothing needs deleting.
