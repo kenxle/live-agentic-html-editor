@@ -1,3 +1,7 @@
+---
+read-when: Checking what the rail cleanup shipped and which leftovers were listed for deletion.
+---
+
 # Rail cleanup: what shipped on 2026-10-12, and what to delete
 
 ## Shipped to main, each with a green CI run and a green full local gate

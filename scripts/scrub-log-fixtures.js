@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+/*
+ * read-when: Turning a real event log into a fixture with no real words, or redoing the projection test fixtures.
+ */
+
 // Turn real event logs into test fixtures that carry no real words.
 //
 // The equivalence tests in test/unit/projection_incremental.test.js have to run

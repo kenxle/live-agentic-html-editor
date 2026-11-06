@@ -1,3 +1,7 @@
+/*
+read-when: Changing the first stitch-back walk of helper, rail, anchor engine and comment surface, or when the built bundle and the helper stop working together.
+*/
+
 // CP1: the first stitch-back, as a script.
 //
 // Ranked test 37. The four Phase 1 branches (1A's helper, 1B's rail and sync,

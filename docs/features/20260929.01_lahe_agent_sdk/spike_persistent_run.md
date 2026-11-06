@@ -1,3 +1,7 @@
+---
+read-when: Read when you want what a spike found about keeping one headless Claude Code process alive per document.
+---
+
 # Spike: one persistent headless Claude Code process per document
 
 Date: 2026-09-29

@@ -1,3 +1,7 @@
+---
+read-when: Read when you need to know what the parked auto-answer agent was meant to do, or to judge a similar idea against it.
+---
+
 # Feature Brief: LAHE starts your agent when a comment is ready
 
 Status: DRAFT, revision 2. The owner rejected one new agent per batch of comments. This revision asks for one agent per review, kept running. Every guess made on his behalf is listed under Assumptions.

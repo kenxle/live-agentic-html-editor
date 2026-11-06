@@ -1,3 +1,7 @@
+---
+read-when: "Read when changing what a Library card says about its agent, or to see the fixes made from Ken's preview."
+---
+
 # Phase 8: watching label, and the items from Ken's preview
 
 Branch `task/lib-watch`, off `feat/lahe_library`. Not merged. `dist/` rebuilt locally only, not committed.

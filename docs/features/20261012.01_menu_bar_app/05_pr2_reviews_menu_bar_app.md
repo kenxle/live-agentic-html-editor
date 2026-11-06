@@ -1,3 +1,7 @@
+---
+read-when: Reading the code, security and other reviews of the second menu bar pull request.
+---
+
 # PR 2 reviews: Menu bar app
 
 Four read-only reviews of PR 2's integrated diff (`feat/menu-bar-pr2` at `34d5d6be` against main at `85c8be9d`), run 2026-10-13 11:50. The progress page's log says what was done with each finding. Three items from the design review are Ken's decisions and sit under Needs your attention on the progress page.

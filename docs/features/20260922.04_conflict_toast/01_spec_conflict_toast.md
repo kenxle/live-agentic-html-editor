@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the toast that tells a reviewer a conflict card holds their edit.
+---
+
 # Conflict toast: tell the reviewer their edit is safe on a card
 
 Summary: when replay finds that the reviewer's edit and the page's own change

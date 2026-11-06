@@ -1,3 +1,7 @@
+/*
+read-when: Changing how replay compares a run record's anchor, or when a repaint or retag writes the wrong words.
+*/
+
 // Replay of a run record's anchor (free-writing plan Task 2.5).
 //
 // The anchor compare reads the anchor view: anchor_after_html in place of the

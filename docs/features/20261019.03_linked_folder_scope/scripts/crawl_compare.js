@@ -1,3 +1,5 @@
+// read-when: Re-running the real-site comparison between two checkouts to catch a serving regression.
+//
 // The real-site no-regression check (spec V12, task 5).
 //
 // Starts one helper from each checkout on its own temp COPY of the sites

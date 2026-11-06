@@ -1,3 +1,5 @@
+// read-when: Changing `lahe style add` or `lahe style list`, or when its tests fail.
+
 // `lahe style add` and `lahe style list`, run through the dispatcher against
 // a temporary state directory.
 //

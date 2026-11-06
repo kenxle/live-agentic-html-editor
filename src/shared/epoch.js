@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how replay's own page writes are kept from retriggering replay, or when replay loops.
+ */
+
 // The write epoch: how replay's own mutations stop retriggering the observer
 // that schedules replay.
 //

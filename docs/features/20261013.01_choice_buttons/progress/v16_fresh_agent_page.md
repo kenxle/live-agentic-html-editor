@@ -1,3 +1,7 @@
+---
+read-when: Seeing the page a fresh agent wrote with a choice group during the skill check.
+---
+
 # Three proposed lessons are waiting: promote two, discard one
 
 Each lesson below needs a decision from you. I recommend promoting the first two and discarding the third. Click an answer under each one.

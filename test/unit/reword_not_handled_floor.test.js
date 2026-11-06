@@ -1,3 +1,5 @@
+// read-when: Changing what happens to an edit the agent refused when the reviewer types on that passage, or when its tests fail.
+
 // An edit the agent said no to, and what typing on the page does to it.
 //
 // Since docs/features/20261011.01_stuck_replayed_blocks (requirement 1), a

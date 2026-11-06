@@ -1,3 +1,5 @@
+// read-when: Changing how the helper rebuilds a rendered review and checks an agent's handled claim, or when its tests fail.
+
 // The rebuild is not the agent's job, and a handled claim is checked.
 //
 // Two halves of one failure. An agent edits the Markdown behind a rendered

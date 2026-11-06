@@ -1,3 +1,5 @@
+// read-when: Changing `lahe hook stop`, the Claude Code Stop hook that restarts a missing monitor, or when its tests fail.
+
 // `lahe hook stop`: Claude Code's Stop hook (docs/features/20261006.02_rearm_guard).
 //
 // Claude Code runs it each time the main agent tries to end its turn. It blocks

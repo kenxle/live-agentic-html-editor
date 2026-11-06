@@ -1,3 +1,7 @@
+---
+read-when: "Read when changing how a comment card's note is edited in place, or how a card's colour tracks its state."
+---
+
 # Inline reword: the comment's own words are the input
 
 Ken, looking at the rail's card actions:

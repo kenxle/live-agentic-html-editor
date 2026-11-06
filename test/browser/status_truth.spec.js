@@ -1,3 +1,7 @@
+/*
+read-when: Changing the status line and failure chips, or when either claims something untrue.
+*/
+
 // The status line and the failure chips must never lie.
 //
 // Three walkers found the same family of bugs on 2026-08-14, and each test here

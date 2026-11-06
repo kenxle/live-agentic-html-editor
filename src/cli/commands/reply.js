@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing lahe reply, or when a reply line an agent wrote is rejected as malformed.
+ */
+
 // `lahe reply`: write one correct reply line, so no agent has to hand-encode
 // JSON in a shell.
 //

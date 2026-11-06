@@ -1,3 +1,5 @@
+// read-when: Changing which Library rows allow Launch, or the reason given when a legacy row refuses it, or when its tests fail.
+
 "use strict";
 
 // Launch follows the row's kind (final adversarial review, finding 2).

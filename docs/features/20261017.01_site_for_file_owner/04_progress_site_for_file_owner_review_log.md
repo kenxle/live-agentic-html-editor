@@ -1,3 +1,7 @@
+---
+read-when: Reading Ken's comment on the handled-check spec and how it was handled.
+---
+
 # Review log: rda43615ac189
 
 **Pages reviewed:** /01_spec_site_for_file_owner.md

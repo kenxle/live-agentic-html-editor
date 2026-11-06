@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing lahe status, or when it reports the wrong open items or page connection.
+ */
+
 // `lahe status`: what is open right now, and is the page still connected?
 //
 // Owner: 3A. This is the one agent-facing read command.

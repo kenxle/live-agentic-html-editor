@@ -1,3 +1,8 @@
+/*
+ * read-when: Cleaning up records of retired page servers, or changing the sweep for left-over page server processes.
+ * not-for: Serving pages; see page_routes.js.
+ */
+
 // The records of the per-session page servers stable addresses retired.
 //
 // Before stable addresses (docs/features/20261011.02_stable_addresses), every

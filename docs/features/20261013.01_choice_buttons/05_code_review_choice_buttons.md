@@ -1,3 +1,7 @@
+---
+read-when: Reading the code review of the integrated choice buttons branch.
+---
+
 # Code review: choice buttons (integrated diff)
 
 Reviewer: `feature-dev:code-reviewer` (Opus), on `feat/choice-buttons` at `3abccb7e` against main. Scope: `src`, `test`, `skills`, `vendor`, `docs/CONTRACTS.md`; `dist/` and `docs/features/` excluded. The reviewer had no write tool, so the orchestrator saved its report here verbatim in substance.

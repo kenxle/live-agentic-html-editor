@@ -1,3 +1,7 @@
+---
+read-when: Changing the PDF button in the rail, or when it sends the wrong note.
+---
+
 # PDF button: spec
 
 **Documents:** [Decision](00_decision_pdf_button.md) · **Spec** · [Progress](02_progress_pdf_button.md)

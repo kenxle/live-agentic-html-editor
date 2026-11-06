@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the running record of the Library build, its current phase and the links to its documents.
+---
+
 # Progress: LAHE Library
 
 **Phase 8, Ship.** The PR is open ([#19](https://github.com/kenxle/live-agentic-html-editor/pull/19)) and waits on your look at the real page. A preview of the Library is running on a copy of your records: http://127.0.0.1:7917/catalog. Last updated 2026-09-29 14:24.

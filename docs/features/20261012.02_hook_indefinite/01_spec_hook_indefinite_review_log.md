@@ -1,3 +1,7 @@
+---
+read-when: Reading Ken's comments on the Stop hook wait spec and how each was handled.
+---
+
 # Review log: r6f1d22fab136
 
 **Pages reviewed:** /01_spec_hook_indefinite.md

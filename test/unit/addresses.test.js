@@ -1,3 +1,5 @@
+// read-when: Changing how the helper proves a page address works before using it (src/service/addresses.js), or when its tests fail.
+
 // The helper proves each address option works before it is used
 // (src/service/addresses.js).
 //

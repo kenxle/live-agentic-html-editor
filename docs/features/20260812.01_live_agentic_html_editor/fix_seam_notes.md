@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the sync, store, merge or lifecycle seams, or the window claim, or to learn which review findings were fixed there.
+---
+
 # Fix-seam builder notes
 
 Owns findings 1, 2, 3, 10, 12, 13, NEW-1, NEW-2, NEW-3 of the Phase 5 review.

@@ -1,3 +1,7 @@
+/*
+read-when: Changing how each page of a review carries its own comments, or when a comment appears on the wrong address.
+*/
+
 // Each page carries its own comments, in a real browser
 // (docs/features/20261011.02_stable_addresses/parts/architecture/
 // each_page_its_own_comments.md).

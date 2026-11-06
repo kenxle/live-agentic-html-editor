@@ -1,3 +1,7 @@
+/*
+read-when: Changing when an open edit commits, or when an edit stays in draft after the reviewer leaves the block.
+*/
+
 // Leaving the edited block, every way a reviewer actually leaves it.
 //
 // THE BUG THIS PINS. Status never offers an edit left in `draft` to an agent,

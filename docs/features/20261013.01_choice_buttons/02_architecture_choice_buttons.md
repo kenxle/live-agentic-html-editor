@@ -1,3 +1,7 @@
+---
+read-when: Changing how a choice group is written, found, painted or recorded, or tracing the choice buttons design.
+---
+
 # Architecture: Choice buttons on a document
 
 ## Summary

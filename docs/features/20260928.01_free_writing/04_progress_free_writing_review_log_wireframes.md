@@ -1,3 +1,7 @@
+---
+read-when: "Read only for the log of Ken's comments on the free writing wireframe index."
+---
+
 # Review log: ra7e80f5e0d90
 
 **Pages reviewed:** /index.html

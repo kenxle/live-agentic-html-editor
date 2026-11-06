@@ -1,3 +1,7 @@
+---
+read-when: Seeing how the choice buttons work was split into workstreams and tasks.
+---
+
 # Plan: Choice buttons on a document
 
 ## Summary

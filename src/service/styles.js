@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how installed document styles are stored, checked or served.
+ */
+
 // Installed document styles: the store, the checks, and serving their files.
 // Owner: Style switcher 1.1. See docs/features/20260930.01_style_switcher/,
 // architecture "Data / State Changes" and "Security & Privacy Notes".

@@ -1,3 +1,5 @@
+// read-when: Changing the catalog store that reads and writes catalog.json (stars and names), or when its tests fail.
+
 "use strict";
 
 // The catalog store: the only reader and writer of <state>/catalog.json (stars,

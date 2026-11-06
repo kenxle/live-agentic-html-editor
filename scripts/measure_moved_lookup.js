@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+/*
+ * read-when: Measuring what a page load costs when many worktree sites have been removed.
+ */
+
 // What a page load costs when many worktrees have been removed.
 //
 // Written for docs/features/20261015.02_review_follows_document (R14), to be

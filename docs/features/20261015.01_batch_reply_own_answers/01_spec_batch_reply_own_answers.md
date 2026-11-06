@@ -1,3 +1,7 @@
+---
+read-when: Changing the batch reply command, or when the drain repeats the agent's own earlier answers.
+---
+
 # Batch reply, and no echo of the agent's own answers
 
 A follow-up to `docs/features/20261014.02_lean_agent_output/` (PR #69). Two more

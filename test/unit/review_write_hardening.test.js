@@ -1,3 +1,5 @@
+// read-when: Changing what review.write and the facts it records may do (origins, pages, targets), or when its tests fail.
+
 // What `review.write` and the facts it records are allowed to do.
 //
 // Five things that were each a live flaw:

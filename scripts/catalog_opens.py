@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Count the Library's Opens from the LAHE helper log.
+"""
+read-when: Counting how often the Library's Open button is used, from the helper log.
+
+Count the Library's Opens from the LAHE helper log.
 
 LAHE Library plan, Task 3.3. Python standard library only, like the rest of
 the tool, which has no dependencies.

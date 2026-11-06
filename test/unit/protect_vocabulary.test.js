@@ -1,3 +1,6 @@
+// read-when: Changing protection's vocabulary or its two predicates (src/layer/protect.js), or when its tests fail.
+// not-for: The three protection layers in a browser; see test/browser/protection_layers.spec.js.
+
 // Protection's vocabulary and its two predicates, without a browser.
 //
 // Owner: 2B. The browser spec (test/browser/protection_layers.spec.js) is the

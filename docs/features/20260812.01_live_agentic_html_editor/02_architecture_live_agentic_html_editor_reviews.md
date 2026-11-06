@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the reviewer findings on the second architecture draft, the answers to them, or the open questions that were left.
+---
+
 # Architecture reviews
 
 This architecture is a restart against the round-2 brief. The first draft (send model,

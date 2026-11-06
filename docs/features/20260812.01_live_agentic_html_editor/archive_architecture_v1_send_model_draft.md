@@ -1,3 +1,8 @@
+---
+read-when: Read only to see the first, discarded architecture draft that used a send model.
+not-for: The current architecture; see 02_architecture_live_agentic_html_editor.md.
+---
+
 # Architecture: Live Agentic HTML Editor
 
 ## Summary

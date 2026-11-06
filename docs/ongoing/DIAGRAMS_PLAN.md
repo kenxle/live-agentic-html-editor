@@ -1,3 +1,7 @@
+---
+read-when: Adding or cutting a diagram, or asking why a diagram was not drawn.
+---
+
 # The diagrams plan, and what we decided not to draw
 
 Reviewed with Ken in a LAHE session on 2026-09-04. Seventeen comments, every

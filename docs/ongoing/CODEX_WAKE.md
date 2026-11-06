@@ -1,3 +1,7 @@
+---
+read-when: Changing how Codex waits for feedback outside a model turn, or when a Codex follow-up does not arrive.
+---
+
 # Codex can wait without holding a turn open
 
 Lahe now watches for Codex feedback outside the model turn. Real feedback queues a follow-up to the same conversation. An idle page makes no model calls. No decision is needed from you.

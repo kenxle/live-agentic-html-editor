@@ -1,3 +1,7 @@
+---
+read-when: Changing which Markdown files get the review rail, or when a linked .md page opens as a plain read-only render.
+---
+
 # A Markdown file beside a reviewed page gets the rail
 
 ## Problem

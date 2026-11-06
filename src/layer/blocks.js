@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the layer reads or writes a block of text in the live page, or when a written block differs from its record.
+ */
+
 // The DOM block rules, in one copy.
 //
 // Owner: free-writing kernel (docs/features/20260928.01_free_writing, plan

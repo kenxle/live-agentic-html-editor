@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the rail's Done tab, or how an agent's answer or question appears on a card.
+ */
+
 // The Done tab's contents, what an agent's answer does to a card, and the
 // treatment a question gets.
 //

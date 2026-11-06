@@ -1,3 +1,5 @@
+// read-when: Changing the menu bar's Stop hold (stopped.json) and how startThroughItem honors it, or when its tests fail.
+
 // Stop holds (menu bar plan V27; architecture "Install, rebuild, and Quit").
 //
 // The menu's Stop writes <state>/stopped.json and unloads the helper's login

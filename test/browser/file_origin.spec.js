@@ -1,3 +1,7 @@
+/*
+read-when: Checking whether a page opened from disk can reach the helper, or changing how file pages are served.
+*/
+
 // THE file:// SPIKE (1A).
 //
 // The question the plan asks 1A to settle before it closes: can a page opened

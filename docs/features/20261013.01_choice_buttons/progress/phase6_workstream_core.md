@@ -1,3 +1,7 @@
+---
+read-when: Looking up how the core choice buttons workstream was built, tested and fixed.
+---
+
 # Workstream core: progress
 
 Updated 2026-10-17 14:55. Branch `feat/cb-core`, worktree `lahe-worktrees/cb-kernel`.

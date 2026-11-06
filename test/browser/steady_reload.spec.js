@@ -1,3 +1,7 @@
+/*
+read-when: Changing where the page lands after an automatic reload, or when the viewport jumps or jitters.
+*/
+
 // The reload sits still: no jump, no jitter.
 //
 // R36's auto-reload replaces the document under a reviewer who did not ask for

@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the Library token, its per-route checks or how catalog pages are served.
+---
+
 # Phase 1, Task 1.2: Catalog auth and page serving
 
 **Summary.** The Library token and its per-route checks are live. `catalog.page` and `catalog.asset` serve for real. `catalog.list`, `open`, `star` and `request` pass their checks and then answer 501 until Task 2.1. `health` reports `catalog_seen_at`. The D11 amendment is in `docs/CONTRACTS.md`. `npm run gate:unit`: 1332 tests, 1330 pass, 0 fail, 2 todo. Both todos existed before this task and are in other areas.

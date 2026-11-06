@@ -1,3 +1,7 @@
+---
+read-when: Checking what choice buttons are meant to do, for whom, and what is out of scope.
+---
+
 # Feature Brief: Choice buttons on a document
 
 ## Summary

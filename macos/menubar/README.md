@@ -1,3 +1,7 @@
+---
+read-when: Building or debugging the Mac menu bar app, or checking which files it is made of.
+---
+
 # Lahe menu bar app
 
 An optional Mac extra. It puts the Lahe mark (the Library page's three books

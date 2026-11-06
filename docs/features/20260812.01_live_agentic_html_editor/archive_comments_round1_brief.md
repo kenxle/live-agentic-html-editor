@@ -1,3 +1,8 @@
+---
+read-when: "Read only for the verbatim record of Ken's first round of comments on the brief."
+not-for: How those comments were handled; see 01_brief_live_agentic_html_editor_reviews.md.
+---
+
 # Review comments: Feature Brief: Live Agentic HTML Editor
 
 _Doc: 01_brief_live_agentic_html_editor.html · saved 2026-08-12T15:23:21 · 62 comment(s)_

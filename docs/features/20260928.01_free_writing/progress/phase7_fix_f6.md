@@ -1,3 +1,7 @@
+---
+read-when: Read when you want what was fixed in the checkpoint gate regressions found after the free writing review fixes, or the test that proves each fix.
+---
+
 # Phase 7, fix round F6 (checkpoint gate regressions): progress
 
 Summary: all six items are fixed on `free-writing-f6`. One was a real product regression (protection of an agent's rewrite). The rest were test problems:

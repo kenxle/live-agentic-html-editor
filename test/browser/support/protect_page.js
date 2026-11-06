@@ -1,3 +1,7 @@
+/*
+read-when: Writing or debugging a protection spec that needs the real protection layer on a fixture page.
+*/
+
 // Loading the REAL protection layer into a fixture page, for 2B's specs.
 //
 // Owner: 2B. This is spec support, not harness: nothing outside

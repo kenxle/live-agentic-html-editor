@@ -1,3 +1,7 @@
+---
+read-when: Changing how a note on a slide deck carries its slide, or when a deck note loses its slide.
+---
+
 # Keep the slide with a deck note
 
 Fixed and installed. A new page note on a Reveal deck carries the slide where the reviewer starts typing. Agent instructions explain how to use its id and words when slides move. The full gate, independent review and live proof passed. No action is needed from Ken.

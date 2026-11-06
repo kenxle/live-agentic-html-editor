@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the helper's name server for .lahe addresses, or when a .lahe name does not resolve.
+ */
+
 // The helper's own name server for `.lahe` (stable addresses, macOS opt-in).
 //
 // Owner: stable addresses, lahe-names workstream. `lahe install --lahe-names`

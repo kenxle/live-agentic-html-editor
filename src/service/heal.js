@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the helper puts the script line back after a rebuild strips it, or when a rebuilt page comes back with no rail.
+ */
+
 // Healing a reviewed page whose rebuild stripped the script line out.
 //
 // Owner: 1A, called from reviews.js's mtime stat (the same seam R36's auto

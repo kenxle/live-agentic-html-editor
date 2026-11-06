@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the helper re-renders a Markdown review after its source changes, or when the page does not reload.
+ */
+
 // LAHE re-renders a Markdown review's page itself.
 //
 // Owner: 3A. Read with src/service/reviews.js (the mtime stat this hangs off)

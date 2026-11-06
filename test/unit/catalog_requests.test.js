@@ -1,3 +1,5 @@
+// read-when: Changing the Library's request queue (catalog-requests.jsonl) or when its requests expire, or when its tests fail.
+
 // The Library's request queue: catalog-requests.jsonl (LAHE Library, Task 1.4).
 //
 // Every expiry takes `now` as an argument. These tests pass a fixed clock and

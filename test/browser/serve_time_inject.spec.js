@@ -1,3 +1,7 @@
+/*
+read-when: Changing how the helper adds the script line when serving a page, or when a rebuilt page loads with no rail.
+*/
+
 // The rail survives a rebuild that stripped the script line even when NOBODY
 // ever had the page open in between.
 //

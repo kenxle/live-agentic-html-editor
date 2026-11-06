@@ -1,3 +1,7 @@
+/*
+read-when: Changing how replay handles a paragraph the source split, or when a split raises a conflict.
+*/
+
 // A split is not a conflict.
 //
 // Review r88dec64b8451 (2026-09-22): the reviewer typed several paragraphs into

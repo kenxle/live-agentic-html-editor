@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the Library routes, how long the helper stays up, or the drain text for Library requests.
+---
+
 # Phase 2, Task 2.1: routes, helper lifetime, drain text, log lines
 
 **Summary.** Done on branch `task/lib-wiring`, off `feat/lahe_library` at `6c872d7`. The Library's four API routes are real, the helper builds every Library piece once, the last `session close` leaves the helper up while the Library is open, the reopened-session sweep runs on a helper timer, the drain names each request's document, and every action writes one `catalog` log line. `npm run gate:unit`: 1492 tests, 1490 pass, 0 fail, 2 todo. The two todos are the older `anchor_cases.test.js` ones. Nothing in scope was punted.

@@ -1,3 +1,5 @@
+// read-when: Changing how a session started by bare `lahe library` closes itself when idle, or when its tests fail.
+
 "use strict";
 
 // A session bare `lahe library` started closes itself when idle (Ken's

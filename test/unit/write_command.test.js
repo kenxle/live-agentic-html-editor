@@ -1,3 +1,5 @@
+// read-when: Changing `lahe write <path>`, which starts notes on a blank page, or when its tests fail.
+
 // `lahe write <path>`: notes on a blank page (free-writing plan Task 2.10,
 // architecture Security & Privacy Notes, the `lahe write` bullets).
 //

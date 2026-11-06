@@ -1,3 +1,7 @@
+/*
+read-when: Changing how a reviewed page prints, or when the rail or a highlight shows up on paper.
+*/
+
 // Print: the reviewed page prints as the document, not as the document plus
 // the review tool.
 //

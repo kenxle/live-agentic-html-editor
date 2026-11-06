@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Copy Ken's Lahe state folder for a preview helper, with every live pid left out.
+"""
+read-when: Copying the real Lahe state folder for a preview helper without live process ids.
+
+Copy Ken's Lahe state folder for a preview helper, with every live pid left out.
 
 The preview (plan Task 4.3) runs the feature branch's own helper on another port
 against a COPY of the real state folder, never the real one. A copy that still

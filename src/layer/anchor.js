@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how a comment or edit finds its place after the page changes, or when an anchor resolves to the wrong spot.
+ */
+
 // The anchor engine: mint a region reference, resolve it in a changed document.
 //
 // Owner: 1C. Implements architecture D9 (anchors match by uniqueness, not

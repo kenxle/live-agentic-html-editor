@@ -1,3 +1,7 @@
+---
+read-when: Read when you want to trace what the release-hardening work completed and what it left open.
+---
+
 # Progress: release readiness
 
 ## 2026-08-18 audit

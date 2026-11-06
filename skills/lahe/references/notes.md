@@ -1,3 +1,7 @@
+---
+read-when: The reviewer wants to write notes from a blank page.
+---
+
 # Notes the reviewer writes
 
 ### Notes on a blank page

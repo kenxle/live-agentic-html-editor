@@ -1,3 +1,5 @@
+// read-when: Changing what `lahe review` prints, the openable URL and the source hint, or when its tests fail.
+
 // `lahe review`'s own printed output, for a plain static HTML target and for a
 // Markdown one: the ONE openable URL rule and the source hint it can infer.
 //

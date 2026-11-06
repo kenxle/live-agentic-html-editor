@@ -1,3 +1,7 @@
+---
+read-when: Reading Ken's comments on the linked folder cap spec and how each was handled.
+---
+
 # Review log: rea6a106e5c29
 
 **Pages reviewed:** /.claude/worktrees/link-folder-cap/docs/features/20261019.01_link_folder_cap/01_spec_link_folder_cap.html

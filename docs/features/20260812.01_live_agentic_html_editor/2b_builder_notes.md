@@ -1,3 +1,7 @@
+---
+read-when: Read when changing how the block being edited is protected from page repaints, or to learn why protection has several layers.
+---
+
 # 2B: protection, the three layers
 
 Branch `task/2b`, worktree `../lahe-worktrees/2b`. Cut after CP1.

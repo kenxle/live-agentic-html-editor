@@ -1,3 +1,5 @@
+// read-when: Changing `lahe review retire` and how a retired review is enforced, or when its tests fail.
+
 // `lahe review retire <id>` ends a review on purpose (each page its own
 // comments, Part 1). Only the owning session may retire its review, and a
 // retired review is enforced in four places: the page's review pick, the

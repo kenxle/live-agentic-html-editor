@@ -1,4 +1,5 @@
 ---
+read-when: A scroll position test fails only in Firefox, with a comment box offset from its passage.
 title: Firefox can undo a scrollBy sent right after scrollIntoView
 category: browser
 symptoms: ["the box opened beside its passage", comment box 40px off its passage, test fails only in Firefox, fails more often on one branch than on main, scroll position jumps back after the test scrolled]

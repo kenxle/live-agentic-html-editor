@@ -1,3 +1,7 @@
+/*
+read-when: Changing how a repaint during a writing session keeps the run blocks and caret, or when typing breaks after a repaint.
+*/
+
 // Free writing, plan Task 2.4: a repaint mid-sitting.
 //
 // The run's blocks are new elements the page's server never sent, so a

@@ -1,3 +1,7 @@
+/*
+read-when: Changing how bold and italic in an edit survive an agent's rebuild, or when a handled card loses its formatting.
+*/
+
 // The reviewer's bold and italic, and a rebuild that dropped them.
 //
 // The incident, review r198259e39417 on 2026-09-11. Ken rewrote a paragraph and,

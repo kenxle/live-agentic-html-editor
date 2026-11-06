@@ -1,3 +1,7 @@
+---
+read-when: Writing a browser test with the harness, or learning what the helpers and fixture knobs offer.
+---
+
 # The browser test harness
 
 Every browser test in this project is written against this module. Import it once:

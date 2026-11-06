@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how an edited block is protected from the page's own repaints, or when the caret jumps during a repaint.
+ */
+
 // The protection API: mark, veto, snapshot, restore, release.
 //
 // Owner: 2B. D7's first half, and it ships with ALL THREE LAYERS or not at all.

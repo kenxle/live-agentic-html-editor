@@ -1,3 +1,7 @@
+/*
+read-when: Changing the B and I buttons, or when removing bold or italic is not captured as an edit.
+*/
+
 // The B and I buttons, both directions, in every engine.
 //
 // Ken, 2026-08-23: "simply changing the bolding on a word or phrase doesn't

@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the choice buttons an agent puts in a document, or when a choice press is refused.
+ */
+
 // Choice buttons: arm the choice groups an agent wrote into a document page,
 // mint a press, and raise the refusal chip.
 //

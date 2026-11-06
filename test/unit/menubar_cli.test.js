@@ -1,3 +1,5 @@
+// read-when: Changing `lahe menubar show`, `lahe menubar rebuild` or the menu bar line in `lahe status`, or when its tests fail.
+
 // `lahe menubar show`, `lahe menubar rebuild`, and the menu bar line in
 // `lahe status` (menu bar plan V23, V26).
 //

@@ -1,3 +1,7 @@
+/*
+read-when: Changing replay and rail behavior for placed runs, list additions and rewordings, or when a clash card appears wrongly.
+*/
+
 // The flow walk's replay-side and rail-side failures, on a real review
 // (reviews_impl/flow_walk.md, fix builder G2).
 //

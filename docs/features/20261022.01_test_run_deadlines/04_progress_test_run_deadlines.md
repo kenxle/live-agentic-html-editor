@@ -1,3 +1,7 @@
+---
+read-when: Finding what the test run deadline and check changes shipped.
+---
+
 # Progress: Test run deadlines and checks
 
 **Shipped** in [PR #90](https://github.com/kenxle/live-agentic-html-editor/pull/90), merged 2026-10-22. Three board rows about the test tooling, shipped as one whetstone change, picked from the board for overnight work on 2026-10-22. Nothing is waiting on you.

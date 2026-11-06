@@ -1,3 +1,5 @@
+// read-when: Changing the rule that a mount's folder is under the home folder, checked when a link makes it, when the registry takes it and when serving, or when its tests fail.
+
 // A mount serves every file in its folder for as long as the site lives, so
 // the folder must be under the home folder by real path. That is checked in
 // three places: when a link makes the mount, when the registry takes it, and

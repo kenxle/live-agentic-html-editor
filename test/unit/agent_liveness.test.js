@@ -1,3 +1,5 @@
+// read-when: Changing how the rail decides an agent is listening, stalled or gone, or the hand-off message built from that, or when its tests fail.
+
 "use strict";
 
 const test = require("node:test");

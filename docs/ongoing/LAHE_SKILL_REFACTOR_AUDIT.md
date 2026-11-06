@@ -1,3 +1,7 @@
+---
+read-when: Checking which guidance from the old skill was missing or moved after the split.
+---
+
 # Lahe skill refactor: instruction audit
 
 The refactor kept the main review workflow, but it left some useful guidance

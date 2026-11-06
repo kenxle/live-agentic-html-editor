@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how reviews, tokens and session ownership are created, or when a second window is refused.
+ */
+
 // Reviews: creating one, minting its token, registering its origins, and
 // holding the one session that owns it.
 //

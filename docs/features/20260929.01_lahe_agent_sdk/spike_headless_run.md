@@ -1,3 +1,7 @@
+---
+read-when: Read when you want what a spike found about running one headless Claude Code run per wake.
+---
+
 # Spike: one headless Claude Code run per wake
 
 Date: 2026-09-29

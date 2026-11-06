@@ -1,3 +1,5 @@
+// read-when: Changing how the helper answers the reserved `.lahe-styles` path from installed styles, or when its tests fail.
+
 // Installed document styles at a stable address (stable addresses Step 3).
 // Carried over from the retired test/retired/unit/static_styles.test.js: the
 // helper answers the reserved `.lahe-styles` segment from the installed styles

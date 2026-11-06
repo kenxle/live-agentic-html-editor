@@ -1,3 +1,7 @@
+---
+read-when: Reading what the product reviewer found in the menu bar app brief.
+---
+
 # PM review: Menu bar app brief
 
 Reviewed: [01_brief_menu_bar_app.md](01_brief_menu_bar_app.md) and its leaf [parts/brief/questions.md](parts/brief/questions.md), against [the crucible](00_crucible_menu_bar_app.md).

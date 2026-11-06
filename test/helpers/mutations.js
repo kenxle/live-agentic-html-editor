@@ -1,3 +1,7 @@
+/*
+read-when: Writing a test that checks what a repaint or replay pass changed in the DOM.
+*/
+
 // MutationObserver capture over a subtree.
 //
 // This is the observation instrument behind the idempotence assertion, and it is

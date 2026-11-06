@@ -1,3 +1,7 @@
+/*
+read-when: Changing the page check on a run record, or when a handled run is reopened.
+*/
+
 // The page check on a run, and the first two R14 cases as run records
 // (free-writing plan Task 2.7).
 //

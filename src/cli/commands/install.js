@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing lahe install or uninstall, or when the helper does not start at login.
+ */
+
 // `lahe install` and `lahe uninstall`: the helper starts at login and
 // restarts if it stops (stable addresses, brief requirement 7).
 //

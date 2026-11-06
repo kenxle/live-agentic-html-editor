@@ -1,3 +1,7 @@
+/*
+read-when: Changing how the page reloads itself when the agent rebuilds it, or when a rebuild does not reach the reviewer's page.
+*/
+
 // R36 for a static page: the page reloads itself when the agent rebuilds it.
 //
 // D7 grounded R36 but assumed the serving environment supplies the refresh. A

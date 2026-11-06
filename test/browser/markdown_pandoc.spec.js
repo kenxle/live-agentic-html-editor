@@ -1,3 +1,7 @@
+/*
+read-when: Changing pandoc rendering of Markdown in the browser, or when fenced divs show as text or the pandoc-missing line is wrong.
+*/
+
 // Markdown through pandoc in a real browser (docs/features/20261017.02_pandoc_render).
 //
 // Two things only a browser answers. A rendered page with fenced divs draws

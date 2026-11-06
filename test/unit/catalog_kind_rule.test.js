@@ -1,3 +1,5 @@
+// read-when: Changing how a Library row gets its kind (static, dev-server, legacy), or when a static review shows as a dev server.
+
 "use strict";
 
 // What makes a row `dev-server` (Library fix round, CL minor).

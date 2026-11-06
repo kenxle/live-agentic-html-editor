@@ -1,3 +1,7 @@
+---
+read-when: Reading the decisions that were left to Ken when the rail cleanup closed.
+---
+
 # Rail cleanup: three things to decide
 
 The rail cleanup is closed: ten pull requests merged, and the full gate on main is green. Three things wait on you. Answer on each card, with a word like "yes", "promote" or "keep".

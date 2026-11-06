@@ -1,3 +1,7 @@
+---
+read-when: "Read when changing the rail's copy and export buttons or what they put out."
+---
+
 # 3C builder notes: copy and export
 
 Branch `task/3c`, worktree `../lahe-worktrees/3c`. Cut after CP2.

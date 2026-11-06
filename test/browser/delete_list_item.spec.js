@@ -1,3 +1,7 @@
+/*
+read-when: Changing Delete block when the caret is in a list, or when it removes the whole list instead of one bullet.
+*/
+
 // Delete block on a bullet takes out that bullet, not the whole list.
 //
 // A list is one block to the editor: the <ul> is the session's block and each

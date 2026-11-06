@@ -1,3 +1,7 @@
+---
+read-when: "Read when you want to know how Ken's two review rounds on the first brief were handled, or why the brief reads the way it does."
+---
+
 # Brief reviews
 
 ## Ken's Review (Round 2)

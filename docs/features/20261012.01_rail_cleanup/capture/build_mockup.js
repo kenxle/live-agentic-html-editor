@@ -1,3 +1,5 @@
+// read-when: Rebuilding the rail mockup page from captured rail states.
+//
 // Turn capture.json (written by rail_capture.spec.js) into rail_mockup.html.
 //
 //   node docs/features/20261012.01_rail_cleanup/capture/build_mockup.js

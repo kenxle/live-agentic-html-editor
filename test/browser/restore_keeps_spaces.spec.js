@@ -1,3 +1,7 @@
+/*
+read-when: Changing how protection restores a block after a repaint, or when typed spaces or the caret are lost.
+*/
+
 // A repaint of the block the reviewer is typing in keeps the space they just typed.
 //
 // Found on CI on 2026-10-01 as keep_mine_live_page line 180, on a Linux runner

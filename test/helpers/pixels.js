@@ -1,3 +1,7 @@
+/*
+read-when: Comparing two screenshots in a test, or when a screenshot comparison fails unreadably.
+*/
+
 // Comparing two screenshots the way an eye does, not the way a byte does.
 //
 // The claim these back is D8's: outside the rail's bounds, a reviewed page

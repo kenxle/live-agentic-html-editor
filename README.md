@@ -1,3 +1,5 @@
+<!-- read-when: Introducing Lahe to a newcomer, or finding what it does, how to start, and which agents it works with. -->
+
 # Live Agentic HTML Editor (Lahe)
 
 **We've graduated from MD to HTML for many of our docs. Or maybe you just want to edit your homepage in place. Lahe is injectable into any HTML on your machine, and provides direct editing, as well as threaded conversations for agentic updates.**

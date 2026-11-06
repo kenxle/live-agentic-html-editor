@@ -1,4 +1,5 @@
 ---
+read-when: The gate fails in a new worktree on a node_modules check.
 title: A fresh worktree under the clone runs the browser suite without its own node_modules, and one test notices
 category: testing
 symptoms: ["npm install has been run", "install_walk_3b", "expected true received false node_modules", "gate fails in a new worktree", "1 failed 878 passed"]

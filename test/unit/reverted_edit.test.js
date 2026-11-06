@@ -1,3 +1,5 @@
+// read-when: Changing the page check on a handled hand edit whose words were reverted, or when its tests fail.
+
 // The page check on a handled hand edit.
 //
 // Spec docs/features/20261011.01_stuck_replayed_blocks/01_spec_flag_dont_hold.md.

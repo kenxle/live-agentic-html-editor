@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the free writing markers, record shape, safe-tag check or agent instructions.
+---
+
 # Phase 1, kernel workstream: progress
 
 **Summary.** Tasks 1.1 to 1.6 are built on `feat/free-writing`, in six commits (`bd5e0de` to `7b88752`). `npm run gate:unit` is green: 1604 tests, 1602 pass, 0 fail, 2 todo (the same 2 todo as the base). Both named browser specs are green. No full browser suite ran. `dist/` was rebuilt locally for the R14 spec and not committed.

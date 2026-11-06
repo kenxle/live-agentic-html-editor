@@ -1,3 +1,7 @@
+---
+read-when: Read when changing what the status drain prints for each item, or to learn why rule text was removed from it.
+---
+
 # Trim the drain: notes
 
 **Summary.** The drain (`lahe status --session <id> --json --quiet`) now prints only the reviewer's items and what locates them. It repeats no rule text on any line. At 1000 items it prints 175,644 fewer bytes per drain (16.79%).

@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the Hold switch that queues comments before they go to the agent.
+---
+
 # Hold: queue several comments, release them to the agent at once
 
 Whetstone-size. Ken, 2026-09-17: "we should probably put in a feature to hold

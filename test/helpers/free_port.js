@@ -1,3 +1,7 @@
+/*
+read-when: A test that starts a helper on its own port, or a start fails because the port was taken.
+*/
+
 // A free loopback port for a helper a test starts on its own port, and one
 // retry when something else took it first.
 //

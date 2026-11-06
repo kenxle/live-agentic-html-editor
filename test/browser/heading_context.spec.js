@@ -1,3 +1,7 @@
+/*
+read-when: Changing how a comment finds the heading above a wrapped block, or when context.heading is empty for repeated blocks.
+*/
+
 // The L8 case, as a test: which treatment was the comment on?
 //
 // Ken clicked a blog block on a tearsheet that shows the same block once per

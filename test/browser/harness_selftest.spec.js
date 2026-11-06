@@ -1,3 +1,7 @@
+/*
+read-when: Changing the browser test harness or its fixture pages, or when a harness assertion passes when it should fail.
+*/
+
 // Self-tests for the browser test harness.
 //
 // The harness is the thing every other builder writes their tests against, so it

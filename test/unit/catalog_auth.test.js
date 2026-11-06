@@ -1,3 +1,5 @@
+// read-when: Changing the Library's credential or the per-route checks (Host, Origin, Sec-Fetch headers), or when its tests fail.
+
 // The Library's credential and its per-route checks (LAHE Library, Task 1.2).
 //
 // Architecture: docs/features/20260922.02_lahe_library/02_architecture_lahe_library.md,

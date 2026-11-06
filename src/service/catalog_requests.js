@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the Library's request queue for an attached agent, or when Pick this up requests are lost or stale.
+ */
+
 // The Library's request queue: catalog-requests.jsonl, and the attach record
 // that says which agent the queue hands requests to.
 //

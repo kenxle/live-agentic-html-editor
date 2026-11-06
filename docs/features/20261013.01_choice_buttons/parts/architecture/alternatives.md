@@ -1,3 +1,7 @@
+---
+read-when: Weighing a different way to record a choice press, or asking why an option was rejected.
+---
+
 Each entry names what was chosen, what was rejected, and why. Read this before deviating.
 
 - **A `choice` field, not words in `note`.** A press could have been a comment whose note reads "promote". Rejected: `note` is free text, the agent would parse it, and the identity would ride on the anchor. The `choice` field is two bounded tokens the agent reads as data, and the group name is the agent's own.

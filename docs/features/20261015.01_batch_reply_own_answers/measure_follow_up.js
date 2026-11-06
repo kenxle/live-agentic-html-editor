@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// read-when: Re-measuring what a follow-up item costs the agent on the drain.
+//
 // What a follow-up item costs the agent on the drain, before and after the drain
 // stops echoing the agent's own earlier answers (requirement 1 of the spec).
 //

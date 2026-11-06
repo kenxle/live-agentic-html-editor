@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+/*
+ * read-when: Measuring how many requests an open review tab sends the helper while idle, active or hidden.
+ */
+
 // How many requests one review tab makes to the helper, in three states.
 //
 // Written for docs/features/20260928.01_quiet_tab_polling (task 7), to be run

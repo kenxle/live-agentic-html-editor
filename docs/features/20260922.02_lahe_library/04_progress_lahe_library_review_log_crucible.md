@@ -1,3 +1,8 @@
+---
+read-when: "Read only for the log of Ken's review comments on the Library crucible."
+not-for: The crucible itself; see 00_crucible.md.
+---
+
 # Review log: r7c32d5b21644
 
 **Pages reviewed:** /00_crucible_lahe_library-56928901ee317935.html

@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the reviewer findings on the Library architecture, including the security review, and how they were answered.
+---
+
 # Architecture Reviews: LAHE Library
 
 ## Security Review (Round 1)

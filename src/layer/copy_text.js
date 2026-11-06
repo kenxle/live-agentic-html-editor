@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the layer copies text to the clipboard, or when a Copy button does nothing.
+ */
+
 // Put text on the clipboard, with or without the clipboard API.
 //
 // ONE FUNCTION, SHARED. `navigator.clipboard` exists only in a secure context,

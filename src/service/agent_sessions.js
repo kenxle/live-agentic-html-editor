@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how agent sessions own reviews and hand them off, or when a review belongs to the wrong session.
+ */
+
 // Durable routing ownership for independent top-level agent workstreams.
 // One machine may have many sessions and one shared helper, but one review has
 // exactly one immutable agent-session owner. Stewardship of that whole session

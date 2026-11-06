@@ -1,3 +1,7 @@
+/*
+read-when: Changing src/layer/blocks.js, the shared block rules for insert points, hosts and runs, or when the DOM walk and the string reader disagree.
+*/
+
 // src/layer/blocks.js: the DOM block rules in one copy (free-writing plan
 // Task 1.3). Editing, replay, undo and protection all find the insert point,
 // the host, and a record's run on the live page through these functions.

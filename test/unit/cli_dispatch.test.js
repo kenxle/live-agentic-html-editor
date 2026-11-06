@@ -1,3 +1,5 @@
+// read-when: Changing how the `lahe` command picks which subcommand to run (src/cli/index.js), or when its tests fail.
+
 // The public command dispatcher.
 
 "use strict";

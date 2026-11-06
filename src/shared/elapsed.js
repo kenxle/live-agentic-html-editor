@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how elapsed time is worded for a reader.
+ */
+
 // How long something has been going on, in words a person reads.
 //
 // Owner: 0A-kernel.

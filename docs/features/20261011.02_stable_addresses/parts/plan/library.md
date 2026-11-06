@@ -1,3 +1,7 @@
+---
+read-when: Building or checking the workstream that moves the Library onto stable addresses.
+---
+
 ### Workstream: library (Step 4)
 
 **Outcome:** the Library lists stable addresses, Open binds instead of restarting a process, and the Library answers at `library.lahe.localhost`.

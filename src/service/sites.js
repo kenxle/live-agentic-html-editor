@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the registry of site names behind stable addresses.
+ */
+
 // The name registry for stable addresses.
 //
 // Architecture: docs/features/20261011.02_stable_addresses/02_architecture_stable_addresses.md,

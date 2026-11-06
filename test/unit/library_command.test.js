@@ -1,3 +1,5 @@
+// read-when: Changing `lahe library` or `lahe library answer`, or when its tests fail.
+
 // `lahe library` and `lahe library answer` (LAHE Library, Task 1.4, architecture
 // "Reaching the Library").
 //

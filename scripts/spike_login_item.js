@@ -1,3 +1,7 @@
+/*
+ * read-when: Checking that the login item starts, restarts and removes the helper on this machine's service manager.
+ */
+
 // Spike for stable addresses Task 5.1: does the login item this clone writes
 // start the helper, restart it when it is killed, start it on request, and
 // go away cleanly, on this machine's real service manager?

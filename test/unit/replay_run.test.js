@@ -1,3 +1,5 @@
+// read-when: Changing how replay handles a run record: the anchor view, the page check and the card's words, or when its tests fail.
+
 // Replay of a run record: the pure halves (free-writing plan Tasks 2.5 to 2.7).
 //
 // The anchor view the compare reads, the page check leaving a handled run

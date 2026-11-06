@@ -1,3 +1,7 @@
+---
+read-when: Read when changing how often unsent drafts are written by the browser or the helper, or to see the before and after measurements.
+---
+
 # Stop writing unsent drafts so often
 
 Whetstone-size. Part of the [performance and token work](../20260916.05_memory_audit/MEMORY_AUDIT_20260916.md). The analysis behind it, and Ken's decisions, are in [where unsent comments are saved](../20260916.05_memory_audit/DRAFT_PERSISTENCE.md). Progress is at the bottom.

@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the code review findings on the integrated free writing diff.
+---
+
 # Code review of the integrated diff (feature-dev:code-reviewer)
 
 Saved by the orchestrator; the reviewer had no write tool.

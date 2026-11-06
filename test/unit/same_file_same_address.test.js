@@ -1,3 +1,5 @@
+// read-when: Changing how a file is bound into the deepest registered folder site so it keeps one address, or when its tests fail.
+
 // The brief: the same file gets the same address, in any review. `lahe review
 // X` made site X, and `lahe review X/sub/p.html` then made site X/sub, so
 // X/sub/p.html had two addresses. A file is now bound into the deepest

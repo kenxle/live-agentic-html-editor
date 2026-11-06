@@ -1,3 +1,7 @@
+/*
+read-when: Changing the helper contract CLI test, which preloads this to fake an older or newer helper.
+*/
+
 // Preloaded into a `lahe` CLI process (node --require) by
 // test/unit/helper_contract_cli.test.js.
 //

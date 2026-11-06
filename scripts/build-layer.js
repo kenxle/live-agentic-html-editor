@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+/*
+ * read-when: Changing how the layer bundle is built, or when check:layer says the committed bundle is out of date.
+ */
+
 // Concatenates the layer into the single artifact `setup` copies into a host
 // application's own static assets.
 //

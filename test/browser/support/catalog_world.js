@@ -1,3 +1,7 @@
+/*
+read-when: Writing or debugging a Library browser spec that needs a world built with the real CLI.
+*/
+
 // A Library world built with the real CLI, for the Library's browser specs.
 //
 // Owner: LAHE Library, Task 3.2. Used by catalog_library.spec.js and

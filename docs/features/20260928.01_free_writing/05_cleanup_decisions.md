@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the last decisions made to close out free writing, such as proposed CLAUDE.md rules.
+---
+
 # Free writing: cleanup decisions
 
 Free writing is merged and live. These are the last decisions before the feature closes. Each has a default. Comment "yes" to take a default, or say what you want instead.

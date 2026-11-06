@@ -1,3 +1,6 @@
+"""
+read-when: Preparing the Reveal deck fixture for the slide comment checks.
+"""
 from pathlib import Path
 import sys
 

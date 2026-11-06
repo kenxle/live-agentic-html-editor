@@ -1,4 +1,5 @@
 ---
+read-when: A worktree is dirty with changed images after the browser suite ran.
 title: The browser suite rewrites committed screenshots under docs/features
 category: testing
 symptoms: [worktree dirty after the gate, modified png files, png changed but I touched no images, git status shows docs/features images, unexpected diff after playwright test]

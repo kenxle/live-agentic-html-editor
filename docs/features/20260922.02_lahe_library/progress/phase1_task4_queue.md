@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the Library request queue, its drain section or the library command.
+---
+
 # Phase 1, Task 1.4: request queue, drain section, CLI
 
 **Summary.** The Library's request queue, its drain section, `lahe library`, `lahe library answer`, and `lahe monitor` with repeated `--session` are built on `task/lib-queue`. `npm run gate:unit` is green: 1375 tests, 1373 pass, 0 fail, and 2 todo. Both todo tests are older anchor tests, not part of this task. Nothing in scope was punted. Two things for 2.1 to wire, listed under Follow-ups.

@@ -1,3 +1,7 @@
+/*
+read-when: Changing where a comment points when its words are gone, or when a guess is painted wrongly.
+*/
+
 // The probable place: where a comment goes when the words it was made on are
 // gone, and what the reviewer is told about the guess.
 //

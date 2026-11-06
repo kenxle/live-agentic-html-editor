@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing lahe library or lahe library answer, or when an agent is not attached to the Library.
+ */
+
 // `lahe library`: print the Library's address, and attach an agent to it.
 // `lahe library answer`: answer a request the Library queued for that agent.
 //

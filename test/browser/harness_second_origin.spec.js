@@ -1,3 +1,7 @@
+/*
+read-when: Changing what the helper refuses from another origin, or when an outside page can read or write a review.
+*/
+
 // The helper cannot be driven from outside. Ranked test 5.
 //
 // Retargeted from the stub service to the REAL helper, which is the one constant

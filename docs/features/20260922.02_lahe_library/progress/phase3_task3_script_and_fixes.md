@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the Library count script, or how the watching agent is named once per card.
+---
+
 # Phase 3, Task 3.3 plus two fixes: the count script, one watcher line per card, one queue read per list
 
 **Summary.** Done on branch `task/lib-fixes`, off `feat/lahe_library` at `8b0c544`. Three commits:

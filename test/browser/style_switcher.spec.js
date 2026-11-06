@@ -1,3 +1,7 @@
+/*
+read-when: Changing the Document style panel on a real page, or when the control appears where it should not.
+*/
+
 // The Document style panel: trying a style on the real page.
 //
 // docs/features/20260930.01_style_switcher, plan Step 2, Test List rows V8 to

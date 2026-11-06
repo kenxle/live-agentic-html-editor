@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the helper starts, listens and shuts down, or when serve fails.
+ */
+
 // The helper: `lahe serve`.
 //
 // Owner: 1A. Architecture D5 (the append-only log), D11 (loopback is not a

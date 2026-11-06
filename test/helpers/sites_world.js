@@ -1,3 +1,7 @@
+/*
+read-when: Writing a unit test of stable addresses, host dispatch or page binding that needs a helper in-process.
+*/
+
 // A helper serving stable addresses, for unit tests of sites, Host dispatch,
 // page serving and binding (docs/features/20261011.02_stable_addresses).
 //

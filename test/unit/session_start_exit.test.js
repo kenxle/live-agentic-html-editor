@@ -1,3 +1,5 @@
+// read-when: Changing how `startHelper` in session.js reports a helper that exits before it answers, or when its tests fail.
+
 // `startHelper` in session.js spawns the helper and waits for it to answer. A
 // helper that exits before it answers (its port taken, a bad state folder) is
 // reported at once, with its exit status, instead of after the whole wait as

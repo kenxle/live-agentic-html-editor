@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the layer re-mounts after the page replaces its body, or when the rail vanishes after a navigation.
+ */
+
 // Living in the page: the remount contract, route detection, and the CSP
 // refusal watcher.
 //

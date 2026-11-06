@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the helper notices it is older than the code, or when a stale helper is not restarted.
+ */
+
 // Is the helper that is running older than the code it is running?
 //
 // Owner: 1A. The helper is deliberately shared and long-lived: one process

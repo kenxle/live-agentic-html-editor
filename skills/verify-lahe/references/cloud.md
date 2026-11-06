@@ -1,3 +1,7 @@
+---
+read-when: Running Lahe verification on a cloud runner.
+---
+
 # Cloud verification
 
 The same headless Chromium that `lahe-verify` drives locally is the cloud route. The seed journey

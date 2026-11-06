@@ -1,3 +1,6 @@
+// read-when: Changing the anchor engine's choice rung, which binds a button press to its named choice group, or when its tests fail.
+// not-for: The rest of the anchor engine; see test/unit/anchor_engine.test.js.
+
 // The anchor engine's choice rung (choice buttons, plan Task 2.2, V20).
 //
 // A press is anchored on its group's name. Exactly one `.choice` group with

@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing what the Library remembers, such as stars and names, across helper restarts.
+ */
+
 // The catalog store: the only code that reads or writes <state>/catalog.json.
 //
 // Owner: LAHE Library 1.1 (docs/features/20260922.02_lahe_library, architecture

@@ -1,3 +1,7 @@
+/*
+read-when: Changing how tests stop helpers in their temp state folders, or when a run leaves helpers behind.
+*/
+
 // Stop the helper processes a test started in its own temp state dir, and prove
 // none of them outlived the test run.
 //

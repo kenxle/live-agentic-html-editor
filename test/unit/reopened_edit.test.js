@@ -1,3 +1,5 @@
+// read-when: Changing how a reopened hand edit leaves the agent's queue while the reviewer types, or when its tests fail.
+
 // Typing into a reopened hand edit takes it off the agent's desk until commit.
 //
 // Owner: 2A. The spec is

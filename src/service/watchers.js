@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the helper detects whether anything holds a file open, or when a session wrongly looks idle or armed.
+ */
+
 // Is anything on this machine holding a file open?
 //
 // WHY THIS EXISTS. The helper is local, so it can ask questions a web server

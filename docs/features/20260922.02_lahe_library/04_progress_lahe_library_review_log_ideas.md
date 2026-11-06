@@ -1,3 +1,7 @@
+---
+read-when: "Read only for the log of Ken's review comments on the document index ideas page."
+---
+
 # Review log: rf52670b461dd
 
 **Pages reviewed:** /DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html

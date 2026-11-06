@@ -1,3 +1,7 @@
+---
+read-when: Read when you want what the adversary review of free writing found that the other reviews missed.
+---
+
 # Adversary review (implementation): free writing
 
 **Short version.** I found six problems the other five reviews missed. Three of them hit the normal blog-post flow:

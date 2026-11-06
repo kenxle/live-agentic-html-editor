@@ -1,3 +1,7 @@
+---
+read-when: Looking up how the choice group's look and its agent-facing wording were built.
+---
+
 # Workstream style-skill: the choice group's look and every agent-facing word
 
 Branch `feat/cb-style`. Tasks 3.1 and 3.2 are done. V14, V15 and V23 (the page half) pass.

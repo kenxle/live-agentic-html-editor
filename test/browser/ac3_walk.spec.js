@@ -1,3 +1,7 @@
+/*
+read-when: Changing the human-and-agent-at-once acceptance walk, or when an unfinished edit and an agent's change collide.
+*/
+
 // AC3, human and agent at the same time, as a script. Ranked test 39, third of
 // three.
 //

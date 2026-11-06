@@ -1,3 +1,7 @@
+---
+read-when: Looking up how an agent should link to files a reviewer names, or why a comment watcher looped or exited early.
+---
+
 # Name another file as a link: progress
 
 **Needs you:**

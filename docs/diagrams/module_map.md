@@ -1,3 +1,7 @@
+---
+read-when: Deciding where a new source file belongs, or which way module dependencies point.
+---
+
 # Module map
 
 This is `src/shared/manifest.js` drawn as a picture. It shows the four folders under `src/`, what each one is for, and which way the dependencies point. Use it to decide where a new file belongs, before you write it.

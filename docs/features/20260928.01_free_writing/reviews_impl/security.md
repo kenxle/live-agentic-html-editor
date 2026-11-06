@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the security review of the implemented free writing diff.
+---
+
 # Security review (implementation): free writing
 
 Diff: `git diff 97a8270..HEAD` on `feat/free-writing` (HEAD 9b5fe24). Design review: `02_architecture_free_writing_reviews.md`, "Security Review (Round 1)".

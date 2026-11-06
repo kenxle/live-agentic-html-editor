@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the Claude Code Stop hook, or when it blocks an agent's turn end wrongly or fails to block.
+ */
+
 // `lahe hook stop`: Claude Code's Stop hook, the re-arm guard.
 //
 // See docs/features/20261006.02_rearm_guard/00_decision.md. Claude Code runs a

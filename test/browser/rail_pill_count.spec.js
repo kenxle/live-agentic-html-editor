@@ -1,3 +1,7 @@
+/*
+read-when: Changing the collapsed pill's counts, or when the pill shows the wrong open or total number.
+*/
+
 // The collapsed pill's burn-down: still to handle, then the all-time total.
 //
 // The pill is what a reviewer sees for most of a session, because the rail

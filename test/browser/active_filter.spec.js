@@ -1,3 +1,7 @@
+/*
+read-when: Changing the rail's two tabs, the Active filter or the search box, or when the filter shows the wrong cards.
+*/
+
 // Two tabs, and the Active pane's filter, in a real browser.
 //
 // The rail had three tabs (Active, Edits, Done). A hand edit that is still work

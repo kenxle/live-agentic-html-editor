@@ -1,3 +1,7 @@
+---
+read-when: Getting the shape of the system, its stack and folders, or deciding where a change belongs.
+---
+
 # Architecture
 
 ## Charter

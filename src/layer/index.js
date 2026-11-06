@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the review layer boots and wires its parts together, or when the rail does not appear.
+ */
+
 // The review layer's entry point: boot, the version stamp, and the one place
 // the library's pieces are wired to each other.
 //

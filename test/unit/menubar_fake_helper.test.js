@@ -1,3 +1,5 @@
+// read-when: Changing the fake helper the menu bar app's tests stand on (test/fixtures/menubar/fake_helper.js), or when its tests fail.
+
 // The menu bar app's fake helper (test/fixtures/menubar/fake_helper.js): it
 // checks proofs and signs answers by the wire in docs/CONTRACTS.md, and each
 // mode gives the answer it names. The app's own tests stand on this, so it is

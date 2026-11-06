@@ -1,3 +1,5 @@
+// read-when: Changing how a Markdown document's lahe-style frontmatter line picks its stylesheet, or when its tests fail.
+
 // A Markdown document carries its style in one frontmatter line,
 // `lahe-style: <id>`, which the renderer turns into one stylesheet link after
 // the house style, and a written artifact gets the style's files beside it.

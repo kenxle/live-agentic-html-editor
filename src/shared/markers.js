@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the attributes and classes that mark page nodes the tool added.
+ */
+
 // Markers: the attribute and class names that identify DOM the tool added.
 //
 // Owner: Task 0a (shared kernel). Imported by: normalize (cleanMarkup strips

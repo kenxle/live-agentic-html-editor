@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the findings from the implementation review of the first build and how each was resolved.
+---
+
 # Phase 5 review findings ledger
 
 Five reviewers ran in parallel on the implemented diff (code, security, testing, code-lead,

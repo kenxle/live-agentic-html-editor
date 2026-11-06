@@ -1,3 +1,7 @@
+/*
+ * read-when: Needing the caret or selection position in the page, or changing how it is read.
+ */
+
 // The caret and selection accessor.
 //
 // Owner: 0A-kernel, and FROZEN AT CP0. 2A (editing) and 2B (protection) both

@@ -1,3 +1,7 @@
+/*
+read-when: Changing the zoom viewer for graphs and images, or when the magnifier button shows on the wrong things.
+*/
+
 // The zoom viewer (docs/features/20261007.01_zoom_viewer/01_spec_zoom_viewer.md).
 //
 // A magnifier button appears at the top right of a graph or a large image while

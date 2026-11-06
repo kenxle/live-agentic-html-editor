@@ -1,3 +1,7 @@
+/*
+read-when: Changing the free-writing editing host and session, or when Backspace and Delete at block edges misbehave.
+*/
+
 // Free writing, plan Task 2.1: the editing host and the session.
 //
 // The host is the anchor's parent, made editable, with a beforeinput guard.

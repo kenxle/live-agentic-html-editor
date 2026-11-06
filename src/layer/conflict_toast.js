@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing when the conflict toast shows or what it says, or when a clash goes unannounced.
+ */
+
 // The conflict toast: "your edit clashed, nothing is lost, go choose".
 //
 // Owner: conflict-toast (2026-09-22). The toast itself is the rail's

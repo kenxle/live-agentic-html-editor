@@ -1,3 +1,8 @@
+---
+read-when: "Read only for the log of Ken's review comments on the Library brief."
+not-for: The brief itself; see 01_brief_lahe_library.md.
+---
+
 # Review log: r2bb2097402e5
 
 **Pages reviewed:** /01_brief_lahe_library-2c46b3ef7fe0f166.html

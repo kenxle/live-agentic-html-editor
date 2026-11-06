@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the LAHE skill and Claude Code's stop hook are installed, or when an installed skill is out of date.
+ */
+
 // Install the repository-owned LAHE skill where supported agents discover it.
 // The repository is the source of truth. Installed files are replaceable
 // projections, and a pre-existing hand-maintained LAHE skill is backed up once

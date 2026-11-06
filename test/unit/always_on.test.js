@@ -1,3 +1,5 @@
+// read-when: Changing the helper as the login item runs it (it stays up when quiet), or how the CLI asks it for a helper, or when its tests fail.
+
 // The helper as the login item runs it (stable addresses, install Task 5.3).
 //
 //   V49  `--always-on` does not stop itself when quiet, and still stops when

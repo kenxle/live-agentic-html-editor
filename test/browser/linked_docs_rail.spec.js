@@ -1,3 +1,7 @@
+/*
+read-when: Changing how the rail follows links out of a reviewed Markdown page, or when a linked document has no rail.
+*/
+
 // Following a link keeps the editor.
 //
 // Spec: docs/features/20260922.02_linked_docs_rail/01_spec_linked_docs_rail.md.

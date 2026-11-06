@@ -1,3 +1,7 @@
+/*
+read-when: Changing how rail cards fold to one line, or when a fold, Collapse all or Expand all misbehaves.
+*/
+
 // Folding a card down to one line, in a real browser, on a real review.
 //
 // Ken, 2026-09-15: "I'm scrolling through comments a lot now. We should make

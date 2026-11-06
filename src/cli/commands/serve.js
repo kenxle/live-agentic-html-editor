@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing lahe serve, or when the helper will not start or restart, or reports its port busy.
+ */
+
 // `lahe serve`: run the helper until something stops it.
 //
 // Owner: 1A.

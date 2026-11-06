@@ -1,3 +1,7 @@
+/*
+read-when: Changing the Library at stable addresses, or when Open on an old row binds the wrong review.
+*/
+
 // The Library with stable addresses, in a real browser (stable addresses,
 // Tasks 4.1 and 4.2).
 //

@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the test harness, the lint checks or the test lanes, or to learn why they were set up that way.
+---
+
 # 0B: harness rescope, instruments, and lanes
 
 Branch `task/0b-harness`. This is the first pass: everything that does not read

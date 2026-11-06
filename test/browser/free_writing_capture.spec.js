@@ -1,3 +1,7 @@
+/*
+read-when: Changing which record shapes typing produces in free writing, or when a typed run differs from its fixture.
+*/
+
 // Free writing, plan Task 2.1: typing produces the agreed record shapes.
 //
 // record_fixtures.runFixtures() is the shape the replay (2B) and helper (2C)

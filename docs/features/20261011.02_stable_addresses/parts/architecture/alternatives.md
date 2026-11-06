@@ -1,3 +1,7 @@
+---
+read-when: Weighing a different way to serve pages than the one chosen, or asking why an option was rejected.
+---
+
 ### Chosen: the helper serves pages, one name per site, one port, `.lahe.localhost` printed
 
 A site is what one page server serves today: a folder, or one notes page. The rest of this leaf records what was weighed against it.

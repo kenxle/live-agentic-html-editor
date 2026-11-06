@@ -1,3 +1,7 @@
+---
+read-when: Reading the architect and security findings on the style switcher design.
+---
+
 # Architecture reviews: Style switcher
 
 Both reviews read the first draft. Their findings are integrated into the architecture; the summary tables there say what changed.

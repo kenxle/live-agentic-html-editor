@@ -1,3 +1,7 @@
+---
+read-when: "Read when you want to know whether the architecture review's table of homed-but-incomplete items was true of the code at the time of the audit."
+---
+
 # Audit: "Homed but broken or incomplete as written"
 
 Scope: the 13 rows of the table at line 805 of

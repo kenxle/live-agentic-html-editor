@@ -1,3 +1,5 @@
+// read-when: Changing how leftover page servers are stopped and how `lahe review` names a taken pages port, or when its tests fail.
+
 // Stable addresses, Step 3: page servers retired, the helper serves every page
 // (Tasks 3.1 and 3.2).
 //

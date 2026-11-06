@@ -1,3 +1,5 @@
+// read-when: Changing `lahe session list`, the read-only command that lists agent sessions and their waiting work, or when its tests fail.
+
 // `lahe session list`: the read-only discovery command.
 //
 // A human said "claim the lahe sessions" and the agent had no id, so it went

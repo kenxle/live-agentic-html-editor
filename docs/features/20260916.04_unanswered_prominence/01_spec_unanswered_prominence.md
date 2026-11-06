@@ -1,3 +1,7 @@
+---
+read-when: Read when changing how the rail shows a comment that nobody has picked up, or its colour and message.
+---
+
 # Make it obvious when nobody is picking up your comments
 
 Ken, 2026-09-16, looking at the rail's footer line "Stored · nobody has picked this up, 10m": "this is great, but it should be more prominent. active boxes should change color if they haven't been picked up after a certain amount of time. something with more prominence should tell you to go check your agent or assign a new one to this doc."

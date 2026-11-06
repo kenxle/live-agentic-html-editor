@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the keyboard shortcuts and gesture table, or the hint lines built from them.
+ */
+
 // The gesture table.
 //
 // Owner: 0A-kernel. Imported by: the rail's hint lines (1B), the comment

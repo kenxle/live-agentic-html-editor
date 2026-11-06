@@ -1,3 +1,7 @@
+---
+read-when: Setting up the comment monitor in Codex.
+---
+
 # Monitor in Codex
 
 ## Codex

@@ -1,4 +1,8 @@
-"""Read a gate log and save one classified row per browser test."""
+"""
+read-when: Turning a browser gate log into one classified row per test.
+
+Read a gate log and save one classified row per browser test.
+"""
 from collections import Counter
 import csv
 import json

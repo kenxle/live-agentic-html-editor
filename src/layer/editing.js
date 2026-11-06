@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing hand editing in the page, or when an edit is lost, commits wrong, or moves the caret.
+ */
+
 // Edit state: one block at a time, entered deliberately, committed once.
 //
 // Owner: 2A. Implements architecture D3 (edit is entered deliberately, per

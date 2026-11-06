@@ -1,3 +1,7 @@
+/*
+read-when: Changing hand-edit cards in the Active pane and their export, or when edit cards look or export wrongly.
+*/
+
 // 3D's done bar: after a session with six hand edits including one
 // formatting-only change, the rail shows six before-and-after cards in the
 // Active pane beside the comment (the Edits tab is gone; the Active filter is

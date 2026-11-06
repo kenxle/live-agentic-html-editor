@@ -1,3 +1,7 @@
+/*
+read-when: Changing Keep mine on a collision, or when a page that keeps repainting undoes the reviewer's choice.
+*/
+
 // "Keep mine" on a page that is still repainting.
 //
 // Found by a real-browser walker on 2026-08-14, on the app fixture at

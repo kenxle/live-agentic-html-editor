@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the review format, the wire protocol bytes or the script tag the page carries, or to learn why they took their shape.
+---
+
 # 0A-wire builder notes
 
 Branch `task/0a-wire`, clone at `../lahe-worktrees/0a-wire`. Task: the wire half of the contracts.

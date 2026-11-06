@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the rail's Copy and Export controls, or when the text they produce is wrong.
+ */
+
 // Copy and Export: the reviewer's way out, with or without a helper.
 //
 // Owner: 3C.

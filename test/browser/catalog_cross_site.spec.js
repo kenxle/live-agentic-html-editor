@@ -1,3 +1,7 @@
+/*
+read-when: Changing which origins may call the Library's actions, or checking that another site cannot drive them.
+*/
+
 // Every Library action is refused from another origin. LAHE Library plan,
 // Task 3.2, "End to end and cross-site (3.2)" in the Test List. Runs on all
 // three lanes: --project=chromium, --project=firefox, --project=webkit.

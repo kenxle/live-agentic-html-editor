@@ -1,3 +1,5 @@
+// read-when: Changing the read mark for replies (reply.seen), the unread rule, or how a second browser adopts it, or when its tests fail.
+
 // The read mark's round trip: the rail's "1 new" mark posted as reply.seen,
 // folded by the helper, and adopted by a second browser.
 //

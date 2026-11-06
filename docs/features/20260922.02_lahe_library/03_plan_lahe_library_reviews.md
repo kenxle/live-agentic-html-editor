@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the reviewer findings on the Library plan and how they were answered.
+---
+
 # Plan Reviews: LAHE Library
 
 ## Code Review Lead Review (Round 1)

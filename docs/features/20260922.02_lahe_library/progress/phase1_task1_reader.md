@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the catalog reader or catalog store, or to learn how the Library list is built from the state folder.
+---
+
 # Phase 1, Task 1.1: catalog reader and catalog store
 
 **Summary:** Done on branch `task/lib-reader`. The reader builds the Library's list from the state dir, the store owns `catalog.json`, and both have a committed fixture. `npm run gate:unit`: 1368 tests, 1366 pass, 0 fail, 2 todo. The two todos are older tests in `anchor_cases.test.js`, not this task's. Three things need the orchestrator: the servesPath split, how 2.1 passes the attach record and requests in, and one new top-level list field.

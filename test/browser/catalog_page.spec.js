@@ -1,3 +1,7 @@
+/*
+read-when: Changing the Library page itself (rendering, content policy, Open behavior), or when a Library row draws wrongly.
+*/
+
 // The Library page in a real browser. LAHE Library plan, Task 2.2, "Page in the
 // browser (2.2)" in the Test List.
 //

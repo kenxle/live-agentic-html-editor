@@ -1,3 +1,7 @@
+---
+read-when: Read when the status line or a failure chip says something that is not true, or when changing how page status is decided.
+---
+
 # The status-truth cluster: the status line and the failure chips never lie
 
 Branch `task/fix-status`. Three walkers hit the same family of bugs on 2026-08-14:

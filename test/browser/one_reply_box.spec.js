@@ -1,3 +1,7 @@
+/*
+read-when: Changing the reply box on a card, or when a thread shows two boxes.
+*/
+
 // One reply box per thread, at the bottom, under the newest message.
 //
 // Ken, on a card that showed "Add another message" with Send and then, right

@@ -1,3 +1,7 @@
+/*
+read-when: Writing or debugging a spec that needs a real review run from this checkout with its own helper.
+*/
+
 // A real review for the seam specs (plan Task 3.4): `lahe review` or
 // `lahe write` run from this checkout, with its own state folder and helper
 // port, never Ken's shared helper on 7817.

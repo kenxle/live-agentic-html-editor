@@ -1,3 +1,7 @@
+/*
+read-when: Changing how the library coexists with the page's own controls and repeated morphs, or when links, buttons or forms stop working.
+*/
+
 // Living in the page: the page keeps working, and the layer survives the page.
 //
 // Owner: 2D. Ranked test 4, both halves, on 0C's app fixture:

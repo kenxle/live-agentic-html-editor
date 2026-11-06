@@ -1,3 +1,5 @@
+// read-when: Changing how often unsent drafts are posted to the helper, or when committed work is held back, or when its tests fail.
+
 // Unsent drafts go to the helper rarely; committed work never waits.
 //
 // Owner: 1B. The spec is

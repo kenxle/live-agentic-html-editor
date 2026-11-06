@@ -1,3 +1,5 @@
+// read-when: Changing where a comment points once its words are gone (src/layer/pointing.js), or when its tests fail.
+
 // Where a comment points when its words are gone.
 //
 // Two claims, and the second one is the one that keeps this honest.

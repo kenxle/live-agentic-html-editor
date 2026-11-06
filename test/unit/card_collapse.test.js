@@ -1,3 +1,6 @@
+// read-when: Changing how cards and thread rounds fold, the one-line folded summary, or the saved fold preference, or when its tests fail.
+// not-for: How folding looks in a browser; see test/browser/card_collapse.spec.js.
+
 // Folding a card, and folding a round of a thread, headless.
 //
 // Ken, 2026-09-15: "I'm scrolling through comments a lot now. We should make

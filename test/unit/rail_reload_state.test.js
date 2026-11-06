@@ -1,3 +1,5 @@
+// read-when: Changing how the rail restores its state after a reload that LAHE started, or when its tests fail.
+
 // The rail comes back from a reload LAHE started, exactly as it was.
 //
 // Ken clicked a toast, the rail opened on the card, and two seconds later a

@@ -1,3 +1,7 @@
+---
+read-when: Read when changing how a static page server restarts, or how stale origins and the Host check behave.
+---
+
 # Phase 1, Task 1.3: static server restart, stale origins, Host check
 
 **Status:** done on branch `task/lib-restart`, off `feat/lahe_library` at `000c40b`. `npm run gate:unit` green: 1333 tests, 1331 pass, 0 fail, 2 todo (both pre-existing in `anchor_cases.test.js`). Browser: `test/browser/static_site_folder.spec.js` 4 of 4 pass on Chromium.

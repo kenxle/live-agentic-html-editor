@@ -1,3 +1,7 @@
+/*
+read-when: Changing how an open edit is delivered on navigation, or when the last keystroke is missing after a page change.
+*/
+
 // Ranked test 7: commit-on-navigation is DELIVERED, not just stored.
 //
 // An edit is left open, the reviewer navigates, and on the next page load the

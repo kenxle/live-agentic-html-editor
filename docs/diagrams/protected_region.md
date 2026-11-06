@@ -1,3 +1,7 @@
+---
+read-when: Changing how a block is protected while the reviewer is editing it.
+---
+
 # Protecting a block while it is being edited
 
 While the reviewer is actively editing a block, the library owns it: the page must not be allowed to repaint that block out from under the reviewer's cursor. There are three layers doing this, not one, and that is the whole point. An archived round-2 review found that restoring the caret after a repaint cannot work on its own: the repaint destroys the text node the selection lives in before any observer even fires, so by the time a restore runs there is nothing left to restore into.

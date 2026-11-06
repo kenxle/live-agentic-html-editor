@@ -1,3 +1,7 @@
+---
+read-when: Writing a lesson, or learning how the lesson store is organized and searched.
+---
+
 # The lesson store
 
 What agents have learned the hard way working in this repo. One problem per file,

@@ -1,3 +1,6 @@
+// read-when: Changing how the rail reads a free-writing run record (the card summary, block list, empty-page lines), or when its tests fail.
+// not-for: How those cards are drawn; see test/browser/edits_tab.spec.js.
+
 // The rail's reading of a free-writing record (plan Tasks 3.2 and 3.3).
 //
 // The pure halves: the pinned two-line summary a run's card and edits row lead

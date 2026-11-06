@@ -1,3 +1,8 @@
+---
+read-when: Read when you want the record of the three performance changes merged on the day of the memory audit.
+not-for: Current progress on the performance work; see MEMORY_AUDIT_20260916.md.
+---
+
 # LAHE: the 2026-09-16 merge record
 
 This page is the record of what merged on 2026-09-16 and why. The one page to follow for progress on all of the performance and token work is `docs/features/20260916.05_memory_audit/MEMORY_AUDIT_20260916.md` (LAHE: performance and token work). Nothing here is updated any more.

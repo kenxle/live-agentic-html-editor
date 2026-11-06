@@ -1,3 +1,5 @@
+// read-when: Running the rail mockup capture on its own, outside the gate.
+//
 // Playwright config for the rail mockup capture only. Not part of any gate.
 const { defineConfig, devices } = require("@playwright/test");
 module.exports = defineConfig({

@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the hand-edit rows inside rail cards.
+ */
+
 // The hand-edit rows: every hand edit as a before-and-after row inside its
 // rail card.
 //

@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the unit run checks for left-over helpers, or when the unit run fails because a helper survived or it ran too long.
+ */
+
 // Run a test command, then fail if a helper or page server it started on a
 // temp state dir is still running.
 //

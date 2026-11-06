@@ -1,4 +1,5 @@
 ---
+read-when: Text like href or src written in a document shows a changed path on the rendered page.
 title: Pandoc leaves double quotes unescaped in text, so the relative-URL rewrite edits href= written as prose
 category: service
 symptoms: ["href=\"./x\" in my document shows a different path on the page", "inline code shows /.lahe-source/ inside the code", "rewriteRelativeUrls changed text I wrote", "src= in a sentence got a prefix", "pandoc and marked render the same quote differently", "&quot; missing in pandoc output", "link prefix appears inside a code span"]

@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the wire between page, helper and agent, such as routes, event lines, reply shapes or the script tag.
+ */
+
 // The wire: every byte that leaves this repo.
 //
 // Owner: 0A-wire. Imported by: the helper's router and per-request check block

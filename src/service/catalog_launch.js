@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the Library starts a new agent in a Terminal window, or when Launch does nothing.
+ */
+
 // Launching a new agent from the Library, by the helper itself.
 //
 // Owner: LAHE Library, direct launch (the architecture's Open Question 1).

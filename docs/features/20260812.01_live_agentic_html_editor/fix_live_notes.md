@@ -1,3 +1,7 @@
+---
+read-when: Read when Keep mine does not survive a repaint, or comment highlights do not return after a reload.
+---
+
 # fix-live: two live-page bugs from the 2026-08-14 browser walks
 
 Branch `task/fix-live`. Two bugs found by real-browser walkers, both invisible to

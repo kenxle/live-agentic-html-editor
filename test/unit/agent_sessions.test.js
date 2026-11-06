@@ -1,3 +1,5 @@
+// read-when: Changing agent sessions (create, close, reopen) in src/service/agent_sessions.js, or when its tests fail.
+
 "use strict";
 
 const test = require("node:test");

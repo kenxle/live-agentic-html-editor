@@ -1,3 +1,5 @@
+// read-when: Changing the handled check on run records and on bold or italic edits (src/service/handled_check.js), or when its tests fail.
+
 // The handled check on run records and bold or italic edits (free-writing
 // plan Task 2.9, architecture "The handled check", AQ3).
 //

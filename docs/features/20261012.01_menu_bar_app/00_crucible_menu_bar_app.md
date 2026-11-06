@@ -1,3 +1,7 @@
+---
+read-when: Asking why the menu bar app exists, or what the first idea for it was before the brief.
+---
+
 # Crucible: Menu bar app
 
 Date: 2026-10-12

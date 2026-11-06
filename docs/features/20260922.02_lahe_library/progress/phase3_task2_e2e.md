@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the end-to-end and cross-site browser specs for the Library.
+---
+
 # Phase 3, Task 3.2: end-to-end and cross-site browser specs
 
 **Summary.** Both specs are written and pass. No product bug was found, and nothing in `src/` changed.

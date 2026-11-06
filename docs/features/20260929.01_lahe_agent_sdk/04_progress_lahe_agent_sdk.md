@@ -1,3 +1,7 @@
+---
+read-when: Read when you want to know why the auto-answer agent was parked and how far the plan got.
+---
+
 ## Parked
 
 This feature is parked at the plan stage. Nothing was built. A Lahe agent that answers comments by itself would need the Claude API, which is paid per use, instead of Ken's Claude subscription, so he decided not to build it.

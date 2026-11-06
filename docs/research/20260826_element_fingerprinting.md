@@ -1,3 +1,8 @@
+---
+read-when: Comparing Lahe's element fingerprinting with what other tools do for selectors and annotation anchors.
+not-for: How Lahe's own fingerprinting works; see docs/ongoing/FINGERPRINTING.md.
+---
+
 # Fingerprinting DOM elements: what the rest of the world does
 
 Research synthesis, 2026-08-26. Three parallel web sweeps: selector-generation

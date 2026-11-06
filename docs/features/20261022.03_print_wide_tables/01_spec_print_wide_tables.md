@@ -1,3 +1,7 @@
+---
+read-when: Changing how wide tables print, or when a table is cut off on paper or in a PDF.
+---
+
 # Spec: Wide tables in print
 
 **Shipped with this change.** Board row LAHE-style-print-wide-tables, picked for overnight work on 2026-10-22. Whetstone route. Nothing is waiting on you.

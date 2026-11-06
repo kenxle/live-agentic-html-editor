@@ -1,3 +1,5 @@
+// read-when: Changing how a run record is merged on load, browser against helper, or when its tests fail.
+
 // Merge on load for a run record (free-writing plan Task 1.4): the browser
 // wins on the new fields while its work is unacknowledged, whichever way the
 // run moved, and a later helper revision still wins over an acknowledged copy.

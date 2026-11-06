@@ -1,3 +1,7 @@
+/*
+read-when: Changing how a review spanning pages keeps items per page, or when a second page shows the first page's items.
+*/
+
 // One review, two pages, and each page shows only its own items.
 //
 // A review MAY span pages: `lahe add <page> --review <id>` attaches a second

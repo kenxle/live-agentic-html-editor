@@ -1,3 +1,5 @@
+// read-when: Changing reviews.removeOrigin, which site.bind uses to drop a review's old origins, or when its tests fail.
+
 // reviews.removeOrigin, carried over from the retired static_restart.test.js
 // (stable addresses Step 3). It stays because site.bind drops a review's old
 // 127.0.0.1:<port> origins through it (V25), and only plain loopback http

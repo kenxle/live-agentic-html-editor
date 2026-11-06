@@ -1,3 +1,7 @@
+/*
+read-when: Changing the rail's look in both color schemes, or when keycaps, card washes or the hosted pane draw wrongly.
+*/
+
 // The rail as a SHIPPING SURFACE: the four things the 4A design review found
 // broken that a screenshot found and no test did.
 //

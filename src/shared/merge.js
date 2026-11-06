@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how browser storage and the helper's store are reconciled for one item, or when a comment reverts after a reconnect.
+ */
+
 // The merge rule: what happens when browser storage and the helper's store
 // disagree about one item.
 //

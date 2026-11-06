@@ -1,3 +1,5 @@
+// read-when: Changing the pure core of the edit surface (what counts as a change, which commands exist), or when its tests fail.
+
 // The parts of the edit surface that are decisions rather than DOM.
 //
 // Everything that needs a caret, a repaint, or a real keystroke is a browser

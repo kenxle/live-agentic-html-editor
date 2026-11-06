@@ -1,3 +1,7 @@
+---
+read-when: Changing how a click on an icon is described to the agent, or when an icon comment points at the wrong icon.
+---
+
 # Identify the icon the reviewer clicked
 
 Fixed and installed. Icon comments now carry the local panel heading, the correct position among matching icons and the SVG drawing. New deck notes also retain the slide where typing began. Both fixes passed the full gate, independent review and live walkthroughs. No action is needed from Ken.

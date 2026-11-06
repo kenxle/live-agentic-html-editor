@@ -1,3 +1,7 @@
+/*
+read-when: Writing a test that needs a static fixture server, a content-policy variant or a second origin.
+*/
+
 // Static servers for fixtures, including the CSP variants and the second origin.
 //
 // Zero dependencies, node:http only, ephemeral ports.

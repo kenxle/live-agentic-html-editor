@@ -1,3 +1,7 @@
+/*
+read-when: Waiting on a condition in a test, or changing the one place the harness allows a timer.
+*/
+
 // Waiting, and the rule about it.
 //
 // harness-allow-timer: this file is the ONE place in the harness where a timer

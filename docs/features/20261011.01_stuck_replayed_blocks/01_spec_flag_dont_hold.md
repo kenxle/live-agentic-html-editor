@@ -1,3 +1,7 @@
+---
+read-when: Changing when the page shows the file instead of a held edit once the agent answers.
+---
+
 # Flag, don't hold: spec
 
 ## Needs your call

@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the banner that says nobody picked up the comments, or when it fires while the agent is still thinking.
+---
+
 # Calm the "nobody picked this up" alarm
 
 A reviewer commented while their agent was thinking through a hard question and
