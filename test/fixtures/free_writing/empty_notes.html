@@ -2071,7 +2071,9 @@ main .mermaid svg {
    them (and, for the frontmatter, below it, at the foot of the page). */
 
 main > .lahe-readonly-note { margin-block: var(--s6) 0 }
-main > .frontmatter { margin-block: var(--s6) var(--s6) }
+main > .frontmatter { margin-block: var(--s6) var(--s8) }
+/* The metadata is for agents and editors, not for readers of a printed or PDF copy. */
+@media print { main > .frontmatter { display: none } }
 
 main .frontmatter { color: var(--on-surface-faint) }
 main .frontmatter summary {
