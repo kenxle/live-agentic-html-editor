@@ -1,3 +1,7 @@
+---
+read-when: Adding another page to a workstream, or taking over a session from another agent.
+---
+
 # Sessions and handoffs
 
 ### More than one page or document

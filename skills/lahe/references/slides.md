@@ -1,3 +1,7 @@
+---
+read-when: Creating or reviewing a slide deck.
+---
+
 # Create and review a slide deck
 
 Keep an existing deck's framework, theme, component library and build process.

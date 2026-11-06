@@ -1,3 +1,7 @@
+---
+read-when: Verifying comments, replies and page notes.
+---
+
 # Comments and replies
 
 A reviewer selects words on the page and leaves a comment, or leaves a note on

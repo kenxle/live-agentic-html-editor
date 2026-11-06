@@ -1,3 +1,7 @@
+---
+read-when: A review misbehaves, the rail says nobody is listening, or a page needs the file fallback.
+---
+
 # Troubleshooting and exceptional serving
 
 - Find records in `<state-dir>/reviews/<review-id>`. The state directory is

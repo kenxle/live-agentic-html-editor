@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// read-when: Driving a disposable Lahe review to prove a feature works, or changing the driver.
+//
 // lahe-verify: drive a disposable Lahe review the way a reviewer and an agent
 // would, one command at a time, and keep a record of every step.
 //

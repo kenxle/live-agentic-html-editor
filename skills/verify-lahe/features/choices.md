@@ -1,3 +1,7 @@
+---
+read-when: Verifying that choice buttons reach the agent as answers.
+---
+
 # Choices
 
 An agent can put answer buttons in a document (a `.choice` group with a

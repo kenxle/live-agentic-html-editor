@@ -1,3 +1,7 @@
+---
+read-when: Verifying document styles and the PDF request.
+---
+
 # Document style and PDF
 
 A Markdown review renders in the house document style. From the rail, the

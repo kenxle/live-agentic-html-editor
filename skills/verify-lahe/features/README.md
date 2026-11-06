@@ -1,3 +1,7 @@
+---
+read-when: Choosing which Lahe feature to verify, or adding a feature to the verification map.
+---
+
 # Lahe verification map
 
 This folder is the maintained list of what a Lahe user can do, and how to prove

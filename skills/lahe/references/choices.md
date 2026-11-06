@@ -1,3 +1,7 @@
+---
+read-when: Asking the reader a question with answer buttons, or handling a choice answer.
+---
+
 # Ask and answer with choice groups
 
 A choice group is a question with real buttons. The reader clicks one, and the

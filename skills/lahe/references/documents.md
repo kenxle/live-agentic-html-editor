@@ -1,3 +1,7 @@
+---
+read-when: Writing or substantially reshaping a page or document for review.
+---
+
 # Write a document
 
 Read this before writing or substantially reshaping a page. For an existing
