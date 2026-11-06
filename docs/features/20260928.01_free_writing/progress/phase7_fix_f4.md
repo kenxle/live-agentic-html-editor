@@ -1,3 +1,7 @@
+---
+read-when: Read when you want what was fixed in the rail and test side of the free writing review fixes, or the test that proves each fix.
+---
+
 # Phase 7 fix round, group F4 (rail and tests)
 
 Branch `free-writing-f4`. Summary: every finding in the F4 row is fixed, or written as a test that fails for the right reason and marked `test.fixme` with the group it waits on. Nothing in another group's files was edited.

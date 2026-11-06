@@ -1,3 +1,7 @@
+---
+read-when: Read when you want to know why free writing was accepted as an idea and which approaches were weighed.
+---
+
 # Crucible: free writing in Lahe
 
 Date: 2026-09-28

@@ -1,3 +1,8 @@
+---
+read-when: "Read when you want the testing review of the free writing plan's test list."
+not-for: The review of the written tests; see reviews_impl/testing.md.
+---
+
 ## Testing Review (Round 1)
 
 **Summary.** The test list is thorough on shapes and allowlists. It is thin in three places:

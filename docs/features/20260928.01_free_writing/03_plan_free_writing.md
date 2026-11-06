@@ -1,3 +1,7 @@
+---
+read-when: Read when you want how free writing was split into workstreams and tasks, or why a test was written.
+---
+
 # Plan: Free writing
 
 ## Summary

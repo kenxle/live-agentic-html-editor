@@ -1,3 +1,7 @@
+---
+read-when: Read when changing how the rail shows free writing cards, or a replay defect found there.
+---
+
 # Phase 3, rail workstream: progress
 
 **Summary.** Tasks 3.2 and 3.3 are built on `free-writing-rail`, in commits `5b99588` and `4267dac`. `npm run gate:unit` is green: 1696 tests, 1694 pass, 0 fail, 2 todo. The named browser specs pass in Chromium: 81 passed, 1 skipped (a `test.fixme` that records a replay defect, below). No full suite ran. `dist/` was rebuilt locally for the specs and screenshots and is not staged.

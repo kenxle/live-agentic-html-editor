@@ -1,3 +1,7 @@
+---
+read-when: Read when writing at the bottom of a page scrolls wrongly or the edit bar covers the caret line.
+---
+
 # Phase 7, fix H2: writing at the bottom of the page
 
 Summary: while a writing session is open, the page now has blank room after its end, the caret's line is scrolled up above the edit bar after every key, input and paste, and the bar moves off the caret's line when it would cover it. When the session ends the room shrinks away as the writer scrolls up, so the page does not jump. All four new tests failed before the change and pass now in Chromium, Firefox and WebKit.

@@ -1,3 +1,7 @@
+---
+read-when: "Read when you want the engineering manager's first-round review of the free writing plan."
+---
+
 ## Engineering Manager Review (Round 1)
 
 **Summary.** The three-way split in Phase 2 is mostly clean. The owned-file lists do not overlap, and the Phase 1 fixtures give each builder something to build against. Three things stop it from being dispatchable as written:

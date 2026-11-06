@@ -1,3 +1,8 @@
+---
+read-when: "Read only for the log of Ken's review comments on the free writing crucible."
+not-for: The crucible itself; see 00_crucible.md.
+---
+
 # Review log: r0d77ab714aae
 
 **Pages reviewed:** /00_crucible-e41f45d6f27a6506.html

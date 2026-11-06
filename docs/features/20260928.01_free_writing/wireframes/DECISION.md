@@ -1,3 +1,7 @@
+---
+read-when: Read when you want which free writing wireframe direction Ken chose, what he said about each, and what carried into the build.
+---
+
 # Wireframe decision
 
 **Direction A (block menu on the bar) is approved.** Ken approved it after clicking through all three directions on the wireframe review.

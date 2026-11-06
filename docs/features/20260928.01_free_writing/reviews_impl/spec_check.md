@@ -1,3 +1,7 @@
+---
+read-when: "Read when you want the check of the free writing code against the brief's requirements."
+---
+
 # Spec check: free writing, integrated branch
 
 **Summary.** The code does what the brief asks. Every brief requirement and every fix-round design call has a test that would fail if the behavior broke, and the ones I ran pass. What is left:

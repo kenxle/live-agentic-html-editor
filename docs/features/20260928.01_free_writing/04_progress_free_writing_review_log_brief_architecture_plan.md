@@ -1,3 +1,8 @@
+---
+read-when: "Read only for the log of Ken's review comments on the free writing brief."
+not-for: The brief itself; see 01_brief_free_writing.md.
+---
+
 # Review log: rea4d4c9c9ac6
 
 **Pages reviewed:** /01_brief_free_writing.html

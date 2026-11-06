@@ -1,3 +1,7 @@
+---
+read-when: Read when the test that the block menu opens upward fails, or when changing how it is set up.
+---
+
 # Phase 7, fix H4: the menu-opens-upward test
 
 Verdict: the test set-up was wrong. The product is right. Test-only fix.

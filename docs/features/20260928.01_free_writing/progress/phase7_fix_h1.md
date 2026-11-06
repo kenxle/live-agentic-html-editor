@@ -1,3 +1,7 @@
+---
+read-when: Read when the free writing repaint spec loses the caret under load, or when changing how that spec moves the caret.
+---
+
 # Phase 7 fix H1: the repaint spec's caret under load
 
 **Verdict: test.** The spec moved the caret with a script, then repainted before the browser told the layer about the move. No reviewer can move a caret that way. The product already follows the "live caret wins" rule wherever a live caret still exists. The spec now moves the caret with arrow keys, like a reviewer does.

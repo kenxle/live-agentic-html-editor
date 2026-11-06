@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the flow walk of free writing on the running app and what stopped it from being ready for a pull request.
+---
+
 # Flow walk: free writing, on the running app
 
 **Summary.** The main path works. A writer can add a heading, paragraphs and a list anywhere, the agent places them from `review.json` alone in HTML and Markdown, and proofreading with "Use the fixes" and "Keep mine" works end to end. It is not ready for the PR, for three reasons:

@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the code-lead review of the implemented free writing diff.
+---
+
 # Code Review Lead: implemented diff (Round 2)
 
 **Short version.** Most of the design was built as written, and most of my 29 first-round findings were built. But two blockers need fixing before the checkpoint:

@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the reviewer findings on the free writing architecture, including security, and how they were answered.
+---
+
 # Reviews: Free writing architecture
 
 Architecture under review: `02_architecture_free_writing.md`. Brief: `01_brief_free_writing.md`.

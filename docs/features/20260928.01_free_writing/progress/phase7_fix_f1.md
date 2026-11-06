@@ -1,3 +1,7 @@
+---
+read-when: Read when you want what was fixed in the editing side of the free writing review fixes, or the test that proves each fix.
+---
+
 # Phase 7, fix round F1 (editing): progress
 
 **Summary.** Every F1 finding is fixed on `free-writing-f1`, each with a test that failed first. `npm run gate:unit` is green. The new spec passes in Chromium. Six existing specs now wait on F3 and F4: they expect the empty notes page to open by itself, and design call 2 makes that need the notes flag, which only F3 can deliver. With the flag forced on locally, all of them pass. `dist/` was rebuilt locally and not committed.
