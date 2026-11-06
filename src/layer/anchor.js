@@ -279,6 +279,7 @@
   function ordinalOf(node) {
     var parent = parentOf(node);
     if (!isElement(parent)) return 0;
+    if (passIndex) return parentInfo(passIndex, parent).tagOrdinal.get(node) || 0;
     var kids = elementChildren(parent);
     var tag = tagOf(node);
     var seen = 0;
@@ -712,11 +713,13 @@
   // a candidate at the foot of the page would match any stored prefix, because
   // everything on the page precedes it.
   function foundContextFor(node, scope, ref) {
-    var texts = contextTextsOf(node, scope, ref && ref.context_level);
     var storedPrefix = typeof ref.prefix === "string" ? ref.prefix : "";
     var storedSuffix = typeof ref.suffix === "string" ? ref.suffix : "";
-    var before = joinContext(texts.before);
-    var after = joinContext(texts.after);
+    var index = indexFor(scope);
+    var joined = index && node !== scope ? contextIndexed(index, node, scope, ref && ref.context_level) : null;
+    var texts = joined ? null : contextTextsOf(node, scope, ref && ref.context_level);
+    var before = joined ? joined.before : joinContext(texts.before);
+    var after = joined ? joined.after : joinContext(texts.after);
     return {
       prefix: storedPrefix ? before.slice(Math.max(0, before.length - storedPrefix.length)) : before,
       suffix: storedSuffix ? after.slice(0, storedSuffix.length) : after
@@ -728,6 +731,8 @@
   // -------------------------------------------------------------------------
 
   function pathOf(node, scope) {
+    var index = indexFor(scope);
+    if (index) return (isElement(scope) ? tagOf(scope) : "") + ">" + pathTailIndexed(index, node, scope);
     var parts = [];
     var current = node;
     while (isElement(current) && current !== scope) {
@@ -762,6 +767,14 @@
   }
 
   function headingOf(node, scope) {
+    var index = indexFor(scope);
+    return index ? headingOfIndexed(index, node, scope) : headingOfWalk(node, scope);
+  }
+
+  // The nearest heading before the node, by walking backwards from it. This is
+  // the definition: headingOfIndexed below gives the same answer from a read of
+  // the page that every element of one pass shares.
+  function headingOfWalk(node, scope) {
     var budget = { left: HEADING_SCAN_CAP };
     var current = node;
     while (isElement(current) && current !== scope) {
@@ -787,6 +800,352 @@
       current = parentOf(current);
     }
     return null;
+  }
+
+  // -------------------------------------------------------------------------
+  // The pass index: one read of the page, shared by every element of a pass
+  // -------------------------------------------------------------------------
+  //
+  // pointing.bestGuess scores EVERY element on the page against a lost
+  // comment, and each score asks for the element's heading, its neighbours'
+  // text and its path. Asked one element at a time, those questions re-read
+  // the same parts of the page over and over: the heading walk alone visits up
+  // to HEADING_SCAN_CAP elements per element, and the context reads every
+  // sibling's text per element. On Seneschal's knowledge tree preview (4,209
+  // elements, 24 deep) one lost comment froze the tab for 26 seconds on every
+  // load.
+  //
+  // Inside withPassIndex the same questions are answered from facts kept per
+  // parent and per element, each computed once. THE ANSWERS DO NOT CHANGE:
+  // every function below returns exactly what the walk above returns, the
+  // heading scan's budget included (test/unit/pass_index.test.js compares the
+  // two element by element). The index is a speed-up, never a second opinion.
+  //
+  // It is only valid while the page holds still, so it lives for one call and
+  // is thrown away, like the text memo it carries with it.
+  var passIndex = null;
+
+  function withPassIndex(scope, run) {
+    var outer = passIndex;
+    passIndex = {
+      scope: scope,
+      parents: new Map(),
+      lastHeading: new Map(),
+      words: new Map(),
+      tails: new Map()
+    };
+    try {
+      return withTextMemo(run);
+    } finally {
+      passIndex = outer;
+    }
+  }
+
+  function indexFor(scope) {
+    return passIndex && passIndex.scope === scope ? passIndex : null;
+  }
+
+  // What one parent's children look like, read once.
+  //   list        the children siblingsOf lists: every child the text walk
+  //               does not skip
+  //   before      child -> how many of `list` come before it. A skipped child
+  //               (an <svg> the reviewer picked) is not in `list` but still
+  //               has a place in it
+  //   tagOrdinal  child -> its 1-based position among children of its tag
+  function parentInfo(index, parent) {
+    var info = index.parents.get(parent);
+    if (info) return info;
+    var kids = elementChildren(parent);
+    var list = [];
+    var before = new Map();
+    var tagOrdinal = new Map();
+    var seen = Object.create(null);
+    for (var i = 0; i < kids.length; i += 1) {
+      var kid = kids[i];
+      var tag = tagOf(kid);
+      seen[tag] = (seen[tag] || 0) + 1;
+      if (!tagOrdinal.has(kid)) tagOrdinal.set(kid, seen[tag]);
+      if (!before.has(kid)) before.set(kid, list.length);
+      if (!isSkipped(kid)) list.push(kid);
+    }
+    info = { list: list, before: before, tagOrdinal: tagOrdinal, back: null, ahead: null, line: null };
+    index.parents.set(parent, info);
+    return info;
+  }
+
+  /** How long siblingsOf(node) is, without building it. */
+  function siblingCountIndexed(index, node) {
+    var parent = parentOf(node);
+    if (!parent) return 0;
+    var info = parentInfo(index, parent);
+    if (!info.before.has(node)) return info.list.length;
+    return info.list.length + (isSkipped(node) ? 1 : 0);
+  }
+
+  function headingWordsIndexed(index, node) {
+    if (index.words.has(node)) return index.words.get(node);
+    var words = headingWords(node);
+    index.words.set(node, words);
+    return words;
+  }
+
+  function isWordedHeading(index, node) {
+    return Object.prototype.hasOwnProperty.call(HEADING_TAGS, tagOf(node)) && !!headingWordsIndexed(index, node);
+  }
+
+  /**
+   * lastHeadingWithin(node) with an unlimited budget: the heading it returns
+   * and how many steps the walk takes to return it.
+   *
+   * `scanned` and `startAt` record the walk itself (children last to first,
+   * and the steps spent before each), so a walk with too little budget to
+   * finish can find where it stops without walking again.
+   */
+  function lastHeadingFull(index, node) {
+    var known = index.lastHeading.get(node);
+    if (known) return known;
+    var kids = elementChildren(node);
+    var cost = 0;
+    var result = null;
+    var scanned = [];
+    var startAt = [];
+    for (var i = kids.length - 1; i >= 0; i -= 1) {
+      var kid = kids[i];
+      scanned.push(kid);
+      startAt.push(cost);
+      cost += 1;
+      if (isSkipped(kid)) continue;
+      var inner = lastHeadingFull(index, kid);
+      cost += inner.cost;
+      if (inner.result) {
+        result = inner.result;
+        break;
+      }
+      if (isWordedHeading(index, kid)) {
+        result = kid;
+        break;
+      }
+    }
+    known = { result: result, cost: cost, scanned: scanned, startAt: startAt };
+    index.lastHeading.set(node, known);
+    return known;
+  }
+
+  /**
+   * What lastHeadingWithin(node, {left: left}) returns when `left` is less
+   * than the walk needs.
+   *
+   * The budgeted walk gives up where the budget runs out, and on the way back
+   * out it still returns any heading it was INSIDE: lastHeadingWithin checks a
+   * child after walking the child's own children, without asking the budget.
+   * So the answer is null, or the innermost worded heading on the path down to
+   * the step where the budget ran out. This follows that one path.
+   */
+  function lastHeadingPartial(index, node, left) {
+    var full = lastHeadingFull(index, node);
+    if (full.cost <= left) return full.result;
+    var scanned = full.scanned;
+    var startAt = full.startAt;
+    // The first child the budget cannot finish. Ends of the children's walks
+    // rise strictly, so a binary search finds it.
+    var lo = 0;
+    var hi = scanned.length - 1;
+    while (lo < hi) {
+      var mid = (lo + hi) >> 1;
+      var end = mid + 1 < scanned.length ? startAt[mid + 1] : full.cost;
+      if (end > left) hi = mid;
+      else lo = mid + 1;
+    }
+    var remaining = left - startAt[lo];
+    if (remaining <= 0) return null;
+    remaining -= 1;
+    var kid = scanned[lo];
+    // A skipped child costs one step, and one step was affordable, so the
+    // child the budget cannot finish is never a skipped one.
+    var deeper = lastHeadingPartial(index, kid, remaining);
+    if (deeper) return deeper;
+    return isWordedHeading(index, kid) ? kid : null;
+  }
+
+  // The backward scan headingOfWalk makes over one parent's listed children,
+  // as running totals: what each child costs to scan, and the nearest child
+  // at or before each one that answers with a heading.
+  function backScan(index, info) {
+    if (info.back) return info.back;
+    var list = info.list;
+    var sums = [0];
+    var answer = [];
+    var nearest = [];
+    for (var i = 0; i < list.length; i += 1) {
+      var cost;
+      var found;
+      if (isWordedHeading(index, list[i])) {
+        cost = 1;
+        found = list[i];
+      } else {
+        var inner = lastHeadingFull(index, list[i]);
+        cost = 1 + inner.cost;
+        found = inner.result;
+      }
+      sums.push(sums[i] + cost);
+      answer.push(found);
+      nearest.push(found ? i : i > 0 ? nearest[i - 1] : -1);
+    }
+    info.back = { sums: sums, answer: answer, nearest: nearest };
+    return info.back;
+  }
+
+  // The forward scan headingOfWalk makes from an element with no text: for
+  // each listed child, the first child at or after it that stops the scan (a
+  // worded heading, or anything with text), or list.length when none does.
+  function aheadScan(index, info) {
+    if (info.ahead) return info.ahead;
+    var list = info.list;
+    var stop = new Array(list.length);
+    var next = list.length;
+    for (var i = list.length - 1; i >= 0; i -= 1) {
+      if (isWordedHeading(index, list[i]) || textOf(list[i])) next = i;
+      stop[i] = next;
+    }
+    info.ahead = stop;
+    return stop;
+  }
+
+  /** headingOfWalk(node, scope), answered from the index. */
+  function headingOfIndexed(index, node, scope) {
+    var budget = HEADING_SCAN_CAP;
+    var current = node;
+    while (isElement(current) && current !== scope) {
+      var parent = parentOf(current);
+      if (!parent) return null;
+      var info = parentInfo(index, parent);
+      if (!info.before.has(current)) return headingOfWalk(node, scope);
+      var list = info.list;
+      var at = info.before.get(current);
+      var after = isSkipped(current) ? at : at + 1;
+
+      if (!textOf(current) && after < list.length) {
+        var stop = aheadScan(index, info)[after];
+        var steps = stop < list.length ? stop - after + 1 : list.length - after;
+        if (budget < steps) return null;
+        budget -= steps;
+        if (stop < list.length && isWordedHeading(index, list[stop])) return headingWordsIndexed(index, list[stop]);
+      }
+
+      if (at > 0) {
+        var back = backScan(index, info);
+        var sums = back.sums;
+        var found = back.nearest[at - 1];
+        var from = found >= 0 ? found : 0;
+        var need = sums[at] - sums[from];
+        if (budget >= need) {
+          budget -= need;
+          if (found >= 0) return headingWordsIndexed(index, back.answer[found]);
+        } else {
+          // The budget runs out inside this parent. Scanning goes from at - 1
+          // down; find the child it cannot finish: the largest k whose scan
+          // from k to at - 1 costs more than the budget.
+          var target = sums[at] - budget;
+          var lo = from;
+          var hi = at - 1;
+          while (lo < hi) {
+            var mid = (lo + hi + 1) >> 1;
+            if (sums[mid] < target) lo = mid;
+            else hi = mid - 1;
+          }
+          var left = budget - (sums[at] - sums[lo + 1]);
+          if (left <= 0) return null;
+          // A worded heading costs one step, and one step was affordable, so
+          // this child is not one: the walk goes inside it.
+          var inside = lastHeadingPartial(index, list[lo], left - 1);
+          return inside ? headingWordsIndexed(index, inside) : null;
+        }
+      }
+      current = parent;
+    }
+    return null;
+  }
+
+  // One parent's listed children's texts joined the way joinContext joins
+  // them, once, with where each run of them starts and ends.
+  //
+  // WHY A SLICE OF ONE STRING IS THE SAME AS joinContext OF A SLICE. Every
+  // step of normalizeText works character by character except NFC, and NFC
+  // never joins characters across a plain space: U+0020 neither composes with
+  // nor reorders around anything. So normalizeText(a + " " + b) is
+  // normalizeText(a) and normalizeText(b) joined by one space, dropping either
+  // when it is empty, and the joined text of any run of children is a slice
+  // of the joined text of all of them.
+  function contextLine(index, info) {
+    if (info.line) return info.line;
+    var list = info.list;
+    var pieces = [];
+    var endBefore = [0];
+    var startOf = [];
+    var length = 0;
+    for (var i = 0; i < list.length; i += 1) {
+      var text = normalize.normalizeText(textOf(list[i]));
+      if (text) {
+        if (length > 0) length += 1;
+        startOf.push(length);
+        length += text.length;
+        pieces.push(text);
+      } else {
+        startOf.push(-1);
+      }
+      endBefore.push(length);
+    }
+    var startFrom = new Array(list.length + 1);
+    startFrom[list.length] = length;
+    for (var j = list.length - 1; j >= 0; j -= 1) {
+      startFrom[j] = startOf[j] >= 0 ? startOf[j] : startFrom[j + 1];
+    }
+    info.line = { text: pieces.join(" "), endBefore: endBefore, startFrom: startFrom };
+    return info.line;
+  }
+
+  /**
+   * joinContext of contextTextsOf(node, scope, level), both sides, from the
+   * index: {before, after}.
+   */
+  function contextIndexed(index, node, scope, level) {
+    var levels = [];
+    var current = node;
+    while (current && current !== scope) {
+      if (siblingCountIndexed(index, current) > 1) levels.push(current);
+      var up = parentOf(current);
+      if (!up || up === scope) break;
+      current = up;
+    }
+    // No level with siblings anywhere: contextAnchorOf's answer has none
+    // either, so both sides are empty.
+    if (!levels.length) return { before: "", after: "" };
+    var want = typeof level === "number" && level > 0 ? Math.min(level, levels.length - 1) : 0;
+    var anchorNode = levels[want] || levels[0];
+    var info = parentInfo(index, parentOf(anchorNode));
+    if (!info.before.has(anchorNode)) return { before: "", after: "" };
+    var at = info.before.get(anchorNode);
+    var after = isSkipped(anchorNode) ? at : at + 1;
+    var line = contextLine(index, info);
+    return {
+      before: line.text.slice(0, line.endBefore[at]),
+      after: line.text.slice(line.startFrom[after])
+    };
+  }
+
+  // pathOf without the leading scope tag, built from the parent's.
+  function pathTailIndexed(index, node, scope) {
+    if (!isElement(node) || node === scope) return "";
+    if (index.tails.has(node)) return index.tails.get(node);
+    var parent = parentOf(node);
+    var tail = "";
+    if (parent) {
+      var piece = tagOf(node) + ":" + (parentInfo(index, parent).tagOrdinal.get(node) || 0);
+      var above = pathTailIndexed(index, parent, scope);
+      tail = above ? above + ">" + piece : piece;
+    }
+    index.tails.set(node, tail);
+    return tail;
   }
 
   // -------------------------------------------------------------------------
@@ -1799,6 +2158,13 @@
     pathOf: pathOf,
     headingOf: headingOf,
     HEADING_SCAN_CAP: HEADING_SCAN_CAP,
+    // For a caller that asks the questions above of every element in one go
+    // (pointing.bestGuess). Same answers, one read of the page. See
+    // "The pass index".
+    withPassIndex: withPassIndex,
+    // The text memo alone, as mint uses it. Exported so a test can time and
+    // compare the walk with its text reads cached and nothing else.
+    withTextMemo: withTextMemo,
     // Read by src/layer/pointing.js, which asks the same questions of a node
     // that this file does and must not grow its own second answer to any of
     // them. Exported as readers, never as decisions: nothing here returns a
