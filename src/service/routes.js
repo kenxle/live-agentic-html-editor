@@ -1,3 +1,7 @@
+/*
+ * read-when: Adding or changing a helper route handler, or when a route answers wrongly or not at all.
+ */
+
 // The router: one handler per route in src/shared/protocol.js.
 //
 // Owner: 1A. The route table is protocol.js's and is never restated here; the

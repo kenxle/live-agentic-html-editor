@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the layer sends events to the helper and polls for replies, or when comments do not reach the helper or replies do not arrive.
+ */
+
 // The sync client, and the reply poll loop.
 //
 // Owner: 1B. 3A (agent loop) reads replies through this file rather than

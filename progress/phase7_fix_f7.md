@@ -1,3 +1,7 @@
+---
+read-when: Tracing why the italic free-writing browser test exists and how it was shown to catch a break.
+---
+
 # Phase 7 fix F7: last small gaps from the spec check
 
 ## What

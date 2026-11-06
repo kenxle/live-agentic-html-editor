@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the browser draft store, or when a draft or unsent event is lost on reload.
+ */
+
 // The draft store: browser storage, written synchronously on every change.
 //
 // Owner: 1B.

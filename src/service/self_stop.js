@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing when the helper stops itself, or when helpers are left running.
+ */
+
 // The helper stops itself once nothing needs it.
 //
 // WHY. The last `lahe session close` stops the shared helper, unless a review

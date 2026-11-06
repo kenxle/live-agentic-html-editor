@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how lahe review enrolls a document in an agent session, or when a review opens on the wrong page.
+ */
+
 // Public entrypoint for enrolling a document in one top-level agent session.
 
 "use strict";

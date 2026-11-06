@@ -1,3 +1,7 @@
+/*
+ * read-when: Adding or renaming an item field, or when an item record fails validation.
+ */
+
 // The item record: the single place every field name in this tool is spelled.
 //
 // Owner: 0A-kernel. Imported by: the store (1B), the sync client (1B), the

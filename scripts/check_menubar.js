@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+/*
+ * read-when: Changing the menu bar build check in the gate, or when check:menubar fails or skips.
+ */
+
 "use strict";
 // check:menubar, part of `npm run gate`.
 //

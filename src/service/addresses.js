@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the helper decides which address options work, or when a printed address is wrong or does not load.
+ */
+
 // Which address options the helper may use right now, proved, not assumed.
 //
 // Owner: stable addresses, lahe-names workstream. Two options exist, each set

@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the rail's Active tab, or when outstanding comments show wrongly.
+ */
+
 // The Active tab's contents: outstanding comments and notes, newest visible,
 // and the open note box at the foot.
 //

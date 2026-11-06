@@ -1,3 +1,8 @@
+---
+read-when: Connecting an agent host to Lahe, or finding where the install steps and docs live.
+not-for: Running a review; see skills/lahe/SKILL.md.
+---
+
 # For agents: the live agentic HTML editor
 
 This file is about the tool: how your agent host connects to it, how to install

@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+/*
+ * read-when: Finding where the lahe command starts, or when its exit code or a startup crash looks wrong.
+ */
+
 // The command. There is no bin/ directory before this file, and no `bin` field
 // in package.json yet either: 1A creates the entry point and wires `serve`, and
 // 3B (install and add) adds the package.json field and the documented

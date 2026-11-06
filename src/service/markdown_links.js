@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how local links in rendered Markdown are translated, or when such a link is broken or refused.
+ */
+
 // Local-link translation for rendered Markdown.
 //
 // THE DISK IS SOURCE-TRUE. A Markdown source keeps the links its author wrote:

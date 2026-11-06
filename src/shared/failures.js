@@ -1,3 +1,7 @@
+/*
+ * read-when: Adding or changing a failure code, or finding what a failure shown in the rail means.
+ */
+
 // The failure code enum.
 //
 // Owner: 0A-wire. Imported by: the sync client and the rail's failures list

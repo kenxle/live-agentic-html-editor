@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing lahe write for notes on a blank page, or when it refuses a path.
+ */
+
 // `lahe write <path>`: notes on a blank page.
 //
 // docs/features/20260928.01_free_writing, architecture "Empty page and lahe

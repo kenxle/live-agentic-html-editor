@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the Library page's wording, sections or button states, or when a row shows the wrong state.
+ */
+
 // The Library page's view model.
 //
 // Owner: Library 2.2. Plan: docs/features/20260922.02_lahe_library/03_plan_lahe_library.md,

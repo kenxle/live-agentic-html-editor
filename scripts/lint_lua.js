@@ -1,3 +1,7 @@
+/*
+ * read-when: Lint complains about the Lua pandoc filter, or you are changing how Lua files are syntax checked.
+ */
+
 // Lint check 1c: a syntax check for the Lua files under src/ (today, the pandoc
 // filter src/service/lahe_render.lua). Lint used to read .js files only, so the
 // filter got no check at all (LAHE-lint-non-js-files).

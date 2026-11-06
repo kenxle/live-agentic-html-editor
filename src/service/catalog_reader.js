@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the Library builds its list from files on disk, or when a row is missing or wrong.
+ */
+
 // The catalog reader: the Library's list, built from files already on disk.
 //
 // Owner: LAHE Library 1.1 (docs/features/20260922.02_lahe_library, architecture

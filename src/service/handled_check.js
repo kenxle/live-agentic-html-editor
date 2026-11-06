@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how a handled reply for a hand edit is checked against the built page, or when one is wrongly accepted or refused.
+ */
+
 // Is a "handled" claim true on the page the reviewer is looking at?
 //
 // Owner: 3A. Read with src/service/replies.js (which asks this before a handled

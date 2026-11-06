@@ -1,3 +1,7 @@
+/*
+ * read-when: Adding or routing a lahe command, or when a command name is not recognized.
+ */
+
 // The command dispatcher.
 //
 // Owner: 1A, which wires `serve`. `add` is 3B's and `status` is 3A's, each wired

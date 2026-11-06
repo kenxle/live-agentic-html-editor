@@ -1,3 +1,7 @@
+/*
+ * read-when: Writing a browser test that needs a realistic edit record.
+ */
+
 // The record fixture generator.
 //
 // Owner: 0A-kernel. Imported by: 2B (protection) and 2C (replay), which have to

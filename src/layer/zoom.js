@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the zoom viewer for diagrams and images, or when the magnifier does not appear or will not pan.
+ */
+
 // The zoom viewer: a magnifier button on graphs and large images, and the
 // full-screen view it opens to zoom and pan.
 //

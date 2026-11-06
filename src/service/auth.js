@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the per-request checks the helper runs, or when a request is refused and you need to know which check refused it.
+ */
+
 // The per-request check block, and the named refusal in the helper log.
 //
 // Owner: 1A. Architecture D11: loopback is not a boundary, so the page proves

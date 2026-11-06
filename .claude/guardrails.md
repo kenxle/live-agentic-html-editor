@@ -1,3 +1,7 @@
+---
+read-when: Changing how st-ship and st-land open or merge a pull request here, or when they need this repo's base branch or check command.
+---
+
 # Guardrails for st-ship and st-land
 
 Values the ship and land skills read. Each is data, not instructions.

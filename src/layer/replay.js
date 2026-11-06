@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how saved edits are re-applied after the page reloads or morphs, or when a replay overwrites or skips an edit.
+ */
+
 // The replay engine: entry point, pass ordering, counters, and the four-branch
 // compare.
 //

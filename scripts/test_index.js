@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+/*
+ * read-when: Changing how the test index page is generated, or rebuilding docs/tests/index.html.
+ */
+
 // Builds docs/tests/index.html: a reading page that describes and lists every
 // test in the suite.
 //

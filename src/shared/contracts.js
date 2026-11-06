@@ -1,3 +1,7 @@
+/*
+ * read-when: Importing the shared kernel's modules from Node code through one path.
+ */
+
 // One import point for the shared kernel.
 //
 // Owner: 0A-kernel. Node-side convenience only: it re-exports the modules that

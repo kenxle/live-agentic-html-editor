@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how text and markup are normalized for recording or comparing, or when a region fails to match its record.
+ */
+
 // The one normalizer.
 //
 // Owner: 0A-kernel. Imported by: the edit recorder (2A) when it mints a

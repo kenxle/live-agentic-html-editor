@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing what the menu bar's summary answer counts, or when its count is wrong.
+ */
+
 // The menu bar's summary: the `summary.read` answer.
 //
 // Owner: menu-bar summary (docs/features/20261012.01_menu_bar_app, plan Step 1;

@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the fallback tab icon given to reviewed pages that have none.
+ */
+
 // The tab icon a reviewed page falls back to when it declares none of its own.
 //
 // WHY THIS EXISTS. A reviewer usually has several documents open at once, and a

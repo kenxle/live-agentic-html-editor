@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the login item is written on macOS or Linux, or when the helper does not restart after it stops.
+ */
+
 // The login item: what makes the helper start at login and restart if it stops.
 //
 // Owner: stable addresses, install workstream. `lahe install` writes one of

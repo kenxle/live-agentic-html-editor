@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+/*
+ * read-when: Measuring how long normalize.cleanBlock takes on hostile markup, before or after changing it.
+ */
+
 // What normalize.cleanBlock costs on hostile input, measured.
 //
 // Written for the free-writing fix round (docs/features/20260928.01_free_writing,

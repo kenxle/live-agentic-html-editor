@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how lahe session opens and closes an agent's workstream, or when the helper stays up or stops at the wrong time.
+ */
+
 // Open and close durable agent workstreams, and lease the shared helper only
 // while at least one workstream is open.
 

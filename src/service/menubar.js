@@ -1,3 +1,8 @@
+/*
+ * read-when: Changing how the menu bar app is built and kept current, or when its build or rebuild tick fails.
+ * not-for: The app's own code; see macos/menubar/LaheMenuBar.swift.
+ */
+
 // The menu bar app: its one build recipe, its login item, and the rebuild tick.
 //
 // Owner: menu-bar install. macOS only; every other system skips it. The app

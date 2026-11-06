@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the Library page's HTML, asset list or response headers.
+ */
+
 // The Library page: its HTML template, the fixed asset allowlist, and the
 // response headers every catalog route sends.
 //

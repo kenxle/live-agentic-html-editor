@@ -1,3 +1,8 @@
+/*
+ * read-when: Changing the Library page's network calls, DOM or event flow, or when the page misbehaves in the browser.
+ * not-for: The Library's wording and button states; see view_model.js.
+ */
+
 // The Library page script.
 //
 // Owner: Library 2.2. Plan: docs/features/20260922.02_lahe_library/03_plan_lahe_library.md,

@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing what counts as a valid style id, colour or name.
+ */
+
 // Style rules: the style id, the hex colour and the style name, spelled once.
 //
 // Owner: Style switcher 1.1. Imported by: src/service/styles.js (install,

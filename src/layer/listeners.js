@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the layer's event listener registry, or when handlers pile up after the page re-renders.
+ */
+
 // The listener registry.
 //
 // Owner (from Phase 1 on): Task 2C, living in the page. Phase 0 ships it

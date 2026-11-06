@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how reply files are found and read into the log, or when an agent's reply is ignored or rejected.
+ */
+
 // Reply files: finding them, reading them by byte offset, and folding what
 // they say into the log.
 //

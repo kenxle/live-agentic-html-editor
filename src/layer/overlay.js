@@ -1,3 +1,8 @@
+/*
+ * read-when: Changing the rail's chrome, status line, failure chips or card API, or when the rail redraws and loses focus.
+ * not-for: What a tab shows; see tab_active.js, tab_done.js and tab_edits.js.
+ */
+
 // The rail: the chrome, the card API, the status line, and the failure chips.
 //
 // Owner: 1B.

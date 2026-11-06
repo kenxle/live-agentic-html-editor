@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the rule that decides whether an anchor match is safe to write to.
+ */
+
 // The uniqueness predicate: architecture D3, Law 1.
 //
 // Owner: Task 0a (shared kernel). Imported by: the anchor engine (1C) and

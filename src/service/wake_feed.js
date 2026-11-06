@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the wake feed an agent host tails for new work, or when a host does not wake.
+ */
+
 // The per-session wake feed: the push channel a host can get with `tail -f`.
 //
 // Owner: 1A.

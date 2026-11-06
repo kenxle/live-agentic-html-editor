@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how a region is labeled for display.
+ */
+
 // Region label rules.
 //
 // Owner: Task 0a (shared kernel). Imported by: the anchor engine (1C), the edit
