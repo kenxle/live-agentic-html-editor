@@ -1,3 +1,7 @@
+---
+read-when: Reading what the product reviewer found in the style switcher brief, or why a requirement changed.
+---
+
 # Brief reviews: Style switcher
 
 Requirement numbers below are the draft's. The draft had fifteen; the brief now has thirteen, so R11, R14 and R15 here are not the brief's current R11 to R13.

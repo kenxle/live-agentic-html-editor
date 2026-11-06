@@ -1,4 +1,7 @@
-"""Upper bound on sites.log growth if the linked-file list lived in sites.json.
+"""
+read-when: Estimating how fast the sites log would grow if it kept the linked-file list.
+
+Upper bound on sites.log growth if the linked-file list lived in sites.json.
 
 A full crawl renders every page once, in the order measure_site.js did. Each
 render that adds at least one new file appends the site's whole entry to

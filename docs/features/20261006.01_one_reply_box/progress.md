@@ -1,3 +1,7 @@
+---
+read-when: Changing the reply box at the foot of a rail card, or when a card shows two boxes or the wrong one.
+---
+
 # One reply box per thread
 
 Every card now shows one reply box, at the bottom, under the newest message.

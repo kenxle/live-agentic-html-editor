@@ -1,3 +1,7 @@
+---
+read-when: Reading Ken's comments across the menu bar app documents and how each was handled.
+---
+
 # Review log: r183d18583a43
 
 **Pages reviewed:** /00_crucible_menu_bar_app.md, /01_brief_menu_bar_app.html, /03_plan_menu_bar_app.html, /04_progress_menu_bar_app.md

@@ -1,3 +1,7 @@
+---
+read-when: Finding where the PDF button stands and what checks it passed.
+---
+
 # PDF button: progress
 
 **Documents:** [Decision](00_decision_pdf_button.md) · [Spec](01_spec_pdf_button.md) · **Progress**

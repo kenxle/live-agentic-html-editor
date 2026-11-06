@@ -1,3 +1,7 @@
+---
+read-when: Changing how a reviewer closes a card with Mark as done, or when the state chip misbehaves.
+---
+
 # Mark as done
 
 **Summary.** You can now close any card yourself. On an Active card, the state chip ("Ready" or "Not handled") is a button. Click it and choose "Mark as done". The card moves to Done and says "You marked this done." The agent stops seeing it, and any late reply from the agent is refused.

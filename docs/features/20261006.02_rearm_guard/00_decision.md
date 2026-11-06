@@ -1,3 +1,7 @@
+---
+read-when: Asking why Lahe installs a Stop hook, or when an agent stops watching for comments between turns.
+---
+
 # Re-arm guard: agents keep watching without having to remember
 
 ## Needs your attention

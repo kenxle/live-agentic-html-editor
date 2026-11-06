@@ -1,3 +1,7 @@
+---
+read-when: Finding where choice buttons stand, what shipped and how to try them.
+---
+
 # Choice buttons: merged, live, and cleaned up
 
 **Where it stands.** Merged to main as [PR #76](https://github.com/kenxle/live-agentic-html-editor/pull/76) on 2026-10-18, after CI went green. Your skill is reinstalled and your real helper restarted onto the new code, so every page it serves now carries live choice groups (checked through the port-free address: the rail script and `data-lahe-document` are on the served pages). The gate on main after the merge is green apart from one load flake. The cleanup batch ran on 2026-10-18 at your word; nothing from this feature is left on the machine but the merged code and this folder.

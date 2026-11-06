@@ -1,3 +1,7 @@
+---
+read-when: Reading the architect and security findings on the stable addresses design.
+---
+
 # Reviews: Stable addresses architecture
 
 Two reviews ran on the first draft of the architecture. Both changed it; the summary tables in the architecture say how.

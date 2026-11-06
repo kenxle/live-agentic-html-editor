@@ -1,3 +1,7 @@
+---
+read-when: Reading Ken's comments on the rail mockup and how each was handled.
+---
+
 # Review log: rf438fd94ca9f
 
 **Pages reviewed:** /rail_mockup.html

@@ -1,3 +1,7 @@
+---
+read-when: Checking which questions about the menu bar app were settled and how.
+---
+
 All questions are settled. The history of each is below.
 
 

@@ -1,3 +1,7 @@
+---
+read-when: Reading the result of the check that a fresh agent can write a choice page from the skill alone.
+---
+
 # V16: a fresh agent writes a choice page from the skill alone
 
 Date: 2026-10-17. Plan row V16, brief R1.

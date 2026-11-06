@@ -1,3 +1,7 @@
+---
+read-when: Checking what stable addresses are meant to do, for whom, and what is out of scope.
+---
+
 # Feature Brief: Stable addresses
 
 ## Summary

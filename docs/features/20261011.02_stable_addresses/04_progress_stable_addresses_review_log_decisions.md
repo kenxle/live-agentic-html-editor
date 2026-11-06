@@ -1,3 +1,7 @@
+---
+read-when: Reading Ken's comments on the stable addresses decisions page.
+---
+
 # Review log: ra192291dfb29
 
 **Pages reviewed:** /STABLE_ADDRESSES-bd14d360685f150a.html

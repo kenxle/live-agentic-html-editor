@@ -1,3 +1,7 @@
+---
+read-when: Finding what the heading ids change shipped and where it stands.
+---
+
 # Progress: Markdown heading ids
 
 **Done.** Every heading in a rendered Markdown page now carries the id GitHub gives it, so `[text](#some-heading)` links land. Shipped in [PR #82](https://github.com/kenxle/live-agentic-html-editor/pull/82). Last updated 2026-10-19 15:16 UTC.

@@ -1,3 +1,7 @@
+---
+read-when: Changing which files under a linked folder a page may reach, or when a linked file is wrongly refused or exposed.
+---
+
 # Linked folder scope
 
 **Status:** shipped in [PR #89](https://github.com/kenxle/live-agentic-html-editor/pull/89). Your helper runs it now. Results are under "Verification results" below. Board row `LAHE-linked-folder-scope` (serve only the files a site's pages link to, plus their images, then drop the folder cap).

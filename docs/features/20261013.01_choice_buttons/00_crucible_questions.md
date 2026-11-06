@@ -1,3 +1,7 @@
+---
+read-when: Reading the full question-and-answer round that led to the choice buttons approach.
+---
+
 # Choice buttons in Lahe: the crucible
 
 Date: 2026-10-13, round 2 on 2026-10-17

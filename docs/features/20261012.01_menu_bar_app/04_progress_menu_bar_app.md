@@ -1,3 +1,7 @@
+---
+read-when: Finding where the menu bar app stands, what shipped and what follow-ups are left.
+---
+
 # Progress: Menu bar app
 
 **Where things are at 11:58 on October 17.** Closed. The menu bar icon is built, installed on your Mac and running (PRs [#61](https://github.com/kenxle/live-agentic-html-editor/pull/61), [#62](https://github.com/kenxle/live-agentic-html-editor/pull/62), [#64](https://github.com/kenxle/live-agentic-html-editor/pull/64), [#66](https://github.com/kenxle/live-agentic-html-editor/pull/66)), and your comments now follow a document out of a removed worktree ([#71](https://github.com/kenxle/live-agentic-html-editor/pull/71)). Nothing is waiting on you.

@@ -1,3 +1,7 @@
+---
+read-when: Asking why the PDF button asks the agent instead of printing, or why it sits where it does.
+---
+
 # PDF button in the rail
 
 **Documents:** **Decision** · [Spec](01_spec_pdf_button.md) · [Progress](02_progress_pdf_button.md)

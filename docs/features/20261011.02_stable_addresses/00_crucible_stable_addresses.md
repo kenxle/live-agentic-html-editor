@@ -1,3 +1,7 @@
+---
+read-when: Asking why documents get stable addresses, or what the first idea for them was before the brief.
+---
+
 # Crucible: Stable addresses
 
 Date: 2026-10-11

@@ -1,3 +1,6 @@
+"""
+read-when: Counting reviews that hold an open agent question in the real state folder, read-only.
+"""
 # Read-only: count reviews with an open agent question (ready item whose reply is a question).
 import json, os, glob, datetime
 base = os.path.expanduser("~/.local/state/lahe/reviews")

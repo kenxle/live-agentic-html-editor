@@ -1,3 +1,7 @@
+---
+read-when: Seeing the preview lesson queue page that was used to try choice groups.
+---
+
 # Lesson queue: 19 waiting
 
 **On hold.** You're holding the other 16 until LAHE has choice buttons. The Personal board's Waiting For row "Finish the lesson queue review once LAHE's choice buttons ship" brings it back. The recommendations below stand.

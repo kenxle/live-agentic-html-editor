@@ -1,3 +1,7 @@
+---
+read-when: Building or checking the step that installs the menu bar app and keeps it working.
+---
+
 ## Step 3: Installing and keeping it working (workstream install, PR 2)
 
 ::: xref

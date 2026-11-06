@@ -1,3 +1,7 @@
+---
+read-when: Changing how comments follow a file that moved or was renamed, or when they stay at the old address.
+---
+
 # Spec: a file's comments move with it
 
 ## Summary

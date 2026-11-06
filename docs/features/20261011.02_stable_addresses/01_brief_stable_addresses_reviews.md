@@ -1,3 +1,7 @@
+---
+read-when: Reading what the product reviewer found in the stable addresses brief.
+---
+
 # PM review: Stable addresses brief
 
 Reviewer: PM persona, 2026-10-11. Read against Ken's directive, the crucible, the decisions page (`docs/ongoing/STABLE_ADDRESSES.md`), `docs/ongoing/LIBRARY.md`, the system overview and session ownership diagrams, and `docs/BULLETIN.md`.

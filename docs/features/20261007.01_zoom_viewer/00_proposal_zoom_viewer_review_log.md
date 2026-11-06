@@ -1,3 +1,7 @@
+---
+read-when: Reading Ken's comments on the zoom viewer proposal and how each was handled.
+---
+
 # Review log: rf755fa5ef8e1
 
 **Pages reviewed:** /zoom_images-65ae11a1be7d45aa.html

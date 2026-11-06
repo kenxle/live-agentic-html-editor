@@ -1,3 +1,7 @@
+---
+read-when: Asking why the style switcher exists, or what the first idea for it was before the brief.
+---
+
 # Crucible: Style switcher
 
 Date: 2026-09-30

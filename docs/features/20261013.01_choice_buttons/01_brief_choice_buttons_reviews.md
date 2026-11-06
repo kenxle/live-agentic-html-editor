@@ -1,3 +1,7 @@
+---
+read-when: Reading what the product reviewer found in the choice buttons brief.
+---
+
 ## PM Review (Round 1)
 
 Reviewer: PM persona. Brief read: [01_brief_choice_buttons.md](01_brief_choice_buttons.md), with [the questions part](parts/brief/questions.md), [the crucible summary](00_crucible_choice_buttons.md), [the crucible questions page](00_crucible_questions.md), the product brief, brand doc, style guide, the lahe skill's "Writing a page for someone to read", and the accepted menu bar brief as the bar.

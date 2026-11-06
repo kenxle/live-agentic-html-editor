@@ -1,4 +1,7 @@
-"""Split the per-reference rows from measure_site.js into counts.
+"""
+read-when: Splitting the per-reference measurement rows into counts by attribute and kind.
+
+Split the per-reference rows from measure_site.js into counts.
 
 Usage: python3 summarize.py refs.csv
 Prints counts by attribute, kind and existence, and samples of missing rows.

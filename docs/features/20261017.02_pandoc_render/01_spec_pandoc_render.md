@@ -1,3 +1,7 @@
+---
+read-when: Changing how Markdown pages are rendered with pandoc, or when fenced divs show as text.
+---
+
 # Render Markdown with pandoc
 
 Status: merged. Ken approved [PR #80](https://github.com/kenxle/live-agentic-html-editor/pull/80) and it landed on main as `f3704ea4` on 2026-10-19. Built and reviewed (architecture and security before code, 2026-10-17; code review and requirements check after, 2026-10-18; dispositions at the bottom).

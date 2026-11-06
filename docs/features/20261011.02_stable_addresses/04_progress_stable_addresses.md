@@ -1,3 +1,7 @@
+---
+read-when: Finding where stable addresses stand, what shipped and what follow-ups are left.
+---
+
 # Progress: Stable addresses
 
 **Done: merged, installed and released as [v0.3.0](https://github.com/kenxle/live-agentic-html-editor/releases/tag/v0.3.0). Nothing is waiting on you.** Shipped in [PR #45](https://github.com/kenxle/live-agentic-html-editor/pull/45). Last updated 2026-10-12 21:22.

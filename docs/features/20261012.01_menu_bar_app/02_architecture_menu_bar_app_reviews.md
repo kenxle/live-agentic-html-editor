@@ -1,3 +1,7 @@
+---
+read-when: Reading the security review of the menu bar app design.
+---
+
 # Architecture reviews: Menu bar app
 
 ## Security review

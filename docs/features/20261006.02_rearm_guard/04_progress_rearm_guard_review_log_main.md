@@ -1,3 +1,7 @@
+---
+read-when: Reading the later round of Ken's comments on the re-arm guard decision page, taken from the main checkout.
+---
+
 # Review log: re0a9463eeeab
 
 **Pages reviewed:** /00_decision-beda7a33299eb550.html
