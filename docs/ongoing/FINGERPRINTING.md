@@ -369,6 +369,17 @@ wearing a number, and tuning the weights is not how this is made correct.
 Position is scored separately (`path` 20, `minted path` 12, `ordinal` 5) and is
 compared only when identity has already tied.
 
+### Scoring every element is one read of the page
+
+Each score asks for the element's heading, its neighbours' text and its path.
+Asked one element at a time, those re-read the page for every element, and a
+4,000-element page froze for half a minute. `bestGuess` runs the scoring inside
+`anchor.withPassIndex`, which answers the same questions from one shared read
+of the page, so the same page takes well under a second. The answers do not
+change: the element-by-element walk stays the definition, and
+[pass_index.test.js](../../test/unit/pass_index.test.js) compares the two for
+every element.
+
 ---
 
 ## The queued-edits problem
