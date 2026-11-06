@@ -2065,12 +2065,13 @@ main .mermaid svg {
    These three class names are load-bearing: the renderer writes them, the
    layer and the tests look for them. Styled on tokens, not renamed.
 
-   The read-only note and the frontmatter sit above the hero, outside any
-   section. They take their column from main, like everything else on the page,
-   so all they need here is the room above them. */
+   The read-only note sits above the hero and the frontmatter sits below the
+   last section, both outside any section. They take their column from main,
+   like everything else on the page, so all they need here is the room above
+   them (and, for the frontmatter, below it, at the foot of the page). */
 
-main > .lahe-readonly-note,
-main > .frontmatter { margin-block: var(--s6) 0 }
+main > .lahe-readonly-note { margin-block: var(--s6) 0 }
+main > .frontmatter { margin-block: var(--s6) var(--s6) }
 
 main .frontmatter { color: var(--on-surface-faint) }
 main .frontmatter summary {
@@ -2102,11 +2103,11 @@ main .lahe-local-link {
 
 </style></head><body><main data-container="Markdown document">
 
-
 <div class="hero">
 <h1 data-lahe-file-title="file-name">empty_notes.md</h1>
 
 </div>
+
 </main>
 
 </body></html>

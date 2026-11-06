@@ -598,6 +598,8 @@ function renderPage(source, options) {
   // relative-URL rewrite. A missing style still gets its link: the page server
   // answers it with a 404 and the rail names the missing style.
   var styleLink = styleId ? styles.linkTag(styleId) : "";
+  // The box goes after the body, so the top of the page is the hero. The source
+  // file keeps its frontmatter at the top; only the rendered position moves.
   var metadata = parts.frontmatter === null || parts.frontmatter.trim() === "" || onlyStyleLine(parts.frontmatter, style)
     ? ""
     : "<details class=\"frontmatter\"><summary>Document metadata</summary><pre data-block=\"Frontmatter\"><code>" +
@@ -612,8 +614,8 @@ function renderPage(source, options) {
     styleSheet(),
     "</style>" + styleLink + (noted ? RENDER_NOTE_META : "") + "</head><body><main data-container=\"Markdown document\">",
     typeof opts.note === "string" ? opts.note : (opts.readOnlyNote ? sourceNote(resolved) : ""),
-    metadata,
     body,
+    metadata,
     "</main>",
     containsMermaid ? "<script src=\"./" + MERMAID_ASSET + "\"></script><script>" + MERMAID_INIT + "</script>" : "",
     "</body></html>"

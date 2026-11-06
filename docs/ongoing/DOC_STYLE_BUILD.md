@@ -153,8 +153,8 @@ Not touched: `src/shared/manifest.js` (nothing new under `src/`),
   which carry the 1080px column and the inset themselves from `document.css`.
   What is left in our layer is the gaps: the reading measure on prose inside a
   section, rhythm for h3 and h4, a bottom margin on `.scrollx`, and the hero's
-  inset for the read-only note and the frontmatter, which sit above the hero
-  with no component around them. The dot-bullet rules are gone, since
+  inset for the read-only note (above the hero) and the frontmatter (after the
+  last section, since 2026-11-05), which have no component around them. The dot-bullet rules are gone, since
   `document.css` draws them now.
 
   Mermaid was still drawing in its stock lavender next to a cobalt and sage

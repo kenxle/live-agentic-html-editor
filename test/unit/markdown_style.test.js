@@ -103,6 +103,18 @@ test("V6: a frontmatter block with other lines is still shown, and the style sti
   assert.ok(html.indexOf("Document metadata") !== -1);
 });
 
+test("the Document metadata box comes after the whole body, inside main, and the hero comes first", () => {
+  const html = markdown.render(source("---\ntitle: A doc\n---\n# Doc\n\nLede.\n\n## One\n\nFirst section.\n\n## Two\n\nLast section words.\n"));
+  const box = html.indexOf("<details class=\"frontmatter\">");
+  assert.ok(box !== -1, "the box is shown");
+  assert.ok(html.indexOf("<div class=\"hero\">") < box, "the hero is not preceded by the box");
+  assert.ok(html.indexOf("Last section words.") < box, "the box follows the last section");
+  assert.ok(box < html.indexOf("</main>"), "and it is still inside main");
+  assert.equal(html.indexOf("<details class=\"frontmatter\">", box + 1), -1, "one box");
+  const mainStart = html.indexOf("<main");
+  assert.equal(html.slice(mainStart, html.indexOf("<div class=\"hero\">")).indexOf("Document metadata"), -1, "nothing before the hero");
+});
+
 test("V6: `lahe-style: international` is the house style: no link, and nothing shown", () => {
   const html = markdown.render(source("---\nlahe-style: international\n---\n# Doc\n"));
   assert.equal(html.indexOf(".lahe-styles"), -1);
