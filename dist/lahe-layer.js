@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.4.0+eb410b8151ff
+ * version 0.4.0+fed5ce9dba7d
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.4.0+eb410b8151ff";
+  g.LAHE.version = "0.4.0+fed5ce9dba7d";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -5757,7 +5757,7 @@
       from: STATE.DRAFT,
       to: STATE.READY,
       actor: ACTOR.REVIEWER,
-      why: "Cmd-Enter on a comment, or an edit committing. R7: the reviewer decides when it is ready"
+      why: "sending a comment (Enter, or Cmd-Enter by setting), or an edit committing. R7: the reviewer decides when it is ready"
     },
     {
       from: STATE.READY,
@@ -6901,11 +6901,15 @@
       requirement: "R1"
     },
     {
+      // The words for the default send key, Enter. The reviewer can switch to
+      // Cmd-Enter in the Keyboard shortcuts panel; SEND_KEY_WORDS holds both
+      // spellings and rowFor picks one, so this row is never read raw for
+      // its keys or hints.
       gesture: GESTURE.MARK_READY,
-      keys: "Cmd-Enter",
+      keys: "Enter",
       when: "a comment box is focused",
-      hint: "Cmd-Enter when done with this comment.",
-      panelHint: "Submit your comment or complete your edit.",
+      hint: "Enter when done with this comment. Shift-Enter for a new line.",
+      panelHint: "Send your comment. Shift-Enter for a new line.",
       passThrough: false,
       preventDefault: true,
       requirement: "R7"
@@ -6915,7 +6919,10 @@
       keys: "Cmd-Enter, Esc, or a click outside",
       when: "a block is in edit state",
       hint: "Cmd-Enter, Esc, or click outside to finish the edit and give the page back.",
-      inPanel: false,
+      // Its own row in the panel now that sending a comment is Enter: the two
+      // used to share one Cmd-Enter line.
+      panelKeys: "Cmd-Enter or Esc",
+      panelHint: "Finish your edit.",
       passThrough: false,
       preventDefault: true,
       requirement: "R24"
@@ -7015,6 +7022,86 @@
     return e.metaKey === true || e.ctrlKey === true;
   }
 
+  // ---------------------------------------------------------------------------
+  // The send key
+  // ---------------------------------------------------------------------------
+  //
+  // Enter sends a comment and Shift-Enter starts a new line, the way a chat box
+  // works. A reviewer who writes long comments can switch to Cmd-Enter in the
+  // Keyboard shortcuts panel, and then a bare Enter is a new line. Cmd-Enter
+  // sends under both settings, so the old habit never stops working.
+  //
+  // Only boxes the reviewer writes TO the agent in follow this: the comment box,
+  // a card's own words, and the rail's message boxes. An edit to the page is
+  // writing ON the page, where Enter is a paragraph, and finishing it stays
+  // Cmd-Enter or Esc.
+  var SEND_KEY = { ENTER: "enter", MOD_ENTER: "mod_enter" };
+
+  var SEND_KEY_WORDS = {
+    enter: {
+      keys: "Enter",
+      hint: "Enter when done with this comment. Shift-Enter for a new line.",
+      panelHint: "Send your comment. Shift-Enter for a new line."
+    },
+    mod_enter: {
+      keys: "Cmd-Enter",
+      hint: "Cmd-Enter when done with this comment.",
+      panelHint: "Send your comment. Enter for a new line."
+    }
+  };
+
+  function normalizeSendKey(value) {
+    return value === SEND_KEY.MOD_ENTER ? SEND_KEY.MOD_ENTER : SEND_KEY.ENTER;
+  }
+
+  function sendKeyLabel(sendKey) {
+    return SEND_KEY_WORDS[normalizeSendKey(sendKey)].keys;
+  }
+
+  /**
+   * Does this keydown send what is in the box?
+   *
+   * @param {Object} e {key, metaKey, ctrlKey, shiftKey, altKey, isComposing,
+   *   sendKey}. isComposing is true while an input method is building a
+   *   character: the Enter that picks a Japanese or Chinese candidate is not
+   *   the reviewer saying they are done.
+   * @returns {boolean}
+   */
+  function isSendPress(e) {
+    var ev = e || {};
+    if (ev.key !== "Enter" || ev.isComposing === true) return false;
+    if (isPrimaryModifier(ev)) return true;
+    if (normalizeSendKey(ev.sendKey) !== SEND_KEY.ENTER) return false;
+    return ev.shiftKey !== true && ev.altKey !== true;
+  }
+
+  /**
+   * isSendPress over a real keydown, for the rail's own message boxes.
+   *
+   * @param {KeyboardEvent} event
+   * @param {string} sendKey the reviewer's setting, from the store
+   */
+  function isSendEvent(event, sendKey) {
+    var ev = event || {};
+    return isSendPress({
+      key: ev.key,
+      metaKey: ev.metaKey === true,
+      ctrlKey: ev.ctrlKey === true,
+      shiftKey: ev.shiftKey === true,
+      altKey: ev.altKey === true,
+      // keyCode 229 is how Safari reports a key an input method took.
+      isComposing: ev.isComposing === true || ev.keyCode === 229,
+      sendKey: sendKey
+    });
+  }
+
+  // A table row as the reviewer's send key spells it.
+  function rowFor(row, sendKey) {
+    if (row.gesture !== GESTURE.MARK_READY) return row;
+    var words = SEND_KEY_WORDS[normalizeSendKey(sendKey)];
+    return Object.assign({}, row, words);
+  }
+
   /**
    * The whole decision, in one place.
    *
@@ -7070,6 +7157,12 @@
           return decide(GESTURE.CANCEL, false, true, "Esc closes the box or cancels picking; the draft is kept either way");
         }
         return decide(GESTURE.NONE, true, false, "nothing of the library's is open, so Esc is the page's");
+      }
+      if (e.key === "Enter" && e.inCommentBox === true) {
+        if (isSendPress(e)) {
+          return decide(GESTURE.MARK_READY, false, true, sendKeyLabel(e.sendKey) + " marks this comment ready for the agent (R7)");
+        }
+        return decide(GESTURE.NONE, true, false, "a new line in the comment box, or an input method finishing a character");
       }
       if (e.key === "Enter" && mod) {
         if (e.inCommentBox === true) {
@@ -7492,9 +7585,9 @@
     };
   }
 
-  function hintFor(gesture) {
+  function hintFor(gesture, sendKey) {
     for (var i = 0; i < TABLE.length; i += 1) {
-      if (TABLE[i].gesture === gesture) return TABLE[i].hint;
+      if (TABLE[i].gesture === gesture) return rowFor(TABLE[i], sendKey).hint;
     }
     return null;
   }
@@ -7502,9 +7595,10 @@
   // Every row, as the rail renders it: the keystroke and the sentence. AC6
   // scores that every gesture appears on the rail with its exact keystroke,
   // without opening a menu.
-  function hintLines() {
+  function hintLines(sendKey) {
     return TABLE.map(function (row) {
-      return { keys: row.keys, hint: row.hint };
+      var got = rowFor(row, sendKey);
+      return { keys: got.keys, hint: got.hint };
     });
   }
 
@@ -7512,11 +7606,12 @@
   // reader who opened the panel to learn the keys: a row may name its keys and
   // say its hint differently there (panelKeys, panelHint), and a step inside
   // another gesture (picking the outlined element) is left out (inPanel).
-  function panelLines() {
+  function panelLines(sendKey) {
     return TABLE.filter(function (row) {
       return row.inPanel !== false;
     }).map(function (row) {
-      return { keys: row.panelKeys || row.keys, hint: row.panelHint || row.hint };
+      var got = rowFor(row, sendKey);
+      return { keys: got.panelKeys || got.keys, hint: got.panelHint || got.hint };
     });
   }
 
@@ -7534,6 +7629,11 @@
     hintFor: hintFor,
     hintLines: hintLines,
     isPrimaryModifier: isPrimaryModifier,
+    SEND_KEY: SEND_KEY,
+    normalizeSendKey: normalizeSendKey,
+    sendKeyLabel: sendKeyLabel,
+    isSendPress: isSendPress,
+    isSendEvent: isSendEvent,
     BLOCK_TYPES: BLOCK_TYPES,
     OTHER_BLOCK_LABEL: OTHER_BLOCK_LABEL,
     blockTypeLabel: blockTypeLabel,
@@ -12487,6 +12587,13 @@
   var HOLDER_PREFIX = "lahe.holder.v1:";
   var LOCK_PREFIX = "lahe.window.v1:";
   var UI_PREFIX = "lahe.ui.v1:";
+  // Which key sends a comment: "enter" (the default) or "mod_enter". The
+  // reviewer's own setting, so ONE key for every review rather than one per
+  // review. Browser storage is per address, and every document has its own
+  // address, so the choice holds for the pages of one document or site.
+  var SEND_KEY_KEY = "lahe.sendkey.v1";
+  var SEND_KEY_MOD = "mod_enter";
+  var SEND_KEY_DEFAULT = "enter";
   // Whether this review is currently held (docs/features/20260917.01_hold_toggle):
   // Cmd-Enter still commits an item to `ready`, durably, exactly as it always
   // has (Hold gates DELIVERY, not the item lifecycle). sync.js's flush reads
@@ -13616,6 +13723,35 @@
       return { collapsed: false, pill: null, width: null, present: false, cards: {}, filter: "all" };
     }
 
+    // Kept here too, so a browser that refuses storage still honours the
+    // choice for as long as the page is open.
+    var sendKeyInMemory = null;
+
+    function normalizeSendKey(value) {
+      return value === SEND_KEY_MOD ? SEND_KEY_MOD : SEND_KEY_DEFAULT;
+    }
+
+    function readSendKey() {
+      try {
+        var raw = backing.getItem(SEND_KEY_KEY);
+        if (raw !== null && raw !== undefined) return normalizeSendKey(raw);
+      } catch (err) {
+        // Denied storage: fall through to what this page was told.
+      }
+      return normalizeSendKey(sendKeyInMemory);
+    }
+
+    function writeSendKey(value) {
+      var next = normalizeSendKey(value);
+      sendKeyInMemory = next;
+      try {
+        backing.setItem(SEND_KEY_KEY, next);
+      } catch (err) {
+        // Best effort, like the rail's other preferences.
+      }
+      return next;
+    }
+
     function readUiPreferences(reviewId) {
       try {
         var raw = backing.getItem(uiKey(reviewId));
@@ -13995,6 +14131,8 @@
       readChips: readChips,
       writeChips: writeChips,
       readUiPreferences: readUiPreferences,
+      readSendKey: readSendKey,
+      writeSendKey: writeSendKey,
       writeUiPreferences: writeUiPreferences,
       readSeenReplies: readSeenReplies,
       writeSeenReplies: writeSeenReplies,
@@ -18942,7 +19080,7 @@
 
   var shared = createHighlights();
 
-  // SEND, AND SEND WHILE HELD. Every send button shows its key, Cmd-Enter, on
+  // SEND, AND SEND WHILE HELD. Every send button shows its key on
   // hover. With Hold on, nothing a reviewer sends reaches the agent until they
   // release it, so every send button says where its words go and explains why
   // on hover instead. Both tips show at once, not after the browser's delay.
@@ -18951,7 +19089,7 @@
   var SEND_ATTR = "data-lahe-send";
   var SEND_WORDS = {
     LABEL: "Send",
-    TIP: "Cmd-Enter",
+    TIP: "Enter",
     HELD_LABEL: "Send to queue",
     HELD_TIP: "Messages are being held until you release them to the agent in a batch."
   };
@@ -18969,6 +19107,15 @@
    * @param {boolean} held whether Hold is on for this review
    * @param {string} [label] the button's own word when not held ("Send" by default)
    */
+  // The send key the tip names: the reviewer's setting, which the rail sets at
+  // boot and again when the reviewer changes it.
+  var sendTip = SEND_WORDS.TIP;
+
+  function setSendTip(words) {
+    if (typeof words === "string" && words) sendTip = words;
+    return sendTip;
+  }
+
   function paintSendButton(button, held, label) {
     if (!button) return;
     if (label) button.setAttribute("data-lahe-label", label);
@@ -18984,8 +19131,8 @@
       button.textContent = SEND_WORDS.HELD_LABEL;
     } else {
       button.removeAttribute("data-lahe-held");
-      button.setAttribute("data-lahe-tip", SEND_WORDS.TIP);
-      button.setAttribute("aria-description", SEND_WORDS.TIP);
+      button.setAttribute("data-lahe-tip", sendTip);
+      button.setAttribute("aria-description", sendTip);
       button.textContent = own;
     }
   }
@@ -19004,6 +19151,7 @@
     SEND_TIP_CSS: SEND_TIP_CSS,
     paintSendButton: paintSendButton,
     paintSendButtons: paintSendButtons,
+    setSendTip: setSendTip,
     refusesWholePaint: refusesWholePaint,
     refusesWholeElement: refusesWholeElement,
     WHOLE_PAINT_MAX_RATIO: WHOLE_PAINT_MAX_RATIO,
@@ -21182,6 +21330,16 @@
     ".keyspanel__list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}",
     ".keyspanel__row{display:flex;flex-direction:column;gap:3px;font-size:12px;line-height:1.45;color:var(--ink-soft)}",
     ".keyspanel__row kbd{align-self:flex-start}",
+    // Which key sends a comment: a two-part switch above the list, on a sunken
+    // track with the picked part a paper chip.
+    ".keyspanel__send{display:flex;align-items:center;justify-content:space-between;gap:8px;",
+    "font-size:12px;color:var(--ink-soft);padding-bottom:10px;border-bottom:1px solid var(--line)}",
+    ".sendkey{display:flex;gap:2px;padding:2px;border-radius:7px;background:var(--sunken)}",
+    ".sendkey__opt{font:inherit;font-size:11.5px;font-weight:550;line-height:1.3;color:var(--ink-soft);",
+    "background:transparent;border:0;border-radius:5px;padding:3px 9px;cursor:pointer}",
+    ".sendkey__opt:hover{color:var(--ink)}",
+    ".sendkey__opt[aria-pressed='true']{background:var(--paper);color:var(--ink);box-shadow:0 1px 2px rgba(18,20,26,.14)}",
+    ".sendkey__opt:focus-visible{outline:2px solid var(--accent);outline-offset:0}",
     ".stylepanel__head{display:flex;align-items:center;justify-content:space-between;gap:8px}",
     ".stylepanel__title{font-size:12.5px;font-weight:700;color:var(--ink)}",
     // A column: the line, then its buttons. The words wrap rather than clip,
@@ -21664,6 +21822,7 @@
   // The keyboard shortcuts, behind the menu rather than standing in the pane.
   // The menu item opens a panel that lists every gesture in gestures.js.
   var SHORTCUTS = { ACTION: "shortcuts", LABEL: "Keyboard shortcuts", CLOSE: "Close" };
+  var SEND_KEY_WORDS = { LABEL: "Send a comment with" };
 
   // The Document style button (docs/features/20260930.01_style_switcher). It
   // has its own place in the head, beside the menu, and exists only on a page
@@ -22613,13 +22772,27 @@
       });
       keysHead.appendChild(keysClose);
       keysPanel.appendChild(keysHead);
-      var keysList = el("ul", "keyspanel__list");
-      gestures.panelLines().forEach(function (line) {
-        var row = el("li", "keyspanel__row");
-        row.appendChild(el("kbd", null, line.keys));
-        row.appendChild(el("span", null, line.hint));
-        keysList.appendChild(row);
+      // Which key sends a comment. The reviewer's own setting, kept by the
+      // store; picking one rewrites the list below and every send button's tip.
+      var sendRow = el("div", "keyspanel__send");
+      sendRow.appendChild(el("span", "keyspanel__sendlabel", SEND_KEY_WORDS.LABEL));
+      var sendSwitch = el("div", "sendkey");
+      sendSwitch.setAttribute("role", "group");
+      sendSwitch.setAttribute("aria-label", SEND_KEY_WORDS.LABEL);
+      var sendKeyButtons = {};
+      [gestures.SEND_KEY.ENTER, gestures.SEND_KEY.MOD_ENTER].forEach(function (key) {
+        var opt = el("button", "sendkey__opt", gestures.sendKeyLabel(key));
+        opt.setAttribute("type", "button");
+        opt.setAttribute("data-lahe-send-key", key);
+        opt.addEventListener("click", function () {
+          setSendKey(key);
+        });
+        sendKeyButtons[key] = opt;
+        sendSwitch.appendChild(opt);
       });
+      sendRow.appendChild(sendSwitch);
+      keysPanel.appendChild(sendRow);
+      var keysList = el("ul", "keyspanel__list");
       keysPanel.appendChild(keysList);
 
       menuBtn.addEventListener("click", function () {
@@ -23124,6 +23297,8 @@
         menuBtn: menuBtn,
         menuList: menuList,
         keysPanel: keysPanel,
+        keysList: keysList,
+        sendKeyButtons: sendKeyButtons,
         menuItems: menuItems,
         menuWrap: menuWrap,
         styleWrap: styleWrap,
@@ -23167,6 +23342,7 @@
       // the button, which says the page is not in the document's own style.
       stylePanelOpen = false;
       renderStylePanel();
+      renderShortcuts();
       // The surface exists now, so a rail mounted while the reviewer is
       // presenting comes up hidden rather than flashing onto the projector for
       // a frame. Remounts reach this too, which is the case that matters: a
@@ -26289,6 +26465,39 @@
     // and unmounting. A menu that survives one of those is a menu that hangs
     // over someone's page after they have moved on.
 
+    function readSendKey() {
+      return store && typeof store.readSendKey === "function" ? store.readSendKey() : gestures.SEND_KEY.ENTER;
+    }
+
+    // The list and the switch, as the reviewer's send key spells them.
+    function renderShortcuts() {
+      if (!dom || !dom.keysList) return;
+      var current = readSendKey();
+      Object.keys(dom.sendKeyButtons).forEach(function (key) {
+        dom.sendKeyButtons[key].setAttribute("aria-pressed", key === current ? "true" : "false");
+      });
+      while (dom.keysList.firstChild) dom.keysList.removeChild(dom.keysList.firstChild);
+      gestures.panelLines(current).forEach(function (line) {
+        var row = el("li", "keyspanel__row");
+        row.appendChild(el("kbd", null, line.keys));
+        row.appendChild(el("span", null, line.hint));
+        dom.keysList.appendChild(row);
+      });
+      highlightModule.setSendTip(gestures.sendKeyLabel(current));
+    }
+
+    /**
+     * Change which key sends a comment. Every box reads the setting on each
+     * key press, so nothing else needs telling; what is drawn (this panel and
+     * every send button's tip) is repainted here.
+     */
+    function setSendKey(key) {
+      var next = store && typeof store.writeSendKey === "function" ? store.writeSendKey(key) : gestures.normalizeSendKey(key);
+      renderShortcuts();
+      repaintHoldChrome();
+      return next;
+    }
+
     // The keyboard shortcuts panel. It hangs from the head like the style
     // dropdown and closes the same ways: Close, Esc, or a click anywhere else.
     function openShortcuts() {
@@ -29205,7 +29414,7 @@
     // the list is open.
     function hintList() {
       var list = el("ul", "lahe-rail-hints");
-      gestures.hintLines().forEach(function (line) {
+      gestures.hintLines(sendKeySetting()).forEach(function (line) {
         var li = el("li");
         li.appendChild(el("span", "lahe-rail-keys", line.keys));
         li.appendChild(el("span", "lahe-rail-hint", line.hint));
@@ -29221,7 +29430,7 @@
       var container = panel || footEl;
       if (!container) {
         return gestures
-          .hintLines()
+          .hintLines(sendKeySetting())
           .map(function (line) {
             return line.keys + " " + line.hint;
           })
@@ -29230,7 +29439,7 @@
       var list = container.querySelector(".lahe-rail-hints");
       if (list) return list.textContent;
       return gestures
-        .hintLines()
+        .hintLines(sendKeySetting())
         .map(function (line) {
           return line.keys + " " + line.hint;
         })
@@ -29409,11 +29618,11 @@
      * from one table; a hard-coded chord here would be a second spelling of it.
      */
     function sendKeys() {
-      var row = null;
-      (gestures.TABLE || []).forEach(function (entry) {
-        if (!row && entry.gesture === gestures.GESTURE.MARK_READY) row = entry;
-      });
-      return (row && row.keys) || "Cmd-Enter";
+      return gestures.sendKeyLabel(sendKeySetting());
+    }
+
+    function sendKeySetting() {
+      return store && typeof store.readSendKey === "function" ? store.readSendKey() : undefined;
     }
 
     function isHeld() {
@@ -29467,8 +29676,8 @@
         if (keepsDrafts()) store.writeFollowupDraft(reviewId, id, input.value);
       });
       input.addEventListener("keydown", function (event) {
-        // The same commit gesture as every other box in the rail.
-        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        // The same send key as every other box in the rail.
+        if (gestures.isSendEvent(event, sendKeySetting())) {
           event.preventDefault();
           submit();
         }
@@ -29976,7 +30185,8 @@
       root.LAHE.protocol,
       root.LAHE.failures,
       root.LAHE.review_format,
-      root.LAHE.overlay
+      root.LAHE.overlay,
+      root.LAHE.gestures
     );
   } else {
     module.exports = factory(
@@ -29986,10 +30196,11 @@
       require("../shared/protocol.js"),
       require("../shared/failures.js"),
       require("../shared/review_format.js"),
-      require("./overlay.js")
+      require("./overlay.js"),
+      require("../shared/gestures.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, record, lifecycle, protocol, failures, reviewFormat, overlayModule) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, record, lifecycle, protocol, failures, reviewFormat, overlayModule, gestures) {
   "use strict";
 
   var ROW_CLASS = "lahe-done-row";
@@ -31434,7 +31645,7 @@
           store.writeFollowupDraft(reviewId, id, input.value);
         });
         input.addEventListener("keydown", function (event) {
-          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+          if (gestures.isSendEvent(event, store && store.readSendKey ? store.readSendKey() : undefined)) {
             event.preventDefault();
             submitFollowup(id, input.value);
           }
@@ -38726,7 +38937,7 @@
 //                                      element under the pointer, clicking one
 //                                      comments on the whole thing, Esc cancels
 //   a box at the foot of the thread    a note tied to nothing (R18)
-//   Cmd-Enter                          marks the comment ready. Nothing that is
+//   Enter (or Cmd-Enter, by setting)   marks the comment ready. Nothing that is
 //                                      not ready is actionable (R7)
 //   Esc                                closes the box, KEEPING the draft
 //   typing in a card's own note        THE rewording gesture. There is no
@@ -38823,8 +39034,11 @@
   // a constant rather than a literal in two files.
   var LISTENER_GROUP = listeners.GROUP.COMMENTS;
 
-  // Ken's copy, exactly. One spelling, used on every card.
-  var HINT_READY = "Cmd-Enter when done with this comment";
+  // One spelling, used on every card: the gesture table's, for the reviewer's
+  // own send key.
+  function hintReady(sendKey) {
+    return gestures.hintFor(gestures.GESTURE.MARK_READY, sendKey);
+  }
 
   // ---------------------------------------------------------------------------
   // Editing the words in place
@@ -40443,6 +40657,10 @@
           metaKey: event.metaKey,
           ctrlKey: event.ctrlKey,
           shiftKey: event.shiftKey,
+          altKey: event.altKey,
+          // keyCode 229 is how Safari reports a key an input method took.
+          isComposing: event.isComposing === true || event.keyCode === 229,
+          sendKey: store.readSendKey(),
           inCommentBox: true
         });
         if (got.gesture === gestures.GESTURE.MARK_READY) {
@@ -41381,7 +41599,7 @@
       node.setAttribute("data-lahe-note-editor", "");
       node.setAttribute("role", "textbox");
       node.setAttribute("aria-multiline", "true");
-      node.setAttribute("aria-label", "Your comment. " + HINT_READY + ".");
+      node.setAttribute("aria-label", "Your comment. " + hintReady(store.readSendKey()));
       node.setAttribute("spellcheck", "false");
       entry.off.push(
         listenOn(node, "focus", function () {
@@ -42063,7 +42281,7 @@
       OUTLINE_CLASS: OUTLINE_CLASS,
       PILL_CLASS: PILL_CLASS,
       POPOVER_KEYS: POPOVER_KEYS,
-      HINT_READY: HINT_READY,
+      hintReady: hintReady,
       setReview: setReview,
       setPage: setPage,
       onChange: onChange,
@@ -42119,7 +42337,7 @@
     POPOVER_KEYS: POPOVER_KEYS,
     POPOVER_ACTIONS: POPOVER_ACTIONS,
     POPOVER_DELAY_MS: POPOVER_DELAY_MS,
-    HINT_READY: HINT_READY,
+    hintReady: hintReady,
     BOX_STYLE: BOX_STYLE,
     BOX_WIDTH: BOX_WIDTH,
     BOX_WIDTH_CAP: BOX_WIDTH_CAP,
@@ -53932,7 +54150,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.4.0+eb410b8151ff";
+  var VERSION = "0.4.0+fed5ce9dba7d";
 
   var protocol = ns.protocol;
   var record = ns.record;
