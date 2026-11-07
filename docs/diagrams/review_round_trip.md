@@ -22,7 +22,7 @@ sequenceDiagram
 
     Rv->>Lib: types a comment or edit
     Lib->>Br: saves every keystroke
-    Rv->>Lib: Cmd-Enter confirms
+    Rv->>Lib: sends (Enter by default)
     Lib->>Hp: posts the record
     Hp->>St: appends to events.jsonl
     Hp->>St: projects review.json

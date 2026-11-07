@@ -4,7 +4,7 @@ read-when: Changing which key sends a comment, or reviewing the send-key switch 
 
 # Enter sends a comment
 
-Built on `task/enter-to-send`. Enter now sends a comment and Shift-Enter starts a new line. A switch in the rail menu's Keyboard shortcuts panel turns sending back to Cmd-Enter.
+Shipped in [PR #101](https://github.com/kenxle/live-agentic-html-editor/pull/101), merged to main as `1362af77` on 2026-11-07, and live on the helper. Enter now sends a comment and Shift-Enter starts a new line. A switch in the rail menu's Keyboard shortcuts panel turns sending back to Cmd-Enter.
 
 ## Problem
 
@@ -41,7 +41,7 @@ The screenshots come from the browser test that proves the switch, `test/browser
 
 ## Follow-up
 
-- Keep the send key in the helper so one choice covers every document. Needs a route and a security review.
+- Keep the send key in the helper so one choice covers every document. Needs a route and a security review. On the board as `LAHE-send-key-everywhere`.
 
 ## Verification
 
@@ -51,9 +51,9 @@ The screenshots come from the browser test that proves the switch, `test/browser
 | The setting is stored once, survives a reload, falls back when storage throws | pass | `test/unit/send_key.test.js` |
 | Real keys into the real box: Enter sends, Shift-Enter makes a new line | pass | `test/browser/send_key.spec.js` |
 | The switch, by a real click: rows change, Enter becomes a new line, Cmd-Enter sends, the choice survives a reload | pass | `test/browser/send_key.spec.js` |
-| `npm run gate:unit` | see the PR body | |
-| `npm run gate` | see the PR body | |
-| Independent review | see the PR body | |
+| `npm run gate:unit` | pass | run by the builder before each push |
+| `npm run gate` | pass | on `f1a6c375`: unit 3,184 passed, 0 failed, 5 skipped; browser 935 passed, 0 failed, 8 skipped; no stray helpers |
+| Independent review | pass after one fix round | empty-box Enter, stale card labels, panel redraw, missing tests and stale docs, all fixed in `84c5ebad` |
 
 ## Rollout
 

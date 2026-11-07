@@ -11,7 +11,7 @@ stateDiagram-v2
     [*] --> draft : reviewer starts typing, or presses a choice button
 
     draft --> draft : reviewer keeps typing (every keystroke saved, revision unchanged)
-    draft --> ready : reviewer confirms (Cmd-Enter, or an edit committing)
+    draft --> ready : reviewer sends (Enter by default, or an edit committing)
 
     ready --> draft : reviewer starts rewording it (first changing keystroke, comment or edit)
     draft --> ready : reviewer's wording matches the committed text again, or commits (bumps the revision)
@@ -31,7 +31,7 @@ stateDiagram-v2
 ## The four states, in plain words
 
 - **draft**: the reviewer is still typing. It is saved so nothing is lost, but no agent can see it yet. Every keystroke is written to browser storage, in that item's own key. The helper gets a backup copy far less often: at most once every 10 seconds while typing, plus leaving the box, hiding the tab, and leaving the page. See `docs/features/20260922.01_draft_write_cost/01_spec_draft_write_cost.md`.
-- **ready**: the reviewer hit Cmd-Enter, or an edit committed. An agent may now act on it.
+- **ready**: the reviewer sent the comment (Enter by default, Cmd-Enter if the switch says so), or an edit committed. An agent may now act on it.
 - **handled**: an agent said it made the change, or the reviewer marked the card done themselves. The record's `closed_by: "reviewer"` says which.
 - **not_handled**: an agent said it did not, and left a reason the reviewer reads on the card.
 

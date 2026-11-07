@@ -191,7 +191,7 @@ That spec also put a floor under how often a draft leaves the browser. Queued
 draft events now wait in the outbox: an item whose queued events are all drafts
 is held back until 10 seconds after its last draft post (`FLUSH.DRAFT_FLOOR_MS`
 in `protocol.js`). Leaving the comment box, hiding the tab and leaving the page
-send everything at once, and committed work never waits: Cmd-Enter, a Hold
+send everything at once, and committed work never waits: sending a comment, a Hold
 release, ending a review, and the first keystroke that withdraws a ready item
 back to draft all post immediately. So coalescing answers how many events one
 wording costs, and the floor answers how often the queue is emptied.
