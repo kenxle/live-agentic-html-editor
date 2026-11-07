@@ -206,7 +206,7 @@ Every transition names the actor allowed to make it:
 | --- | --- | --- |
 | (none) | `draft` | reviewer |
 | `draft` | `draft` | reviewer (typing; `rev` does not move for a draft) |
-| `draft` | `ready` | reviewer (Cmd-Enter, or an edit committing) |
+| `draft` | `ready` | reviewer (sending a comment, or an edit committing) |
 | `ready` | `ready` | reviewer (rewording; bumps `rev`) |
 | `ready` | `handled` | **agent**, and only naming the current `rev` |
 | `ready` | `not_handled` | **agent**, with a reason |
@@ -301,7 +301,8 @@ it would see without the library (R13, which outranks editing convenience).
 | Cmd-Shift-C | nothing selected | Element-pick mode; click an element, Esc cancels |
 | Cmd-Shift-E | cursor or selection in a block | Edit that block, and nothing else |
 | Cmd-Shift-1 | always, unless the review is hidden for presenting | Open the review panel, or close it |
-| Cmd-Enter | in a comment box | Mark ready for the agent |
+| Enter (Cmd-Enter also works) | in a comment box or a rail message box | Mark ready for the agent. Shift-Enter is a new line |
+| Cmd-Enter | in a comment box, with "Send a comment with Cmd-Enter" chosen | Mark ready for the agent. A bare Enter is a new line |
 | Cmd-Enter | a block is in edit state | Commit the edit |
 | Esc | a block is in edit state | Commit the edit |
 | the pointer going down anywhere outside the block, INCLUDING on the rail | a block is in edit state | Commit the edit; the event still passes through |

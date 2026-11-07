@@ -1057,7 +1057,7 @@
 
   var shared = createHighlights();
 
-  // SEND, AND SEND WHILE HELD. Every send button shows its key, Cmd-Enter, on
+  // SEND, AND SEND WHILE HELD. Every send button shows its key on
   // hover. With Hold on, nothing a reviewer sends reaches the agent until they
   // release it, so every send button says where its words go and explains why
   // on hover instead. Both tips show at once, not after the browser's delay.
@@ -1066,7 +1066,7 @@
   var SEND_ATTR = "data-lahe-send";
   var SEND_WORDS = {
     LABEL: "Send",
-    TIP: "Cmd-Enter",
+    TIP: "Enter",
     HELD_LABEL: "Send to queue",
     HELD_TIP: "Messages are being held until you release them to the agent in a batch."
   };
@@ -1084,6 +1084,15 @@
    * @param {boolean} held whether Hold is on for this review
    * @param {string} [label] the button's own word when not held ("Send" by default)
    */
+  // The send key the tip names: the reviewer's setting, which the rail sets at
+  // boot and again when the reviewer changes it.
+  var sendTip = SEND_WORDS.TIP;
+
+  function setSendTip(words) {
+    if (typeof words === "string" && words) sendTip = words;
+    return sendTip;
+  }
+
   function paintSendButton(button, held, label) {
     if (!button) return;
     if (label) button.setAttribute("data-lahe-label", label);
@@ -1099,8 +1108,8 @@
       button.textContent = SEND_WORDS.HELD_LABEL;
     } else {
       button.removeAttribute("data-lahe-held");
-      button.setAttribute("data-lahe-tip", SEND_WORDS.TIP);
-      button.setAttribute("aria-description", SEND_WORDS.TIP);
+      button.setAttribute("data-lahe-tip", sendTip);
+      button.setAttribute("aria-description", sendTip);
       button.textContent = own;
     }
   }
@@ -1119,6 +1128,7 @@
     SEND_TIP_CSS: SEND_TIP_CSS,
     paintSendButton: paintSendButton,
     paintSendButtons: paintSendButtons,
+    setSendTip: setSendTip,
     refusesWholePaint: refusesWholePaint,
     refusesWholeElement: refusesWholeElement,
     WHOLE_PAINT_MAX_RATIO: WHOLE_PAINT_MAX_RATIO,

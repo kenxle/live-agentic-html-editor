@@ -417,7 +417,7 @@ test.describe("Hold: queue several comments, release them to the agent at once",
         const railRoot = window.__lahe.rail.tabBody("active").getRootNode();
         return railRoot.querySelector("[data-lahe-send]").getAttribute("data-lahe-tip");
       });
-      expect(plainTip, "a plain Send names its key on hover").toBe("Cmd-Enter");
+      expect(plainTip, "a plain Send names its key on hover").toBe("Enter");
     } finally {
       await helper.stop().catch(() => {});
       await app.close();

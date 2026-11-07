@@ -17,9 +17,9 @@ thread.
 
 ## How to get to it (user POV)
 
-- Select words on the page, press Cmd-Shift-C (Ctrl-Shift-C elsewhere), type, press Cmd-Enter.
-- Type in the rail box under "Add a note on the whole page", press Cmd-Enter or Send.
-- Read the agent's answer on the card. Type in the card's "Add a new message" box and press Cmd-Enter.
+- Select words on the page, press Cmd-Shift-C (Ctrl-Shift-C elsewhere), type, press Enter (Shift-Enter for a new line; Cmd-Enter when the Keyboard shortcuts panel says "Send a comment with Cmd-Enter").
+- Type in the rail box under "Add a note on the whole page", press Enter or Send.
+- Read the agent's answer on the card. Type in the card's "Add a new message" box and press Enter.
 - Press × ("Delete this comment") on a card.
 - Press Cmd-Shift-C with no selection, then click a panel icon.
 

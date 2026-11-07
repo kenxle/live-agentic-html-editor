@@ -574,7 +574,7 @@ test.describe("1D: comments, gestures, and highlights", () => {
       expect(shown).toContain(line.hint);
     });
     // Ken's copy, exactly.
-    expect(shown).toContain("Cmd-Enter when done with this comment");
+    expect(shown).toContain("Enter when done with this comment. Shift-Enter for a new line.");
   });
 
   // ---------------------------------------------------------------------------

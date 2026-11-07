@@ -139,6 +139,68 @@ test("Cmd-Enter marks a comment ready, and only inside a comment box (R7)", () =
   assert.equal(outside.passThrough, true, "the page's own Cmd-Enter still works");
 });
 
+test("Enter sends a comment by default, and Shift-Enter is a new line", () => {
+  const sent = key("Enter", { inCommentBox: true });
+  assert.equal(sent.gesture, gestures.GESTURE.MARK_READY);
+  assert.equal(sent.preventDefault, true);
+  assert.equal(key("Enter", { inCommentBox: true, sendKey: gestures.SEND_KEY.ENTER }).gesture, gestures.GESTURE.MARK_READY);
+  const line = key("Enter", { inCommentBox: true, shiftKey: true });
+  assert.equal(line.gesture, gestures.GESTURE.NONE);
+  assert.equal(line.preventDefault, false, "Shift-Enter types its new line");
+  assert.equal(key("Enter", { inCommentBox: true, altKey: true }).gesture, gestures.GESTURE.NONE);
+});
+
+test("with the Cmd-Enter setting, a bare Enter is a new line and Cmd-Enter sends", () => {
+  const MOD = gestures.SEND_KEY.MOD_ENTER;
+  const line = key("Enter", { inCommentBox: true, sendKey: MOD });
+  assert.equal(line.gesture, gestures.GESTURE.NONE);
+  assert.equal(line.preventDefault, false);
+  assert.equal(key("Enter", { inCommentBox: true, sendKey: MOD, metaKey: true }).gesture, gestures.GESTURE.MARK_READY);
+  assert.equal(key("Enter", { inCommentBox: true, sendKey: MOD, ctrlKey: true }).gesture, gestures.GESTURE.MARK_READY);
+});
+
+test("Cmd-Enter still sends with the Enter setting, so old habits keep working", () => {
+  assert.equal(key("Enter", { inCommentBox: true, metaKey: true }).gesture, gestures.GESTURE.MARK_READY);
+});
+
+test("Enter that finishes an input-method composition never sends", () => {
+  assert.equal(key("Enter", { inCommentBox: true, isComposing: true }).gesture, gestures.GESTURE.NONE);
+  assert.equal(key("Enter", { inCommentBox: true, isComposing: true, metaKey: true }).gesture, gestures.GESTURE.NONE);
+});
+
+test("a bare Enter outside a comment box is never the library's, whatever the setting", () => {
+  const page = key("Enter", {});
+  assert.equal(page.gesture, gestures.GESTURE.NONE);
+  assert.equal(page.passThrough, true);
+  assert.notEqual(key("Enter", { editing: true }).gesture, gestures.GESTURE.COMMIT_EDIT, "Enter in an edit is a paragraph");
+});
+
+test("isSendPress is the same rule for the rail's own message boxes", () => {
+  assert.equal(gestures.isSendPress({ key: "Enter" }), true);
+  assert.equal(gestures.isSendPress({ key: "Enter", shiftKey: true }), false);
+  assert.equal(gestures.isSendPress({ key: "Enter", isComposing: true }), false);
+  assert.equal(gestures.isSendPress({ key: "a" }), false);
+  assert.equal(gestures.isSendPress({ key: "Enter", sendKey: "mod_enter" }), false);
+  assert.equal(gestures.isSendPress({ key: "Enter", sendKey: "mod_enter", metaKey: true }), true);
+  assert.equal(gestures.isSendPress({ key: "Enter", metaKey: true }), true);
+});
+
+test("the send key's words follow the setting", () => {
+  assert.equal(gestures.normalizeSendKey(undefined), gestures.SEND_KEY.ENTER);
+  assert.equal(gestures.normalizeSendKey("nonsense"), gestures.SEND_KEY.ENTER);
+  assert.equal(gestures.normalizeSendKey("mod_enter"), gestures.SEND_KEY.MOD_ENTER);
+  assert.equal(gestures.sendKeyLabel(gestures.SEND_KEY.ENTER), "Enter");
+  assert.equal(gestures.sendKeyLabel(gestures.SEND_KEY.MOD_ENTER), "Cmd-Enter");
+  assert.equal(
+    gestures.hintFor(gestures.GESTURE.MARK_READY, gestures.SEND_KEY.MOD_ENTER),
+    "Cmd-Enter when done with this comment."
+  );
+  const rows = gestures.hintLines(gestures.SEND_KEY.MOD_ENTER);
+  assert.ok(rows.some((r) => r.keys === "Cmd-Enter" && r.hint === "Cmd-Enter when done with this comment."));
+  const panel = gestures.panelLines();
+  assert.ok(panel.some((r) => r.keys === "Enter" && /Shift-Enter/.test(r.hint)));
+});
+
 test("Esc commits an open edit, cancels a pick, and is otherwise the page's", () => {
   assert.equal(key("Escape", { editing: true }).gesture, gestures.GESTURE.COMMIT_EDIT);
   assert.equal(key("Escape", { pickMode: true }).gesture, gestures.GESTURE.CANCEL);
@@ -190,7 +252,7 @@ test("every gesture has a hint line with its exact keystroke, because AC6 scores
 });
 
 test("the on-card hint is Ken's copy, word for word", () => {
-  assert.equal(gestures.hintFor(gestures.GESTURE.MARK_READY), "Cmd-Enter when done with this comment.");
+  assert.equal(gestures.hintFor(gestures.GESTURE.MARK_READY), "Enter when done with this comment. Shift-Enter for a new line.");
 });
 
 // ---------------------------------------------------------------------------

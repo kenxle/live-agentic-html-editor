@@ -14,7 +14,7 @@
 //                                      element under the pointer, clicking one
 //                                      comments on the whole thing, Esc cancels
 //   a box at the foot of the thread    a note tied to nothing (R18)
-//   Cmd-Enter                          marks the comment ready. Nothing that is
+//   Enter (or Cmd-Enter, by setting)   marks the comment ready. Nothing that is
 //                                      not ready is actionable (R7)
 //   Esc                                closes the box, KEEPING the draft
 //   typing in a card's own note        THE rewording gesture. There is no
@@ -111,8 +111,11 @@
   // a constant rather than a literal in two files.
   var LISTENER_GROUP = listeners.GROUP.COMMENTS;
 
-  // Ken's copy, exactly. One spelling, used on every card.
-  var HINT_READY = "Cmd-Enter when done with this comment";
+  // One spelling, used on every card: the gesture table's, for the reviewer's
+  // own send key.
+  function hintReady(sendKey) {
+    return gestures.hintFor(gestures.GESTURE.MARK_READY, sendKey);
+  }
 
   // ---------------------------------------------------------------------------
   // Editing the words in place
@@ -1731,6 +1734,10 @@
           metaKey: event.metaKey,
           ctrlKey: event.ctrlKey,
           shiftKey: event.shiftKey,
+          altKey: event.altKey,
+          // keyCode 229 is how Safari reports a key an input method took.
+          isComposing: event.isComposing === true || event.keyCode === 229,
+          sendKey: store.readSendKey(),
           inCommentBox: true
         });
         if (got.gesture === gestures.GESTURE.MARK_READY) {
@@ -2669,7 +2676,7 @@
       node.setAttribute("data-lahe-note-editor", "");
       node.setAttribute("role", "textbox");
       node.setAttribute("aria-multiline", "true");
-      node.setAttribute("aria-label", "Your comment. " + HINT_READY + ".");
+      node.setAttribute("aria-label", "Your comment. " + hintReady(store.readSendKey()));
       node.setAttribute("spellcheck", "false");
       entry.off.push(
         listenOn(node, "focus", function () {
@@ -3351,7 +3358,7 @@
       OUTLINE_CLASS: OUTLINE_CLASS,
       PILL_CLASS: PILL_CLASS,
       POPOVER_KEYS: POPOVER_KEYS,
-      HINT_READY: HINT_READY,
+      hintReady: hintReady,
       setReview: setReview,
       setPage: setPage,
       onChange: onChange,
@@ -3407,7 +3414,7 @@
     POPOVER_KEYS: POPOVER_KEYS,
     POPOVER_ACTIONS: POPOVER_ACTIONS,
     POPOVER_DELAY_MS: POPOVER_DELAY_MS,
-    HINT_READY: HINT_READY,
+    hintReady: hintReady,
     BOX_STYLE: BOX_STYLE,
     BOX_WIDTH: BOX_WIDTH,
     BOX_WIDTH_CAP: BOX_WIDTH_CAP,
