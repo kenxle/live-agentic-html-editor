@@ -1205,6 +1205,16 @@
     ".keyspanel__list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}",
     ".keyspanel__row{display:flex;flex-direction:column;gap:3px;font-size:12px;line-height:1.45;color:var(--ink-soft)}",
     ".keyspanel__row kbd{align-self:flex-start}",
+    // Which key sends a comment: a two-part switch above the list, on a sunken
+    // track with the picked part a paper chip.
+    ".keyspanel__send{display:flex;align-items:center;justify-content:space-between;gap:8px;",
+    "font-size:12px;color:var(--ink-soft);padding-bottom:10px;border-bottom:1px solid var(--line)}",
+    ".sendkey{display:flex;gap:2px;padding:2px;border-radius:7px;background:var(--sunken)}",
+    ".sendkey__opt{font:inherit;font-size:11.5px;font-weight:550;line-height:1.3;color:var(--ink-soft);",
+    "background:transparent;border:0;border-radius:5px;padding:3px 9px;cursor:pointer}",
+    ".sendkey__opt:hover{color:var(--ink)}",
+    ".sendkey__opt[aria-pressed='true']{background:var(--paper);color:var(--ink);box-shadow:0 1px 2px rgba(18,20,26,.14)}",
+    ".sendkey__opt:focus-visible{outline:2px solid var(--accent);outline-offset:0}",
     ".stylepanel__head{display:flex;align-items:center;justify-content:space-between;gap:8px}",
     ".stylepanel__title{font-size:12.5px;font-weight:700;color:var(--ink)}",
     // A column: the line, then its buttons. The words wrap rather than clip,
@@ -1687,6 +1697,7 @@
   // The keyboard shortcuts, behind the menu rather than standing in the pane.
   // The menu item opens a panel that lists every gesture in gestures.js.
   var SHORTCUTS = { ACTION: "shortcuts", LABEL: "Keyboard shortcuts", CLOSE: "Close" };
+  var SEND_KEY_WORDS = { LABEL: "Send a comment with" };
 
   // The Document style button (docs/features/20260930.01_style_switcher). It
   // has its own place in the head, beside the menu, and exists only on a page
@@ -2242,6 +2253,7 @@
     // wants to (data-lahe-start="hidden", which boot passes in).
     var presenting = opts.present === true || readPresentPreference();
     var presentHandlers = [];
+    var sendKeyHandlers = [];
     // How wide the reviewer dragged the rail, or null while they have left it
     // at its default. Held UNCLAMPED: the clamp belongs to the viewport that is
     // on screen right now, and a window dragged narrow and then wide again
@@ -2636,13 +2648,27 @@
       });
       keysHead.appendChild(keysClose);
       keysPanel.appendChild(keysHead);
-      var keysList = el("ul", "keyspanel__list");
-      gestures.panelLines().forEach(function (line) {
-        var row = el("li", "keyspanel__row");
-        row.appendChild(el("kbd", null, line.keys));
-        row.appendChild(el("span", null, line.hint));
-        keysList.appendChild(row);
+      // Which key sends a comment. The reviewer's own setting, kept by the
+      // store; picking one rewrites the list below and every send button's tip.
+      var sendRow = el("div", "keyspanel__send");
+      sendRow.appendChild(el("span", "keyspanel__sendlabel", SEND_KEY_WORDS.LABEL));
+      var sendSwitch = el("div", "sendkey");
+      sendSwitch.setAttribute("role", "group");
+      sendSwitch.setAttribute("aria-label", SEND_KEY_WORDS.LABEL);
+      var sendKeyButtons = {};
+      [gestures.SEND_KEY.ENTER, gestures.SEND_KEY.MOD_ENTER].forEach(function (key) {
+        var opt = el("button", "sendkey__opt", gestures.sendKeyLabel(key));
+        opt.setAttribute("type", "button");
+        opt.setAttribute("data-lahe-send-key", key);
+        opt.addEventListener("click", function () {
+          setSendKey(key);
+        });
+        sendKeyButtons[key] = opt;
+        sendSwitch.appendChild(opt);
       });
+      sendRow.appendChild(sendSwitch);
+      keysPanel.appendChild(sendRow);
+      var keysList = el("ul", "keyspanel__list");
       keysPanel.appendChild(keysList);
 
       menuBtn.addEventListener("click", function () {
@@ -3147,6 +3173,8 @@
         menuBtn: menuBtn,
         menuList: menuList,
         keysPanel: keysPanel,
+        keysList: keysList,
+        sendKeyButtons: sendKeyButtons,
         menuItems: menuItems,
         menuWrap: menuWrap,
         styleWrap: styleWrap,
@@ -3190,6 +3218,7 @@
       // the button, which says the page is not in the document's own style.
       stylePanelOpen = false;
       renderStylePanel();
+      renderShortcuts();
       // The surface exists now, so a rail mounted while the reviewer is
       // presenting comes up hidden rather than flashing onto the projector for
       // a frame. Remounts reach this too, which is the case that matters: a
@@ -6312,6 +6341,46 @@
     // and unmounting. A menu that survives one of those is a menu that hangs
     // over someone's page after they have moved on.
 
+    function readSendKey() {
+      return store && typeof store.readSendKey === "function" ? store.readSendKey() : gestures.SEND_KEY.ENTER;
+    }
+
+    // The list and the switch, as the reviewer's send key spells them.
+    function renderShortcuts() {
+      if (!dom || !dom.keysList) return;
+      var current = readSendKey();
+      Object.keys(dom.sendKeyButtons).forEach(function (key) {
+        dom.sendKeyButtons[key].setAttribute("aria-pressed", key === current ? "true" : "false");
+      });
+      while (dom.keysList.firstChild) dom.keysList.removeChild(dom.keysList.firstChild);
+      gestures.panelLines(current).forEach(function (line) {
+        var row = el("li", "keyspanel__row");
+        row.appendChild(el("kbd", null, line.keys));
+        row.appendChild(el("span", null, line.hint));
+        dom.keysList.appendChild(row);
+      });
+      highlightModule.setSendTip(gestures.sendKeyLabel(current));
+    }
+
+    /**
+     * Change which key sends a comment. Every box reads the setting on each
+     * key press, so nothing else needs telling; what is drawn (this panel and
+     * every send button's tip) is repainted here.
+     */
+    function setSendKey(key) {
+      var next = store && typeof store.writeSendKey === "function" ? store.writeSendKey(key) : gestures.normalizeSendKey(key);
+      renderShortcuts();
+      repaintHoldChrome();
+      sendKeyHandlers.slice().forEach(function (fn) {
+        try {
+          fn(next);
+        } catch (err) {
+          // One listener failing must not stop the rest hearing it.
+        }
+      });
+      return next;
+    }
+
     // The keyboard shortcuts panel. It hangs from the head like the style
     // dropdown and closes the same ways: Close, Esc, or a click anywhere else.
     function openShortcuts() {
@@ -6320,6 +6389,8 @@
       closeMenu(false);
       closeStylePanel(false);
       closePdfTray(false);
+      // Drawn fresh: another window of this document may have changed the key.
+      renderShortcuts();
       shortcutsOpen = true;
       dom.keysPanel.setAttribute("data-shown", "open");
       shortcutsOutsideListener = function (event) {
@@ -7289,6 +7360,15 @@
     }
 
     /** Tell me when the library is hidden or brought back. Returns an unsubscribe. */
+    function onSendKey(fn) {
+      if (typeof fn !== "function") throw new TypeError("onSendKey: a function is required");
+      sendKeyHandlers.push(fn);
+      return function () {
+        var at = sendKeyHandlers.indexOf(fn);
+        if (at !== -1) sendKeyHandlers.splice(at, 1);
+      };
+    }
+
     function onPresent(fn) {
       if (typeof fn !== "function") throw new TypeError("onPresent: a function is required");
       presentHandlers.push(fn);
@@ -8518,6 +8598,7 @@
       setPresenting: setPresenting,
       isPresenting: isPresenting,
       onPresent: onPresent,
+      onSendKey: onSendKey,
       // The rail's width, and the room everything else leaves for it.
       width: width,
       setWidth: setRailWidth,

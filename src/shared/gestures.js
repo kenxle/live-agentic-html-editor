@@ -112,11 +112,15 @@
       requirement: "R1"
     },
     {
+      // The words for the default send key, Enter. The reviewer can switch to
+      // Cmd-Enter in the Keyboard shortcuts panel; SEND_KEY_WORDS holds both
+      // spellings and rowFor picks one, so this row is never read raw for
+      // its keys or hints.
       gesture: GESTURE.MARK_READY,
-      keys: "Cmd-Enter",
+      keys: "Enter",
       when: "a comment box is focused",
-      hint: "Cmd-Enter when done with this comment.",
-      panelHint: "Submit your comment or complete your edit.",
+      hint: "Enter when done with this comment. Shift-Enter for a new line.",
+      panelHint: "Send your comment. Shift-Enter for a new line.",
       passThrough: false,
       preventDefault: true,
       requirement: "R7"
@@ -126,7 +130,10 @@
       keys: "Cmd-Enter, Esc, or a click outside",
       when: "a block is in edit state",
       hint: "Cmd-Enter, Esc, or click outside to finish the edit and give the page back.",
-      inPanel: false,
+      // Its own row in the panel now that sending a comment is Enter: the two
+      // used to share one Cmd-Enter line.
+      panelKeys: "Cmd-Enter or Esc",
+      panelHint: "Finish your edit.",
       passThrough: false,
       preventDefault: true,
       requirement: "R24"
@@ -226,6 +233,86 @@
     return e.metaKey === true || e.ctrlKey === true;
   }
 
+  // ---------------------------------------------------------------------------
+  // The send key
+  // ---------------------------------------------------------------------------
+  //
+  // Enter sends a comment and Shift-Enter starts a new line, the way a chat box
+  // works. A reviewer who writes long comments can switch to Cmd-Enter in the
+  // Keyboard shortcuts panel, and then a bare Enter is a new line. Cmd-Enter
+  // sends under both settings, so the old habit never stops working.
+  //
+  // Only boxes the reviewer writes TO the agent in follow this: the comment box,
+  // a card's own words, and the rail's message boxes. An edit to the page is
+  // writing ON the page, where Enter is a paragraph, and finishing it stays
+  // Cmd-Enter or Esc.
+  var SEND_KEY = { ENTER: "enter", MOD_ENTER: "mod_enter" };
+
+  var SEND_KEY_WORDS = {
+    enter: {
+      keys: "Enter",
+      hint: "Enter when done with this comment. Shift-Enter for a new line.",
+      panelHint: "Send your comment. Shift-Enter for a new line."
+    },
+    mod_enter: {
+      keys: "Cmd-Enter",
+      hint: "Cmd-Enter when done with this comment.",
+      panelHint: "Send your comment. Enter for a new line."
+    }
+  };
+
+  function normalizeSendKey(value) {
+    return value === SEND_KEY.MOD_ENTER ? SEND_KEY.MOD_ENTER : SEND_KEY.ENTER;
+  }
+
+  function sendKeyLabel(sendKey) {
+    return SEND_KEY_WORDS[normalizeSendKey(sendKey)].keys;
+  }
+
+  /**
+   * Does this keydown send what is in the box?
+   *
+   * @param {Object} e {key, metaKey, ctrlKey, shiftKey, altKey, isComposing,
+   *   sendKey}. isComposing is true while an input method is building a
+   *   character: the Enter that picks a Japanese or Chinese candidate is not
+   *   the reviewer saying they are done.
+   * @returns {boolean}
+   */
+  function isSendPress(e) {
+    var ev = e || {};
+    if (ev.key !== "Enter" || ev.isComposing === true) return false;
+    if (isPrimaryModifier(ev)) return true;
+    if (normalizeSendKey(ev.sendKey) !== SEND_KEY.ENTER) return false;
+    return ev.shiftKey !== true && ev.altKey !== true;
+  }
+
+  /**
+   * isSendPress over a real keydown, for the rail's own message boxes.
+   *
+   * @param {KeyboardEvent} event
+   * @param {string} sendKey the reviewer's setting, from the store
+   */
+  function isSendEvent(event, sendKey) {
+    var ev = event || {};
+    return isSendPress({
+      key: ev.key,
+      metaKey: ev.metaKey === true,
+      ctrlKey: ev.ctrlKey === true,
+      shiftKey: ev.shiftKey === true,
+      altKey: ev.altKey === true,
+      // keyCode 229 is how Safari reports a key an input method took.
+      isComposing: ev.isComposing === true || ev.keyCode === 229,
+      sendKey: sendKey
+    });
+  }
+
+  // A table row as the reviewer's send key spells it.
+  function rowFor(row, sendKey) {
+    if (row.gesture !== GESTURE.MARK_READY) return row;
+    var words = SEND_KEY_WORDS[normalizeSendKey(sendKey)];
+    return Object.assign({}, row, words);
+  }
+
   /**
    * The whole decision, in one place.
    *
@@ -282,10 +369,13 @@
         }
         return decide(GESTURE.NONE, true, false, "nothing of the library's is open, so Esc is the page's");
       }
-      if (e.key === "Enter" && mod) {
-        if (e.inCommentBox === true) {
-          return decide(GESTURE.MARK_READY, false, true, "Cmd-Enter marks this comment ready for the agent (R7)");
+      if (e.key === "Enter" && e.inCommentBox === true) {
+        if (isSendPress(e)) {
+          return decide(GESTURE.MARK_READY, false, true, sendKeyLabel(e.sendKey) + " marks this comment ready for the agent (R7)");
         }
+        return decide(GESTURE.NONE, true, false, "a new line in the comment box, or an input method finishing a character");
+      }
+      if (e.key === "Enter" && mod) {
         if (e.editing === true) {
           return decide(GESTURE.COMMIT_EDIT, false, true, "Cmd-Enter commits the open edit and gives the block back to the page");
         }
@@ -703,9 +793,9 @@
     };
   }
 
-  function hintFor(gesture) {
+  function hintFor(gesture, sendKey) {
     for (var i = 0; i < TABLE.length; i += 1) {
-      if (TABLE[i].gesture === gesture) return TABLE[i].hint;
+      if (TABLE[i].gesture === gesture) return rowFor(TABLE[i], sendKey).hint;
     }
     return null;
   }
@@ -713,9 +803,10 @@
   // Every row, as the rail renders it: the keystroke and the sentence. AC6
   // scores that every gesture appears on the rail with its exact keystroke,
   // without opening a menu.
-  function hintLines() {
+  function hintLines(sendKey) {
     return TABLE.map(function (row) {
-      return { keys: row.keys, hint: row.hint };
+      var got = rowFor(row, sendKey);
+      return { keys: got.keys, hint: got.hint };
     });
   }
 
@@ -723,11 +814,12 @@
   // reader who opened the panel to learn the keys: a row may name its keys and
   // say its hint differently there (panelKeys, panelHint), and a step inside
   // another gesture (picking the outlined element) is left out (inPanel).
-  function panelLines() {
+  function panelLines(sendKey) {
     return TABLE.filter(function (row) {
       return row.inPanel !== false;
     }).map(function (row) {
-      return { keys: row.panelKeys || row.keys, hint: row.panelHint || row.hint };
+      var got = rowFor(row, sendKey);
+      return { keys: got.panelKeys || got.keys, hint: got.panelHint || got.hint };
     });
   }
 
@@ -745,6 +837,11 @@
     hintFor: hintFor,
     hintLines: hintLines,
     isPrimaryModifier: isPrimaryModifier,
+    SEND_KEY: SEND_KEY,
+    normalizeSendKey: normalizeSendKey,
+    sendKeyLabel: sendKeyLabel,
+    isSendPress: isSendPress,
+    isSendEvent: isSendEvent,
     BLOCK_TYPES: BLOCK_TYPES,
     OTHER_BLOCK_LABEL: OTHER_BLOCK_LABEL,
     blockTypeLabel: blockTypeLabel,

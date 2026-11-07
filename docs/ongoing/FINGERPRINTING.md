@@ -30,7 +30,7 @@ Runners come back too fast after a layoff, and <span style="background-color:rgb
   <p style="margin:0;padding-left:8px;border-left:2px solid rgba(60,86,165,0.75);color:rgba(17,17,17,0.62);font-size:12px">the third week is where it shows</p>
   <div style="width:100%;box-sizing:border-box;min-height:66px;border:1px solid rgba(17,17,17,0.16);border-radius:6px;padding:7px 8px;font:inherit;color:inherit;background:#fff">Say which week plainly. And cut the second sentence down, it is doing two jobs.</div>
   <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;color:rgba(17,17,17,0.5);font-size:11px">
-    <span>Cmd-Enter when done with this comment</span>
+    <span>Enter when done with this comment</span>
     <span>Draft</span>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">

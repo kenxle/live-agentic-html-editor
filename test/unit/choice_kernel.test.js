@@ -425,7 +425,7 @@ test("V1: PRESS_CHOICE has no hint row, so a page with no groups shows the same 
   // The rail's hint list, pinned on purpose: eleven lines, none of them about
   // choices. A new row here is a new line on every page's rail.
   assert.equal(gestures.hintLines().length, 11);
-  assert.equal(gestures.panelLines().length, 9);
+  assert.equal(gestures.panelLines().length, 10);
   assert.equal(gestures.hintLines().some((line) => /choice/i.test(line.hint)), false);
 });
 
