@@ -89,6 +89,13 @@
   var HOLDER_PREFIX = "lahe.holder.v1:";
   var LOCK_PREFIX = "lahe.window.v1:";
   var UI_PREFIX = "lahe.ui.v1:";
+  // Which key sends a comment: "enter" (the default) or "mod_enter". The
+  // reviewer's own setting, so ONE key for every review rather than one per
+  // review. Browser storage is per address, and every document has its own
+  // address, so the choice holds for the pages of one document or site.
+  var SEND_KEY_KEY = "lahe.sendkey.v1";
+  var SEND_KEY_MOD = "mod_enter";
+  var SEND_KEY_DEFAULT = "enter";
   // Whether this review is currently held (docs/features/20260917.01_hold_toggle):
   // Cmd-Enter still commits an item to `ready`, durably, exactly as it always
   // has (Hold gates DELIVERY, not the item lifecycle). sync.js's flush reads
@@ -1218,6 +1225,35 @@
       return { collapsed: false, pill: null, width: null, present: false, cards: {}, filter: "all" };
     }
 
+    // Kept here too, so a browser that refuses storage still honours the
+    // choice for as long as the page is open.
+    var sendKeyInMemory = null;
+
+    function normalizeSendKey(value) {
+      return value === SEND_KEY_MOD ? SEND_KEY_MOD : SEND_KEY_DEFAULT;
+    }
+
+    function readSendKey() {
+      try {
+        var raw = backing.getItem(SEND_KEY_KEY);
+        if (raw !== null && raw !== undefined) return normalizeSendKey(raw);
+      } catch (err) {
+        // Denied storage: fall through to what this page was told.
+      }
+      return normalizeSendKey(sendKeyInMemory);
+    }
+
+    function writeSendKey(value) {
+      var next = normalizeSendKey(value);
+      sendKeyInMemory = next;
+      try {
+        backing.setItem(SEND_KEY_KEY, next);
+      } catch (err) {
+        // Best effort, like the rail's other preferences.
+      }
+      return next;
+    }
+
     function readUiPreferences(reviewId) {
       try {
         var raw = backing.getItem(uiKey(reviewId));
@@ -1597,6 +1633,8 @@
       readChips: readChips,
       writeChips: writeChips,
       readUiPreferences: readUiPreferences,
+      readSendKey: readSendKey,
+      writeSendKey: writeSendKey,
       writeUiPreferences: writeUiPreferences,
       readSeenReplies: readSeenReplies,
       writeSeenReplies: writeSeenReplies,

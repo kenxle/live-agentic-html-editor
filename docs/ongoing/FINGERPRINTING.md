@@ -34,7 +34,7 @@ Runners come back too fast after a layoff, and <span style="background-color:rgb
   <p style="margin:0;padding-left:8px;border-left:2px solid rgba(60,86,165,0.75);color:rgba(17,17,17,0.62);font-size:12px">the third week is where it shows</p>
   <div style="width:100%;box-sizing:border-box;min-height:66px;border:1px solid rgba(17,17,17,0.16);border-radius:6px;padding:7px 8px;font:inherit;color:inherit;background:#fff">Say which week plainly. And cut the second sentence down, it is doing two jobs.</div>
   <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;color:rgba(17,17,17,0.5);font-size:11px">
-    <span>Cmd-Enter when done with this comment</span>
+    <span>Enter when done with this comment</span>
     <span>Draft</span>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
@@ -372,6 +372,17 @@ wearing a number, and tuning the weights is not how this is made correct.
 
 Position is scored separately (`path` 20, `minted path` 12, `ordinal` 5) and is
 compared only when identity has already tied.
+
+### Scoring every element is one read of the page
+
+Each score asks for the element's heading, its neighbours' text and its path.
+Asked one element at a time, those re-read the page for every element, and a
+4,000-element page froze for half a minute. `bestGuess` runs the scoring inside
+`anchor.withPassIndex`, which answers the same questions from one shared read
+of the page, so the same page takes well under a second. The answers do not
+change: the element-by-element walk stays the definition, and
+[pass_index.test.js](../../test/unit/pass_index.test.js) compares the two for
+every element.
 
 ---
 

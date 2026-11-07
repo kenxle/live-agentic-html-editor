@@ -28,11 +28,12 @@ function surface() {
   return { store, comments };
 }
 
-test("the on-card hint is Ken's copy, and it is spelled once", () => {
-  assert.equal(commentsModule.HINT_READY, "Cmd-Enter when done with this comment");
-  // The gesture table says the same thing, as a sentence. Two wordings of one
-  // instruction is how a hint line and a card drift apart.
-  assert.equal(gestures.hintFor(gestures.GESTURE.MARK_READY), commentsModule.HINT_READY + ".");
+test("the on-card hint is spelled once, and follows the send key", () => {
+  assert.equal(commentsModule.hintReady(), "Enter when done with this comment. Shift-Enter for a new line.");
+  assert.equal(commentsModule.hintReady(gestures.SEND_KEY.MOD_ENTER), "Cmd-Enter when done with this comment.");
+  // The gesture table says the same thing. Two wordings of one instruction is
+  // how a hint line and a card drift apart.
+  assert.equal(gestures.hintFor(gestures.GESTURE.MARK_READY), commentsModule.hintReady());
 });
 
 test("every highlight name is namespaced, so a page using the API itself cannot collide", () => {

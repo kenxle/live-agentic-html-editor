@@ -29,7 +29,7 @@ No matter how many files were used to create the HTML page, Lahe knows how to ed
 - **Edit to use your own words.** Type the correction into the page. Your exact words reach the source file, not a paraphrase with added em dashes.
 - **Write new text in place.** Add paragraphs, headings, and bulleted or numbered lists after any block, or start a notes page from nothing with `lahe write notes.md`. A long piece gets a proofreading question, and your words are placed as you typed them.
 - **Ask questions and get threaded answers.** Ask a question and the answer arrives on the same card, no need to go back to the chat window. An exchange from ten minutes ago is threaded and easy to find, not lost in the neverending scroll of the chat window.
-- **Drafted until sent.** A half-typed thought is private to your browser until you hit Cmd-Enter.
+- **Drafted until sent.** A half-typed thought is private to your browser until you hit Enter.
 - **Zoom into big diagrams.** Hover a graph or a large image and click the magnifier at its corner. It opens full screen: scroll to zoom toward the pointer, drag to move around, Esc to close. Graphs stay sharp at any zoom.
 - **Hotkeys for speed.** Comment, edit, and send without reaching for the mouse.
 - **Save as PDF.** A button in the rail asks your agent to turn the page into a PDF, in one click.
@@ -158,7 +158,7 @@ An idle review costs no model tokens on any of them. The watcher is a small loca
 | Cmd-Shift-E | Edit the block under the cursor. Press Enter at the end of it to write a new paragraph after it |
 | Cmd-Shift-E with the cursor in no block | Edit state with nothing open: click a thin "+ Write here" line between blocks or below the last one to start writing there |
 | The block menu in the edit bar, or its hotkey | Change the block under the cursor: Paragraph, Heading, Subheading, Small heading, Bulleted list, Numbered list. Typing `## `, `### `, `#### `, `- `, or `1. ` at the start of a block does the same |
-| Cmd-Enter in a comment box | This comment is ready, send it to the agent |
+| Enter in a comment box | This comment is ready, send it to the agent. Shift-Enter starts a new line. To send with Cmd-Enter instead, open the rail menu's Keyboard shortcuts and pick it under "Send a comment with" |
 | Cmd-Enter, Esc, or a click outside an edit | Commit the edit and give the block back to the page |
 | The box at the foot of the rail | A note about the page, tied to nothing in particular |
 | The magnifier on a graph or large image | Open it full screen. Scroll or pinch to zoom, drag to pan, Esc to close |

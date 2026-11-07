@@ -514,7 +514,7 @@
     // the list is open.
     function hintList() {
       var list = el("ul", "lahe-rail-hints");
-      gestures.hintLines().forEach(function (line) {
+      gestures.hintLines(sendKeySetting()).forEach(function (line) {
         var li = el("li");
         li.appendChild(el("span", "lahe-rail-keys", line.keys));
         li.appendChild(el("span", "lahe-rail-hint", line.hint));
@@ -530,7 +530,7 @@
       var container = panel || footEl;
       if (!container) {
         return gestures
-          .hintLines()
+          .hintLines(sendKeySetting())
           .map(function (line) {
             return line.keys + " " + line.hint;
           })
@@ -539,7 +539,7 @@
       var list = container.querySelector(".lahe-rail-hints");
       if (list) return list.textContent;
       return gestures
-        .hintLines()
+        .hintLines(sendKeySetting())
         .map(function (line) {
           return line.keys + " " + line.hint;
         })
@@ -718,11 +718,11 @@
      * from one table; a hard-coded chord here would be a second spelling of it.
      */
     function sendKeys() {
-      var row = null;
-      (gestures.TABLE || []).forEach(function (entry) {
-        if (!row && entry.gesture === gestures.GESTURE.MARK_READY) row = entry;
-      });
-      return (row && row.keys) || "Cmd-Enter";
+      return gestures.sendKeyLabel(sendKeySetting());
+    }
+
+    function sendKeySetting() {
+      return store && typeof store.readSendKey === "function" ? store.readSendKey() : undefined;
     }
 
     function isHeld() {
@@ -776,8 +776,8 @@
         if (keepsDrafts()) store.writeFollowupDraft(reviewId, id, input.value);
       });
       input.addEventListener("keydown", function (event) {
-        // The same commit gesture as every other box in the rail.
-        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        // The same send key as every other box in the rail.
+        if (gestures.isSendEvent(event, sendKeySetting())) {
           event.preventDefault();
           submit();
         }

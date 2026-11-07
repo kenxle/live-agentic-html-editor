@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.4.0+6a3749ffc3e2
+ * version 0.4.0+d87cafc72d0b
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.4.0+6a3749ffc3e2";
+  g.LAHE.version = "0.4.0+d87cafc72d0b";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 /*
@@ -5781,7 +5781,7 @@
       from: STATE.DRAFT,
       to: STATE.READY,
       actor: ACTOR.REVIEWER,
-      why: "Cmd-Enter on a comment, or an edit committing. R7: the reviewer decides when it is ready"
+      why: "sending a comment (Enter, or Cmd-Enter by setting), or an edit committing. R7: the reviewer decides when it is ready"
     },
     {
       from: STATE.READY,
@@ -6941,11 +6941,15 @@
       requirement: "R1"
     },
     {
+      // The words for the default send key, Enter. The reviewer can switch to
+      // Cmd-Enter in the Keyboard shortcuts panel; SEND_KEY_WORDS holds both
+      // spellings and rowFor picks one, so this row is never read raw for
+      // its keys or hints.
       gesture: GESTURE.MARK_READY,
-      keys: "Cmd-Enter",
+      keys: "Enter",
       when: "a comment box is focused",
-      hint: "Cmd-Enter when done with this comment.",
-      panelHint: "Submit your comment or complete your edit.",
+      hint: "Enter when done with this comment. Shift-Enter for a new line.",
+      panelHint: "Send your comment. Shift-Enter for a new line.",
       passThrough: false,
       preventDefault: true,
       requirement: "R7"
@@ -6955,7 +6959,10 @@
       keys: "Cmd-Enter, Esc, or a click outside",
       when: "a block is in edit state",
       hint: "Cmd-Enter, Esc, or click outside to finish the edit and give the page back.",
-      inPanel: false,
+      // Its own row in the panel now that sending a comment is Enter: the two
+      // used to share one Cmd-Enter line.
+      panelKeys: "Cmd-Enter or Esc",
+      panelHint: "Finish your edit.",
       passThrough: false,
       preventDefault: true,
       requirement: "R24"
@@ -7055,6 +7062,86 @@
     return e.metaKey === true || e.ctrlKey === true;
   }
 
+  // ---------------------------------------------------------------------------
+  // The send key
+  // ---------------------------------------------------------------------------
+  //
+  // Enter sends a comment and Shift-Enter starts a new line, the way a chat box
+  // works. A reviewer who writes long comments can switch to Cmd-Enter in the
+  // Keyboard shortcuts panel, and then a bare Enter is a new line. Cmd-Enter
+  // sends under both settings, so the old habit never stops working.
+  //
+  // Only boxes the reviewer writes TO the agent in follow this: the comment box,
+  // a card's own words, and the rail's message boxes. An edit to the page is
+  // writing ON the page, where Enter is a paragraph, and finishing it stays
+  // Cmd-Enter or Esc.
+  var SEND_KEY = { ENTER: "enter", MOD_ENTER: "mod_enter" };
+
+  var SEND_KEY_WORDS = {
+    enter: {
+      keys: "Enter",
+      hint: "Enter when done with this comment. Shift-Enter for a new line.",
+      panelHint: "Send your comment. Shift-Enter for a new line."
+    },
+    mod_enter: {
+      keys: "Cmd-Enter",
+      hint: "Cmd-Enter when done with this comment.",
+      panelHint: "Send your comment. Enter for a new line."
+    }
+  };
+
+  function normalizeSendKey(value) {
+    return value === SEND_KEY.MOD_ENTER ? SEND_KEY.MOD_ENTER : SEND_KEY.ENTER;
+  }
+
+  function sendKeyLabel(sendKey) {
+    return SEND_KEY_WORDS[normalizeSendKey(sendKey)].keys;
+  }
+
+  /**
+   * Does this keydown send what is in the box?
+   *
+   * @param {Object} e {key, metaKey, ctrlKey, shiftKey, altKey, isComposing,
+   *   sendKey}. isComposing is true while an input method is building a
+   *   character: the Enter that picks a Japanese or Chinese candidate is not
+   *   the reviewer saying they are done.
+   * @returns {boolean}
+   */
+  function isSendPress(e) {
+    var ev = e || {};
+    if (ev.key !== "Enter" || ev.isComposing === true) return false;
+    if (isPrimaryModifier(ev)) return true;
+    if (normalizeSendKey(ev.sendKey) !== SEND_KEY.ENTER) return false;
+    return ev.shiftKey !== true && ev.altKey !== true;
+  }
+
+  /**
+   * isSendPress over a real keydown, for the rail's own message boxes.
+   *
+   * @param {KeyboardEvent} event
+   * @param {string} sendKey the reviewer's setting, from the store
+   */
+  function isSendEvent(event, sendKey) {
+    var ev = event || {};
+    return isSendPress({
+      key: ev.key,
+      metaKey: ev.metaKey === true,
+      ctrlKey: ev.ctrlKey === true,
+      shiftKey: ev.shiftKey === true,
+      altKey: ev.altKey === true,
+      // keyCode 229 is how Safari reports a key an input method took.
+      isComposing: ev.isComposing === true || ev.keyCode === 229,
+      sendKey: sendKey
+    });
+  }
+
+  // A table row as the reviewer's send key spells it.
+  function rowFor(row, sendKey) {
+    if (row.gesture !== GESTURE.MARK_READY) return row;
+    var words = SEND_KEY_WORDS[normalizeSendKey(sendKey)];
+    return Object.assign({}, row, words);
+  }
+
   /**
    * The whole decision, in one place.
    *
@@ -7111,10 +7198,13 @@
         }
         return decide(GESTURE.NONE, true, false, "nothing of the library's is open, so Esc is the page's");
       }
-      if (e.key === "Enter" && mod) {
-        if (e.inCommentBox === true) {
-          return decide(GESTURE.MARK_READY, false, true, "Cmd-Enter marks this comment ready for the agent (R7)");
+      if (e.key === "Enter" && e.inCommentBox === true) {
+        if (isSendPress(e)) {
+          return decide(GESTURE.MARK_READY, false, true, sendKeyLabel(e.sendKey) + " marks this comment ready for the agent (R7)");
         }
+        return decide(GESTURE.NONE, true, false, "a new line in the comment box, or an input method finishing a character");
+      }
+      if (e.key === "Enter" && mod) {
         if (e.editing === true) {
           return decide(GESTURE.COMMIT_EDIT, false, true, "Cmd-Enter commits the open edit and gives the block back to the page");
         }
@@ -7532,9 +7622,9 @@
     };
   }
 
-  function hintFor(gesture) {
+  function hintFor(gesture, sendKey) {
     for (var i = 0; i < TABLE.length; i += 1) {
-      if (TABLE[i].gesture === gesture) return TABLE[i].hint;
+      if (TABLE[i].gesture === gesture) return rowFor(TABLE[i], sendKey).hint;
     }
     return null;
   }
@@ -7542,9 +7632,10 @@
   // Every row, as the rail renders it: the keystroke and the sentence. AC6
   // scores that every gesture appears on the rail with its exact keystroke,
   // without opening a menu.
-  function hintLines() {
+  function hintLines(sendKey) {
     return TABLE.map(function (row) {
-      return { keys: row.keys, hint: row.hint };
+      var got = rowFor(row, sendKey);
+      return { keys: got.keys, hint: got.hint };
     });
   }
 
@@ -7552,11 +7643,12 @@
   // reader who opened the panel to learn the keys: a row may name its keys and
   // say its hint differently there (panelKeys, panelHint), and a step inside
   // another gesture (picking the outlined element) is left out (inPanel).
-  function panelLines() {
+  function panelLines(sendKey) {
     return TABLE.filter(function (row) {
       return row.inPanel !== false;
     }).map(function (row) {
-      return { keys: row.panelKeys || row.keys, hint: row.panelHint || row.hint };
+      var got = rowFor(row, sendKey);
+      return { keys: got.panelKeys || got.keys, hint: got.panelHint || got.hint };
     });
   }
 
@@ -7574,6 +7666,11 @@
     hintFor: hintFor,
     hintLines: hintLines,
     isPrimaryModifier: isPrimaryModifier,
+    SEND_KEY: SEND_KEY,
+    normalizeSendKey: normalizeSendKey,
+    sendKeyLabel: sendKeyLabel,
+    isSendPress: isSendPress,
+    isSendEvent: isSendEvent,
     BLOCK_TYPES: BLOCK_TYPES,
     OTHER_BLOCK_LABEL: OTHER_BLOCK_LABEL,
     blockTypeLabel: blockTypeLabel,
@@ -12564,6 +12661,13 @@
   var HOLDER_PREFIX = "lahe.holder.v1:";
   var LOCK_PREFIX = "lahe.window.v1:";
   var UI_PREFIX = "lahe.ui.v1:";
+  // Which key sends a comment: "enter" (the default) or "mod_enter". The
+  // reviewer's own setting, so ONE key for every review rather than one per
+  // review. Browser storage is per address, and every document has its own
+  // address, so the choice holds for the pages of one document or site.
+  var SEND_KEY_KEY = "lahe.sendkey.v1";
+  var SEND_KEY_MOD = "mod_enter";
+  var SEND_KEY_DEFAULT = "enter";
   // Whether this review is currently held (docs/features/20260917.01_hold_toggle):
   // Cmd-Enter still commits an item to `ready`, durably, exactly as it always
   // has (Hold gates DELIVERY, not the item lifecycle). sync.js's flush reads
@@ -13693,6 +13797,35 @@
       return { collapsed: false, pill: null, width: null, present: false, cards: {}, filter: "all" };
     }
 
+    // Kept here too, so a browser that refuses storage still honours the
+    // choice for as long as the page is open.
+    var sendKeyInMemory = null;
+
+    function normalizeSendKey(value) {
+      return value === SEND_KEY_MOD ? SEND_KEY_MOD : SEND_KEY_DEFAULT;
+    }
+
+    function readSendKey() {
+      try {
+        var raw = backing.getItem(SEND_KEY_KEY);
+        if (raw !== null && raw !== undefined) return normalizeSendKey(raw);
+      } catch (err) {
+        // Denied storage: fall through to what this page was told.
+      }
+      return normalizeSendKey(sendKeyInMemory);
+    }
+
+    function writeSendKey(value) {
+      var next = normalizeSendKey(value);
+      sendKeyInMemory = next;
+      try {
+        backing.setItem(SEND_KEY_KEY, next);
+      } catch (err) {
+        // Best effort, like the rail's other preferences.
+      }
+      return next;
+    }
+
     function readUiPreferences(reviewId) {
       try {
         var raw = backing.getItem(uiKey(reviewId));
@@ -14072,6 +14205,8 @@
       readChips: readChips,
       writeChips: writeChips,
       readUiPreferences: readUiPreferences,
+      readSendKey: readSendKey,
+      writeSendKey: writeSendKey,
       writeUiPreferences: writeUiPreferences,
       readSeenReplies: readSeenReplies,
       writeSeenReplies: writeSeenReplies,
@@ -14395,6 +14530,7 @@
   function ordinalOf(node) {
     var parent = parentOf(node);
     if (!isElement(parent)) return 0;
+    if (passIndex) return parentInfo(passIndex, parent).tagOrdinal.get(node) || 0;
     var kids = elementChildren(parent);
     var tag = tagOf(node);
     var seen = 0;
@@ -14828,11 +14964,13 @@
   // a candidate at the foot of the page would match any stored prefix, because
   // everything on the page precedes it.
   function foundContextFor(node, scope, ref) {
-    var texts = contextTextsOf(node, scope, ref && ref.context_level);
     var storedPrefix = typeof ref.prefix === "string" ? ref.prefix : "";
     var storedSuffix = typeof ref.suffix === "string" ? ref.suffix : "";
-    var before = joinContext(texts.before);
-    var after = joinContext(texts.after);
+    var index = indexFor(scope);
+    var joined = index && node !== scope ? contextIndexed(index, node, scope, ref && ref.context_level) : null;
+    var texts = joined ? null : contextTextsOf(node, scope, ref && ref.context_level);
+    var before = joined ? joined.before : joinContext(texts.before);
+    var after = joined ? joined.after : joinContext(texts.after);
     return {
       prefix: storedPrefix ? before.slice(Math.max(0, before.length - storedPrefix.length)) : before,
       suffix: storedSuffix ? after.slice(0, storedSuffix.length) : after
@@ -14844,6 +14982,8 @@
   // -------------------------------------------------------------------------
 
   function pathOf(node, scope) {
+    var index = indexFor(scope);
+    if (index) return (isElement(scope) ? tagOf(scope) : "") + ">" + pathTailIndexed(index, node, scope);
     var parts = [];
     var current = node;
     while (isElement(current) && current !== scope) {
@@ -14878,6 +15018,14 @@
   }
 
   function headingOf(node, scope) {
+    var index = indexFor(scope);
+    return index ? headingOfIndexed(index, node, scope) : headingOfWalk(node, scope);
+  }
+
+  // The nearest heading before the node, by walking backwards from it. This is
+  // the definition: headingOfIndexed below gives the same answer from a read of
+  // the page that every element of one pass shares.
+  function headingOfWalk(node, scope) {
     var budget = { left: HEADING_SCAN_CAP };
     var current = node;
     while (isElement(current) && current !== scope) {
@@ -14903,6 +15051,352 @@
       current = parentOf(current);
     }
     return null;
+  }
+
+  // -------------------------------------------------------------------------
+  // The pass index: one read of the page, shared by every element of a pass
+  // -------------------------------------------------------------------------
+  //
+  // pointing.bestGuess scores EVERY element on the page against a lost
+  // comment, and each score asks for the element's heading, its neighbours'
+  // text and its path. Asked one element at a time, those questions re-read
+  // the same parts of the page over and over: the heading walk alone visits up
+  // to HEADING_SCAN_CAP elements per element, and the context reads every
+  // sibling's text per element. On Seneschal's knowledge tree preview (4,209
+  // elements, 24 deep) one lost comment froze the tab for 26 seconds on every
+  // load.
+  //
+  // Inside withPassIndex the same questions are answered from facts kept per
+  // parent and per element, each computed once. THE ANSWERS DO NOT CHANGE:
+  // every function below returns exactly what the walk above returns, the
+  // heading scan's budget included (test/unit/pass_index.test.js compares the
+  // two element by element). The index is a speed-up, never a second opinion.
+  //
+  // It is only valid while the page holds still, so it lives for one call and
+  // is thrown away, like the text memo it carries with it.
+  var passIndex = null;
+
+  function withPassIndex(scope, run) {
+    var outer = passIndex;
+    passIndex = {
+      scope: scope,
+      parents: new Map(),
+      lastHeading: new Map(),
+      words: new Map(),
+      tails: new Map()
+    };
+    try {
+      return withTextMemo(run);
+    } finally {
+      passIndex = outer;
+    }
+  }
+
+  function indexFor(scope) {
+    return passIndex && passIndex.scope === scope ? passIndex : null;
+  }
+
+  // What one parent's children look like, read once.
+  //   list        the children siblingsOf lists: every child the text walk
+  //               does not skip
+  //   before      child -> how many of `list` come before it. A skipped child
+  //               (an <svg> the reviewer picked) is not in `list` but still
+  //               has a place in it
+  //   tagOrdinal  child -> its 1-based position among children of its tag
+  function parentInfo(index, parent) {
+    var info = index.parents.get(parent);
+    if (info) return info;
+    var kids = elementChildren(parent);
+    var list = [];
+    var before = new Map();
+    var tagOrdinal = new Map();
+    var seen = Object.create(null);
+    for (var i = 0; i < kids.length; i += 1) {
+      var kid = kids[i];
+      var tag = tagOf(kid);
+      seen[tag] = (seen[tag] || 0) + 1;
+      if (!tagOrdinal.has(kid)) tagOrdinal.set(kid, seen[tag]);
+      if (!before.has(kid)) before.set(kid, list.length);
+      if (!isSkipped(kid)) list.push(kid);
+    }
+    info = { list: list, before: before, tagOrdinal: tagOrdinal, back: null, ahead: null, line: null };
+    index.parents.set(parent, info);
+    return info;
+  }
+
+  /** How long siblingsOf(node) is, without building it. */
+  function siblingCountIndexed(index, node) {
+    var parent = parentOf(node);
+    if (!parent) return 0;
+    var info = parentInfo(index, parent);
+    if (!info.before.has(node)) return info.list.length;
+    return info.list.length + (isSkipped(node) ? 1 : 0);
+  }
+
+  function headingWordsIndexed(index, node) {
+    if (index.words.has(node)) return index.words.get(node);
+    var words = headingWords(node);
+    index.words.set(node, words);
+    return words;
+  }
+
+  function isWordedHeading(index, node) {
+    return Object.prototype.hasOwnProperty.call(HEADING_TAGS, tagOf(node)) && !!headingWordsIndexed(index, node);
+  }
+
+  /**
+   * lastHeadingWithin(node) with an unlimited budget: the heading it returns
+   * and how many steps the walk takes to return it.
+   *
+   * `scanned` and `startAt` record the walk itself (children last to first,
+   * and the steps spent before each), so a walk with too little budget to
+   * finish can find where it stops without walking again.
+   */
+  function lastHeadingFull(index, node) {
+    var known = index.lastHeading.get(node);
+    if (known) return known;
+    var kids = elementChildren(node);
+    var cost = 0;
+    var result = null;
+    var scanned = [];
+    var startAt = [];
+    for (var i = kids.length - 1; i >= 0; i -= 1) {
+      var kid = kids[i];
+      scanned.push(kid);
+      startAt.push(cost);
+      cost += 1;
+      if (isSkipped(kid)) continue;
+      var inner = lastHeadingFull(index, kid);
+      cost += inner.cost;
+      if (inner.result) {
+        result = inner.result;
+        break;
+      }
+      if (isWordedHeading(index, kid)) {
+        result = kid;
+        break;
+      }
+    }
+    known = { result: result, cost: cost, scanned: scanned, startAt: startAt };
+    index.lastHeading.set(node, known);
+    return known;
+  }
+
+  /**
+   * What lastHeadingWithin(node, {left: left}) returns when `left` is less
+   * than the walk needs.
+   *
+   * The budgeted walk gives up where the budget runs out, and on the way back
+   * out it still returns any heading it was INSIDE: lastHeadingWithin checks a
+   * child after walking the child's own children, without asking the budget.
+   * So the answer is null, or the innermost worded heading on the path down to
+   * the step where the budget ran out. This follows that one path.
+   */
+  function lastHeadingPartial(index, node, left) {
+    var full = lastHeadingFull(index, node);
+    if (full.cost <= left) return full.result;
+    var scanned = full.scanned;
+    var startAt = full.startAt;
+    // The first child the budget cannot finish. Ends of the children's walks
+    // rise strictly, so a binary search finds it.
+    var lo = 0;
+    var hi = scanned.length - 1;
+    while (lo < hi) {
+      var mid = (lo + hi) >> 1;
+      var end = mid + 1 < scanned.length ? startAt[mid + 1] : full.cost;
+      if (end > left) hi = mid;
+      else lo = mid + 1;
+    }
+    var remaining = left - startAt[lo];
+    if (remaining <= 0) return null;
+    remaining -= 1;
+    var kid = scanned[lo];
+    // A skipped child costs one step, and one step was affordable, so the
+    // child the budget cannot finish is never a skipped one.
+    var deeper = lastHeadingPartial(index, kid, remaining);
+    if (deeper) return deeper;
+    return isWordedHeading(index, kid) ? kid : null;
+  }
+
+  // The backward scan headingOfWalk makes over one parent's listed children,
+  // as running totals: what each child costs to scan, and the nearest child
+  // at or before each one that answers with a heading.
+  function backScan(index, info) {
+    if (info.back) return info.back;
+    var list = info.list;
+    var sums = [0];
+    var answer = [];
+    var nearest = [];
+    for (var i = 0; i < list.length; i += 1) {
+      var cost;
+      var found;
+      if (isWordedHeading(index, list[i])) {
+        cost = 1;
+        found = list[i];
+      } else {
+        var inner = lastHeadingFull(index, list[i]);
+        cost = 1 + inner.cost;
+        found = inner.result;
+      }
+      sums.push(sums[i] + cost);
+      answer.push(found);
+      nearest.push(found ? i : i > 0 ? nearest[i - 1] : -1);
+    }
+    info.back = { sums: sums, answer: answer, nearest: nearest };
+    return info.back;
+  }
+
+  // The forward scan headingOfWalk makes from an element with no text: for
+  // each listed child, the first child at or after it that stops the scan (a
+  // worded heading, or anything with text), or list.length when none does.
+  function aheadScan(index, info) {
+    if (info.ahead) return info.ahead;
+    var list = info.list;
+    var stop = new Array(list.length);
+    var next = list.length;
+    for (var i = list.length - 1; i >= 0; i -= 1) {
+      if (isWordedHeading(index, list[i]) || textOf(list[i])) next = i;
+      stop[i] = next;
+    }
+    info.ahead = stop;
+    return stop;
+  }
+
+  /** headingOfWalk(node, scope), answered from the index. */
+  function headingOfIndexed(index, node, scope) {
+    var budget = HEADING_SCAN_CAP;
+    var current = node;
+    while (isElement(current) && current !== scope) {
+      var parent = parentOf(current);
+      if (!parent) return null;
+      var info = parentInfo(index, parent);
+      if (!info.before.has(current)) return headingOfWalk(node, scope);
+      var list = info.list;
+      var at = info.before.get(current);
+      var after = isSkipped(current) ? at : at + 1;
+
+      if (!textOf(current) && after < list.length) {
+        var stop = aheadScan(index, info)[after];
+        var steps = stop < list.length ? stop - after + 1 : list.length - after;
+        if (budget < steps) return null;
+        budget -= steps;
+        if (stop < list.length && isWordedHeading(index, list[stop])) return headingWordsIndexed(index, list[stop]);
+      }
+
+      if (at > 0) {
+        var back = backScan(index, info);
+        var sums = back.sums;
+        var found = back.nearest[at - 1];
+        var from = found >= 0 ? found : 0;
+        var need = sums[at] - sums[from];
+        if (budget >= need) {
+          budget -= need;
+          if (found >= 0) return headingWordsIndexed(index, back.answer[found]);
+        } else {
+          // The budget runs out inside this parent. Scanning goes from at - 1
+          // down; find the child it cannot finish: the largest k whose scan
+          // from k to at - 1 costs more than the budget.
+          var target = sums[at] - budget;
+          var lo = from;
+          var hi = at - 1;
+          while (lo < hi) {
+            var mid = (lo + hi + 1) >> 1;
+            if (sums[mid] < target) lo = mid;
+            else hi = mid - 1;
+          }
+          var left = budget - (sums[at] - sums[lo + 1]);
+          if (left <= 0) return null;
+          // A worded heading costs one step, and one step was affordable, so
+          // this child is not one: the walk goes inside it.
+          var inside = lastHeadingPartial(index, list[lo], left - 1);
+          return inside ? headingWordsIndexed(index, inside) : null;
+        }
+      }
+      current = parent;
+    }
+    return null;
+  }
+
+  // One parent's listed children's texts joined the way joinContext joins
+  // them, once, with where each run of them starts and ends.
+  //
+  // WHY A SLICE OF ONE STRING IS THE SAME AS joinContext OF A SLICE. Every
+  // step of normalizeText works character by character except NFC, and NFC
+  // never joins characters across a plain space: U+0020 neither composes with
+  // nor reorders around anything. So normalizeText(a + " " + b) is
+  // normalizeText(a) and normalizeText(b) joined by one space, dropping either
+  // when it is empty, and the joined text of any run of children is a slice
+  // of the joined text of all of them.
+  function contextLine(index, info) {
+    if (info.line) return info.line;
+    var list = info.list;
+    var pieces = [];
+    var endBefore = [0];
+    var startOf = [];
+    var length = 0;
+    for (var i = 0; i < list.length; i += 1) {
+      var text = normalize.normalizeText(textOf(list[i]));
+      if (text) {
+        if (length > 0) length += 1;
+        startOf.push(length);
+        length += text.length;
+        pieces.push(text);
+      } else {
+        startOf.push(-1);
+      }
+      endBefore.push(length);
+    }
+    var startFrom = new Array(list.length + 1);
+    startFrom[list.length] = length;
+    for (var j = list.length - 1; j >= 0; j -= 1) {
+      startFrom[j] = startOf[j] >= 0 ? startOf[j] : startFrom[j + 1];
+    }
+    info.line = { text: pieces.join(" "), endBefore: endBefore, startFrom: startFrom };
+    return info.line;
+  }
+
+  /**
+   * joinContext of contextTextsOf(node, scope, level), both sides, from the
+   * index: {before, after}.
+   */
+  function contextIndexed(index, node, scope, level) {
+    var levels = [];
+    var current = node;
+    while (current && current !== scope) {
+      if (siblingCountIndexed(index, current) > 1) levels.push(current);
+      var up = parentOf(current);
+      if (!up || up === scope) break;
+      current = up;
+    }
+    // No level with siblings anywhere: contextAnchorOf's answer has none
+    // either, so both sides are empty.
+    if (!levels.length) return { before: "", after: "" };
+    var want = typeof level === "number" && level > 0 ? Math.min(level, levels.length - 1) : 0;
+    var anchorNode = levels[want] || levels[0];
+    var info = parentInfo(index, parentOf(anchorNode));
+    if (!info.before.has(anchorNode)) return { before: "", after: "" };
+    var at = info.before.get(anchorNode);
+    var after = isSkipped(anchorNode) ? at : at + 1;
+    var line = contextLine(index, info);
+    return {
+      before: line.text.slice(0, line.endBefore[at]),
+      after: line.text.slice(line.startFrom[after])
+    };
+  }
+
+  // pathOf without the leading scope tag, built from the parent's.
+  function pathTailIndexed(index, node, scope) {
+    if (!isElement(node) || node === scope) return "";
+    if (index.tails.has(node)) return index.tails.get(node);
+    var parent = parentOf(node);
+    var tail = "";
+    if (parent) {
+      var piece = tagOf(node) + ":" + (parentInfo(index, parent).tagOrdinal.get(node) || 0);
+      var above = pathTailIndexed(index, parent, scope);
+      tail = above ? above + ">" + piece : piece;
+    }
+    index.tails.set(node, tail);
+    return tail;
   }
 
   // -------------------------------------------------------------------------
@@ -15915,6 +16409,13 @@
     pathOf: pathOf,
     headingOf: headingOf,
     HEADING_SCAN_CAP: HEADING_SCAN_CAP,
+    // For a caller that asks the questions above of every element in one go
+    // (pointing.bestGuess). Same answers, one read of the page. See
+    // "The pass index".
+    withPassIndex: withPassIndex,
+    // The text memo alone, as mint uses it. Exported so a test can time and
+    // compare the walk with its text reads cached and nothing else.
+    withTextMemo: withTextMemo,
     // Read by src/layer/pointing.js, which asks the same questions of a node
     // that this file does and must not grow its own second answer to any of
     // them. Exported as readers, never as decisions: nothing here returns a
@@ -16054,8 +16555,11 @@
   /** The same one-sided containment the strict predicate uses for context. */
   function contextAgrees(stored, found) {
     var a = textish(stored);
+    // Nothing stored on this side: say so before normalizing what was found,
+    // which at the edge of a long list is every sibling's text joined.
+    if (!a) return false;
     var b = textish(found);
-    if (!a || !b) return false;
+    if (!b) return false;
     return a === b || a.indexOf(b) !== -1 || b.indexOf(a) !== -1;
   }
 
@@ -16201,10 +16705,18 @@
     if (!scope) return { element: null };
 
     var scored = [];
-    anchor.eachElement(scope, function (node) {
-      var got = scoreAgainst(reference, node, scope, knownPath, knownPrint);
-      if (got.score <= 0) return;
-      scored.push({ node: node, score: got.score, position: got.position, reasons: got.reasons });
+    // ONE READ OF THE PAGE FOR THE WHOLE PASS. Every element is scored, and
+    // each score asks for a heading, neighbours' text and a path. Asked one
+    // element at a time those re-read the page per element, which froze
+    // Seneschal's 4,209-element knowledge tree for 26 seconds on every load.
+    // The pass index answers the same questions with the same answers, read
+    // once. See "The pass index" in anchor.js.
+    anchor.withPassIndex(scope, function () {
+      anchor.eachElement(scope, function (node) {
+        var got = scoreAgainst(reference, node, scope, knownPath, knownPrint);
+        if (got.score <= 0) return;
+        scored.push({ node: node, score: got.score, position: got.position, reasons: got.reasons });
+      });
     });
     if (!scored.length) return { element: null };
 
@@ -18659,7 +19171,7 @@
 
   var shared = createHighlights();
 
-  // SEND, AND SEND WHILE HELD. Every send button shows its key, Cmd-Enter, on
+  // SEND, AND SEND WHILE HELD. Every send button shows its key on
   // hover. With Hold on, nothing a reviewer sends reaches the agent until they
   // release it, so every send button says where its words go and explains why
   // on hover instead. Both tips show at once, not after the browser's delay.
@@ -18668,7 +19180,7 @@
   var SEND_ATTR = "data-lahe-send";
   var SEND_WORDS = {
     LABEL: "Send",
-    TIP: "Cmd-Enter",
+    TIP: "Enter",
     HELD_LABEL: "Send to queue",
     HELD_TIP: "Messages are being held until you release them to the agent in a batch."
   };
@@ -18678,6 +19190,15 @@
     "right:0;bottom:calc(100% + 6px);width:max-content;max-width:220px;padding:7px 9px;border-radius:7px;background:#15171c;" +
     "color:#fff;font-size:11.5px;font-weight:500;line-height:1.4;text-align:left;white-space:normal;" +
     "letter-spacing:0;text-transform:none;box-shadow:0 6px 18px rgba(0,0,0,.25);z-index:10;pointer-events:none}";
+
+  // The send key the tip names: the reviewer's setting, which the rail sets at
+  // boot and again when the reviewer changes it.
+  var sendTip = SEND_WORDS.TIP;
+
+  function setSendTip(words) {
+    if (typeof words === "string" && words) sendTip = words;
+    return sendTip;
+  }
 
   /**
    * Label one send button for the Hold state.
@@ -18701,8 +19222,8 @@
       button.textContent = SEND_WORDS.HELD_LABEL;
     } else {
       button.removeAttribute("data-lahe-held");
-      button.setAttribute("data-lahe-tip", SEND_WORDS.TIP);
-      button.setAttribute("aria-description", SEND_WORDS.TIP);
+      button.setAttribute("data-lahe-tip", sendTip);
+      button.setAttribute("aria-description", sendTip);
       button.textContent = own;
     }
   }
@@ -18721,6 +19242,7 @@
     SEND_TIP_CSS: SEND_TIP_CSS,
     paintSendButton: paintSendButton,
     paintSendButtons: paintSendButtons,
+    setSendTip: setSendTip,
     refusesWholePaint: refusesWholePaint,
     refusesWholeElement: refusesWholeElement,
     WHOLE_PAINT_MAX_RATIO: WHOLE_PAINT_MAX_RATIO,
@@ -20908,6 +21430,16 @@
     ".keyspanel__list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}",
     ".keyspanel__row{display:flex;flex-direction:column;gap:3px;font-size:12px;line-height:1.45;color:var(--ink-soft)}",
     ".keyspanel__row kbd{align-self:flex-start}",
+    // Which key sends a comment: a two-part switch above the list, on a sunken
+    // track with the picked part a paper chip.
+    ".keyspanel__send{display:flex;align-items:center;justify-content:space-between;gap:8px;",
+    "font-size:12px;color:var(--ink-soft);padding-bottom:10px;border-bottom:1px solid var(--line)}",
+    ".sendkey{display:flex;gap:2px;padding:2px;border-radius:7px;background:var(--sunken)}",
+    ".sendkey__opt{font:inherit;font-size:11.5px;font-weight:550;line-height:1.3;color:var(--ink-soft);",
+    "background:transparent;border:0;border-radius:5px;padding:3px 9px;cursor:pointer}",
+    ".sendkey__opt:hover{color:var(--ink)}",
+    ".sendkey__opt[aria-pressed='true']{background:var(--paper);color:var(--ink);box-shadow:0 1px 2px rgba(18,20,26,.14)}",
+    ".sendkey__opt:focus-visible{outline:2px solid var(--accent);outline-offset:0}",
     ".stylepanel__head{display:flex;align-items:center;justify-content:space-between;gap:8px}",
     ".stylepanel__title{font-size:12.5px;font-weight:700;color:var(--ink)}",
     // A column: the line, then its buttons. The words wrap rather than clip,
@@ -21390,6 +21922,7 @@
   // The keyboard shortcuts, behind the menu rather than standing in the pane.
   // The menu item opens a panel that lists every gesture in gestures.js.
   var SHORTCUTS = { ACTION: "shortcuts", LABEL: "Keyboard shortcuts", CLOSE: "Close" };
+  var SEND_KEY_WORDS = { LABEL: "Send a comment with" };
 
   // The Document style button (docs/features/20260930.01_style_switcher). It
   // has its own place in the head, beside the menu, and exists only on a page
@@ -21945,6 +22478,7 @@
     // wants to (data-lahe-start="hidden", which boot passes in).
     var presenting = opts.present === true || readPresentPreference();
     var presentHandlers = [];
+    var sendKeyHandlers = [];
     // How wide the reviewer dragged the rail, or null while they have left it
     // at its default. Held UNCLAMPED: the clamp belongs to the viewport that is
     // on screen right now, and a window dragged narrow and then wide again
@@ -22339,13 +22873,27 @@
       });
       keysHead.appendChild(keysClose);
       keysPanel.appendChild(keysHead);
-      var keysList = el("ul", "keyspanel__list");
-      gestures.panelLines().forEach(function (line) {
-        var row = el("li", "keyspanel__row");
-        row.appendChild(el("kbd", null, line.keys));
-        row.appendChild(el("span", null, line.hint));
-        keysList.appendChild(row);
+      // Which key sends a comment. The reviewer's own setting, kept by the
+      // store; picking one rewrites the list below and every send button's tip.
+      var sendRow = el("div", "keyspanel__send");
+      sendRow.appendChild(el("span", "keyspanel__sendlabel", SEND_KEY_WORDS.LABEL));
+      var sendSwitch = el("div", "sendkey");
+      sendSwitch.setAttribute("role", "group");
+      sendSwitch.setAttribute("aria-label", SEND_KEY_WORDS.LABEL);
+      var sendKeyButtons = {};
+      [gestures.SEND_KEY.ENTER, gestures.SEND_KEY.MOD_ENTER].forEach(function (key) {
+        var opt = el("button", "sendkey__opt", gestures.sendKeyLabel(key));
+        opt.setAttribute("type", "button");
+        opt.setAttribute("data-lahe-send-key", key);
+        opt.addEventListener("click", function () {
+          setSendKey(key);
+        });
+        sendKeyButtons[key] = opt;
+        sendSwitch.appendChild(opt);
       });
+      sendRow.appendChild(sendSwitch);
+      keysPanel.appendChild(sendRow);
+      var keysList = el("ul", "keyspanel__list");
       keysPanel.appendChild(keysList);
 
       menuBtn.addEventListener("click", function () {
@@ -22850,6 +23398,8 @@
         menuBtn: menuBtn,
         menuList: menuList,
         keysPanel: keysPanel,
+        keysList: keysList,
+        sendKeyButtons: sendKeyButtons,
         menuItems: menuItems,
         menuWrap: menuWrap,
         styleWrap: styleWrap,
@@ -22893,6 +23443,7 @@
       // the button, which says the page is not in the document's own style.
       stylePanelOpen = false;
       renderStylePanel();
+      renderShortcuts();
       // The surface exists now, so a rail mounted while the reviewer is
       // presenting comes up hidden rather than flashing onto the projector for
       // a frame. Remounts reach this too, which is the case that matters: a
@@ -26015,6 +26566,46 @@
     // and unmounting. A menu that survives one of those is a menu that hangs
     // over someone's page after they have moved on.
 
+    function readSendKey() {
+      return store && typeof store.readSendKey === "function" ? store.readSendKey() : gestures.SEND_KEY.ENTER;
+    }
+
+    // The list and the switch, as the reviewer's send key spells them.
+    function renderShortcuts() {
+      if (!dom || !dom.keysList) return;
+      var current = readSendKey();
+      Object.keys(dom.sendKeyButtons).forEach(function (key) {
+        dom.sendKeyButtons[key].setAttribute("aria-pressed", key === current ? "true" : "false");
+      });
+      while (dom.keysList.firstChild) dom.keysList.removeChild(dom.keysList.firstChild);
+      gestures.panelLines(current).forEach(function (line) {
+        var row = el("li", "keyspanel__row");
+        row.appendChild(el("kbd", null, line.keys));
+        row.appendChild(el("span", null, line.hint));
+        dom.keysList.appendChild(row);
+      });
+      highlightModule.setSendTip(gestures.sendKeyLabel(current));
+    }
+
+    /**
+     * Change which key sends a comment. Every box reads the setting on each
+     * key press, so nothing else needs telling; what is drawn (this panel and
+     * every send button's tip) is repainted here.
+     */
+    function setSendKey(key) {
+      var next = store && typeof store.writeSendKey === "function" ? store.writeSendKey(key) : gestures.normalizeSendKey(key);
+      renderShortcuts();
+      repaintHoldChrome();
+      sendKeyHandlers.slice().forEach(function (fn) {
+        try {
+          fn(next);
+        } catch (err) {
+          // One listener failing must not stop the rest hearing it.
+        }
+      });
+      return next;
+    }
+
     // The keyboard shortcuts panel. It hangs from the head like the style
     // dropdown and closes the same ways: Close, Esc, or a click anywhere else.
     function openShortcuts() {
@@ -26023,6 +26614,8 @@
       closeMenu(false);
       closeStylePanel(false);
       closePdfTray(false);
+      // Drawn fresh: another window of this document may have changed the key.
+      renderShortcuts();
       shortcutsOpen = true;
       dom.keysPanel.setAttribute("data-shown", "open");
       shortcutsOutsideListener = function (event) {
@@ -26992,6 +27585,15 @@
     }
 
     /** Tell me when the library is hidden or brought back. Returns an unsubscribe. */
+    function onSendKey(fn) {
+      if (typeof fn !== "function") throw new TypeError("onSendKey: a function is required");
+      sendKeyHandlers.push(fn);
+      return function () {
+        var at = sendKeyHandlers.indexOf(fn);
+        if (at !== -1) sendKeyHandlers.splice(at, 1);
+      };
+    }
+
     function onPresent(fn) {
       if (typeof fn !== "function") throw new TypeError("onPresent: a function is required");
       presentHandlers.push(fn);
@@ -28221,6 +28823,7 @@
       setPresenting: setPresenting,
       isPresenting: isPresenting,
       onPresent: onPresent,
+      onSendKey: onSendKey,
       // The rail's width, and the room everything else leaves for it.
       width: width,
       setWidth: setRailWidth,
@@ -28935,7 +29538,7 @@
     // the list is open.
     function hintList() {
       var list = el("ul", "lahe-rail-hints");
-      gestures.hintLines().forEach(function (line) {
+      gestures.hintLines(sendKeySetting()).forEach(function (line) {
         var li = el("li");
         li.appendChild(el("span", "lahe-rail-keys", line.keys));
         li.appendChild(el("span", "lahe-rail-hint", line.hint));
@@ -28951,7 +29554,7 @@
       var container = panel || footEl;
       if (!container) {
         return gestures
-          .hintLines()
+          .hintLines(sendKeySetting())
           .map(function (line) {
             return line.keys + " " + line.hint;
           })
@@ -28960,7 +29563,7 @@
       var list = container.querySelector(".lahe-rail-hints");
       if (list) return list.textContent;
       return gestures
-        .hintLines()
+        .hintLines(sendKeySetting())
         .map(function (line) {
           return line.keys + " " + line.hint;
         })
@@ -29139,11 +29742,11 @@
      * from one table; a hard-coded chord here would be a second spelling of it.
      */
     function sendKeys() {
-      var row = null;
-      (gestures.TABLE || []).forEach(function (entry) {
-        if (!row && entry.gesture === gestures.GESTURE.MARK_READY) row = entry;
-      });
-      return (row && row.keys) || "Cmd-Enter";
+      return gestures.sendKeyLabel(sendKeySetting());
+    }
+
+    function sendKeySetting() {
+      return store && typeof store.readSendKey === "function" ? store.readSendKey() : undefined;
     }
 
     function isHeld() {
@@ -29197,8 +29800,8 @@
         if (keepsDrafts()) store.writeFollowupDraft(reviewId, id, input.value);
       });
       input.addEventListener("keydown", function (event) {
-        // The same commit gesture as every other box in the rail.
-        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        // The same send key as every other box in the rail.
+        if (gestures.isSendEvent(event, sendKeySetting())) {
           event.preventDefault();
           submit();
         }
@@ -29710,7 +30313,8 @@
       root.LAHE.protocol,
       root.LAHE.failures,
       root.LAHE.review_format,
-      root.LAHE.overlay
+      root.LAHE.overlay,
+      root.LAHE.gestures
     );
   } else {
     module.exports = factory(
@@ -29720,10 +30324,11 @@
       require("../shared/protocol.js"),
       require("../shared/failures.js"),
       require("../shared/review_format.js"),
-      require("./overlay.js")
+      require("./overlay.js"),
+      require("../shared/gestures.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, record, lifecycle, protocol, failures, reviewFormat, overlayModule) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, record, lifecycle, protocol, failures, reviewFormat, overlayModule, gestures) {
   "use strict";
 
   var ROW_CLASS = "lahe-done-row";
@@ -31168,7 +31773,7 @@
           store.writeFollowupDraft(reviewId, id, input.value);
         });
         input.addEventListener("keydown", function (event) {
-          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+          if (gestures.isSendEvent(event, store && store.readSendKey ? store.readSendKey() : undefined)) {
             event.preventDefault();
             submitFollowup(id, input.value);
           }
@@ -38484,7 +39089,7 @@
 //                                      element under the pointer, clicking one
 //                                      comments on the whole thing, Esc cancels
 //   a box at the foot of the thread    a note tied to nothing (R18)
-//   Cmd-Enter                          marks the comment ready. Nothing that is
+//   Enter (or Cmd-Enter, by setting)   marks the comment ready. Nothing that is
 //                                      not ready is actionable (R7)
 //   Esc                                closes the box, KEEPING the draft
 //   typing in a card's own note        THE rewording gesture. There is no
@@ -38581,8 +39186,11 @@
   // a constant rather than a literal in two files.
   var LISTENER_GROUP = listeners.GROUP.COMMENTS;
 
-  // Ken's copy, exactly. One spelling, used on every card.
-  var HINT_READY = "Cmd-Enter when done with this comment";
+  // One spelling, used on every card: the gesture table's, for the reviewer's
+  // own send key.
+  function hintReady(sendKey) {
+    return gestures.hintFor(gestures.GESTURE.MARK_READY, sendKey);
+  }
 
   // ---------------------------------------------------------------------------
   // Editing the words in place
@@ -40150,7 +40758,7 @@
       // The two buttons
       // ----------------------------------------------------------------------
 
-      /** Send: the Cmd-Enter path, called by the key and by the button alike. */
+      /** Send: the send key's path, called by the key and by the button alike. */
       function commitFromControl() {
         var next = markReady();
         // A box has done its job and goes. A session in a card's own note stays
@@ -40177,8 +40785,8 @@
       }
 
       /**
-       * Send is offered only when there is something to send. The keyboard path
-       * is untouched: Cmd-Enter does what it has always done.
+       * Send is offered only when there is something to send, and the send key
+       * agrees: in an empty box it does nothing.
        */
       function paintSendable() {
         if (!sendEl) return null;
@@ -40201,10 +40809,17 @@
           metaKey: event.metaKey,
           ctrlKey: event.ctrlKey,
           shiftKey: event.shiftKey,
+          altKey: event.altKey,
+          // keyCode 229 is how Safari reports a key an input method took.
+          isComposing: event.isComposing === true || event.keyCode === 229,
+          sendKey: store.readSendKey(),
           inCommentBox: true
         });
         if (got.gesture === gestures.GESTURE.MARK_READY) {
           if (got.preventDefault) event.preventDefault();
+          // Nothing to send, so the key does what the disabled Send button
+          // does: nothing. Enter is easy to hit by reflex in a fresh box.
+          if (!readInput().trim()) return;
           // The very function the Send button calls. The card's own note stays
           // where it is with the reviewer still in it: they are looking at the
           // words they just committed, and typing on is the next rewording.
@@ -41139,7 +41754,7 @@
       node.setAttribute("data-lahe-note-editor", "");
       node.setAttribute("role", "textbox");
       node.setAttribute("aria-multiline", "true");
-      node.setAttribute("aria-label", "Your comment. " + HINT_READY + ".");
+      node.setAttribute("aria-label", noteLabel());
       node.setAttribute("spellcheck", "false");
       entry.off.push(
         listenOn(node, "focus", function () {
@@ -41172,6 +41787,18 @@
       });
       delete noteEditors[id];
       return true;
+    }
+
+    // The words a card announces, for the reviewer's send key. Set when the
+    // card is built, and again when the reviewer changes the key.
+    function noteLabel() {
+      return "Your comment. " + hintReady(store.readSendKey());
+    }
+
+    function refreshSendKeyLabels() {
+      eachNoteEditor(function (entry) {
+        entry.node.setAttribute("aria-label", noteLabel());
+      });
     }
 
     function eachNoteEditor(fn) {
@@ -41821,7 +42448,8 @@
       OUTLINE_CLASS: OUTLINE_CLASS,
       PILL_CLASS: PILL_CLASS,
       POPOVER_KEYS: POPOVER_KEYS,
-      HINT_READY: HINT_READY,
+      hintReady: hintReady,
+      refreshSendKeyLabels: refreshSendKeyLabels,
       setReview: setReview,
       setPage: setPage,
       onChange: onChange,
@@ -41877,7 +42505,7 @@
     POPOVER_KEYS: POPOVER_KEYS,
     POPOVER_ACTIONS: POPOVER_ACTIONS,
     POPOVER_DELAY_MS: POPOVER_DELAY_MS,
-    HINT_READY: HINT_READY,
+    hintReady: hintReady,
     BOX_STYLE: BOX_STYLE,
     BOX_WIDTH: BOX_WIDTH,
     BOX_WIDTH_CAP: BOX_WIDTH_CAP,
@@ -53710,7 +54338,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.4.0+6a3749ffc3e2";
+  var VERSION = "0.4.0+d87cafc72d0b";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -54670,6 +55298,11 @@
       editing.bind({ page: page });
       if (tab && typeof tab.ensureNoteBox === "function") tab.ensureNoteBox();
     }
+
+    // A card announces the send key, so it hears when the reviewer changes it.
+    rail.onSendKey(function () {
+      comments.refreshSendKeyLabels();
+    });
 
     rail.onPresent(function (presenting) {
       applyPresent(presenting);

@@ -119,8 +119,11 @@
   /** The same one-sided containment the strict predicate uses for context. */
   function contextAgrees(stored, found) {
     var a = textish(stored);
+    // Nothing stored on this side: say so before normalizing what was found,
+    // which at the edge of a long list is every sibling's text joined.
+    if (!a) return false;
     var b = textish(found);
-    if (!a || !b) return false;
+    if (!b) return false;
     return a === b || a.indexOf(b) !== -1 || b.indexOf(a) !== -1;
   }
 
@@ -266,10 +269,18 @@
     if (!scope) return { element: null };
 
     var scored = [];
-    anchor.eachElement(scope, function (node) {
-      var got = scoreAgainst(reference, node, scope, knownPath, knownPrint);
-      if (got.score <= 0) return;
-      scored.push({ node: node, score: got.score, position: got.position, reasons: got.reasons });
+    // ONE READ OF THE PAGE FOR THE WHOLE PASS. Every element is scored, and
+    // each score asks for a heading, neighbours' text and a path. Asked one
+    // element at a time those re-read the page per element, which froze
+    // Seneschal's 4,209-element knowledge tree for 26 seconds on every load.
+    // The pass index answers the same questions with the same answers, read
+    // once. See "The pass index" in anchor.js.
+    anchor.withPassIndex(scope, function () {
+      anchor.eachElement(scope, function (node) {
+        var got = scoreAgainst(reference, node, scope, knownPath, knownPrint);
+        if (got.score <= 0) return;
+        scored.push({ node: node, score: got.score, position: got.position, reasons: got.reasons });
+      });
     });
     if (!scored.length) return { element: null };
 

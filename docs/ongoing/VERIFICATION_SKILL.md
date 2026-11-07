@@ -70,7 +70,7 @@ pieces that version was missing:
 Each line was driven with `lahe-verify` on commit `47e786b6` (macOS, Node
 20.19.0, Chromium from Playwright 1.62):
 
-- **Comments:** select words, Cmd-Shift-C, Cmd-Enter; the agent drains it, asks a question, the card shows it; the reviewer answers in the thread (revision 2); a page note; delete.
+- **Comments:** select words, Cmd-Shift-C, Enter; the agent drains it, asks a question, the card shows it; the reviewer answers in the thread (revision 2); a page note; delete.
 - **Editing:** edit a paragraph; the agent changes the file and replies handled; the page shows it once, after a reload too.
 - **Notes page:** `lahe write` opens ready to type; a heading and a paragraph reach the agent as new blocks; placed once in the file and on the page.
 - **Choices:** a press, a changed answer (same item, revision 2), a keyboard press (revision 3).

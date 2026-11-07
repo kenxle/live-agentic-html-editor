@@ -66,7 +66,8 @@
       root.LAHE.protocol,
       root.LAHE.failures,
       root.LAHE.review_format,
-      root.LAHE.overlay
+      root.LAHE.overlay,
+      root.LAHE.gestures
     );
   } else {
     module.exports = factory(
@@ -76,10 +77,11 @@
       require("../shared/protocol.js"),
       require("../shared/failures.js"),
       require("../shared/review_format.js"),
-      require("./overlay.js")
+      require("./overlay.js"),
+      require("../shared/gestures.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, record, lifecycle, protocol, failures, reviewFormat, overlayModule) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, record, lifecycle, protocol, failures, reviewFormat, overlayModule, gestures) {
   "use strict";
 
   var ROW_CLASS = "lahe-done-row";
@@ -1524,7 +1526,7 @@
           store.writeFollowupDraft(reviewId, id, input.value);
         });
         input.addEventListener("keydown", function (event) {
-          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+          if (gestures.isSendEvent(event, store && store.readSendKey ? store.readSendKey() : undefined)) {
             event.preventDefault();
             submitFollowup(id, input.value);
           }

@@ -76,7 +76,7 @@
       from: STATE.DRAFT,
       to: STATE.READY,
       actor: ACTOR.REVIEWER,
-      why: "Cmd-Enter on a comment, or an edit committing. R7: the reviewer decides when it is ready"
+      why: "sending a comment (Enter, or Cmd-Enter by setting), or an edit committing. R7: the reviewer decides when it is ready"
     },
     {
       from: STATE.READY,

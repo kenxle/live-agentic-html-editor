@@ -1042,6 +1042,11 @@
       if (tab && typeof tab.ensureNoteBox === "function") tab.ensureNoteBox();
     }
 
+    // A card announces the send key, so it hears when the reviewer changes it.
+    rail.onSendKey(function () {
+      comments.refreshSendKeyLabels();
+    });
+
     rail.onPresent(function (presenting) {
       applyPresent(presenting);
       if (presenting) return;

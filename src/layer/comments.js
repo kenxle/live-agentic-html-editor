@@ -18,7 +18,7 @@
 //                                      element under the pointer, clicking one
 //                                      comments on the whole thing, Esc cancels
 //   a box at the foot of the thread    a note tied to nothing (R18)
-//   Cmd-Enter                          marks the comment ready. Nothing that is
+//   Enter (or Cmd-Enter, by setting)   marks the comment ready. Nothing that is
 //                                      not ready is actionable (R7)
 //   Esc                                closes the box, KEEPING the draft
 //   typing in a card's own note        THE rewording gesture. There is no
@@ -115,8 +115,11 @@
   // a constant rather than a literal in two files.
   var LISTENER_GROUP = listeners.GROUP.COMMENTS;
 
-  // Ken's copy, exactly. One spelling, used on every card.
-  var HINT_READY = "Cmd-Enter when done with this comment";
+  // One spelling, used on every card: the gesture table's, for the reviewer's
+  // own send key.
+  function hintReady(sendKey) {
+    return gestures.hintFor(gestures.GESTURE.MARK_READY, sendKey);
+  }
 
   // ---------------------------------------------------------------------------
   // Editing the words in place
@@ -1684,7 +1687,7 @@
       // The two buttons
       // ----------------------------------------------------------------------
 
-      /** Send: the Cmd-Enter path, called by the key and by the button alike. */
+      /** Send: the send key's path, called by the key and by the button alike. */
       function commitFromControl() {
         var next = markReady();
         // A box has done its job and goes. A session in a card's own note stays
@@ -1711,8 +1714,8 @@
       }
 
       /**
-       * Send is offered only when there is something to send. The keyboard path
-       * is untouched: Cmd-Enter does what it has always done.
+       * Send is offered only when there is something to send, and the send key
+       * agrees: in an empty box it does nothing.
        */
       function paintSendable() {
         if (!sendEl) return null;
@@ -1735,10 +1738,17 @@
           metaKey: event.metaKey,
           ctrlKey: event.ctrlKey,
           shiftKey: event.shiftKey,
+          altKey: event.altKey,
+          // keyCode 229 is how Safari reports a key an input method took.
+          isComposing: event.isComposing === true || event.keyCode === 229,
+          sendKey: store.readSendKey(),
           inCommentBox: true
         });
         if (got.gesture === gestures.GESTURE.MARK_READY) {
           if (got.preventDefault) event.preventDefault();
+          // Nothing to send, so the key does what the disabled Send button
+          // does: nothing. Enter is easy to hit by reflex in a fresh box.
+          if (!readInput().trim()) return;
           // The very function the Send button calls. The card's own note stays
           // where it is with the reviewer still in it: they are looking at the
           // words they just committed, and typing on is the next rewording.
@@ -2673,7 +2683,7 @@
       node.setAttribute("data-lahe-note-editor", "");
       node.setAttribute("role", "textbox");
       node.setAttribute("aria-multiline", "true");
-      node.setAttribute("aria-label", "Your comment. " + HINT_READY + ".");
+      node.setAttribute("aria-label", noteLabel());
       node.setAttribute("spellcheck", "false");
       entry.off.push(
         listenOn(node, "focus", function () {
@@ -2706,6 +2716,18 @@
       });
       delete noteEditors[id];
       return true;
+    }
+
+    // The words a card announces, for the reviewer's send key. Set when the
+    // card is built, and again when the reviewer changes the key.
+    function noteLabel() {
+      return "Your comment. " + hintReady(store.readSendKey());
+    }
+
+    function refreshSendKeyLabels() {
+      eachNoteEditor(function (entry) {
+        entry.node.setAttribute("aria-label", noteLabel());
+      });
     }
 
     function eachNoteEditor(fn) {
@@ -3355,7 +3377,8 @@
       OUTLINE_CLASS: OUTLINE_CLASS,
       PILL_CLASS: PILL_CLASS,
       POPOVER_KEYS: POPOVER_KEYS,
-      HINT_READY: HINT_READY,
+      hintReady: hintReady,
+      refreshSendKeyLabels: refreshSendKeyLabels,
       setReview: setReview,
       setPage: setPage,
       onChange: onChange,
@@ -3411,7 +3434,7 @@
     POPOVER_KEYS: POPOVER_KEYS,
     POPOVER_ACTIONS: POPOVER_ACTIONS,
     POPOVER_DELAY_MS: POPOVER_DELAY_MS,
-    HINT_READY: HINT_READY,
+    hintReady: hintReady,
     BOX_STYLE: BOX_STYLE,
     BOX_WIDTH: BOX_WIDTH,
     BOX_WIDTH_CAP: BOX_WIDTH_CAP,
