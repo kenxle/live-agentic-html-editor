@@ -1,3 +1,5 @@
+// read-when: Changing `lahe reply` and how it writes a reply line, or when its tests fail.
+
 // `lahe reply`: the one command that writes a reply line, so no shell has to
 // encode JSON.
 //

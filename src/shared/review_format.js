@@ -1,3 +1,8 @@
+/*
+ * read-when: Changing what review.json says, the Copy and Export text, or the agent contract text.
+ * not-for: Where review.json is written; see src/service/review_writer.js.
+ */
+
 // The two things the reviewer's work turns into: the `review.json` projection
 // the helper writes for the agent, and the human-readable text the library's
 // Copy and Export produce from its own records.

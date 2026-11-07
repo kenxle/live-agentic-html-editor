@@ -1,3 +1,7 @@
+/*
+read-when: Changing the pill that appears after selecting text, or when Comment and Edit are missing from it.
+*/
+
 // The selection popover: the pill that appears when a reviewer finishes
 // selecting text on the page.
 //

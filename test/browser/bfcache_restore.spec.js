@@ -1,3 +1,7 @@
+/*
+read-when: Changing what runs when a page returns from the back/forward cache, or when Back leaves the rail dead or stale.
+*/
+
 // Ranked test 24: the back/forward cache restore.
 //
 // Owner: 2D (living in the page).

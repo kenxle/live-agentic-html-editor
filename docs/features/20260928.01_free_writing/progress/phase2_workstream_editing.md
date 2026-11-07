@@ -1,3 +1,7 @@
+---
+read-when: "Read when changing how Enter and block types behave inside a free writing edit, or the edit bar's new controls."
+---
+
 # Phase 2, editing workstream (2A): progress
 
 **Summary.** Tasks 2.1 to 2.4 are built on `free-writing-2a`. `npm run gate:unit` is green: 1619 tests, 1617 pass, 0 fail, 2 todo. The six new browser specs pass in Chromium (92 tests), Firefox (90 pass, 2 skipped) and WebKit (90 pass, 2 skipped). The two skips are the IME tests, which only Chromium can drive. The three existing Enter specs pass with updated expectations. No full browser suite ran. `dist/` was rebuilt locally and not committed.

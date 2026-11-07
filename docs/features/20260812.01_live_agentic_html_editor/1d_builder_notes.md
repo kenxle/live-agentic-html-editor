@@ -1,3 +1,7 @@
+---
+read-when: Read when changing how comments are made, how selections become gestures, or how highlights are drawn.
+---
+
 # 1D builder notes: comments, gestures, and highlights
 
 Branch `task/1d`, worktree `../lahe-worktrees/1d`. Nothing pushed, nothing merged, `dist/` never staged.

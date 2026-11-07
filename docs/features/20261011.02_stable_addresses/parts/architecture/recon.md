@@ -1,3 +1,7 @@
+---
+read-when: Learning how page serving, origins and helper lifetime worked before stable addresses.
+---
+
 # Recon: how serving, origins and lifetime work today
 
 Read-only survey of the worktree on branch `feat/stable-addresses`, taken 2026-10-11. Every claim is read from the file cited. Nothing was run. Where a line is my reading of how an operating system or browser behaves (not something in the repo), it is marked "unverified".

@@ -1,3 +1,5 @@
+// read-when: Changing how replay treats a card the agent refused (not_handled), or when its tests fail.
+
 // A refused card is not written onto the page.
 //
 // Spec: docs/features/20261011.01_stuck_replayed_blocks/01_spec_flag_dont_hold.md,

@@ -1,3 +1,7 @@
+---
+read-when: "Read when changing the rail head's actions menu, the card state colours or how a long file path is shown."
+---
+
 # feat-menu: the head's actions menu, card state colors, and the long file path
 
 Branch `task/feat-menu`. Files touched: `src/layer/overlay.js`, the architecture doc's D10

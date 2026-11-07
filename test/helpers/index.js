@@ -1,3 +1,7 @@
+/*
+read-when: Importing the browser test harness, or changing what it exports.
+*/
+
 // The harness, one import.
 //
 //   const { test, expect, typeInto, assertCaretSurvivesTyping } = require("../helpers");

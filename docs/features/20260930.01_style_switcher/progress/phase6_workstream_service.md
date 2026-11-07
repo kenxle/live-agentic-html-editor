@@ -1,3 +1,7 @@
+---
+read-when: Looking up how installing, serving and rendering styles was built and fixed.
+---
+
 # Service workstream: installed styles (pull request A)
 
 Builder: Service builder, Tasks 1.1 to 1.3 of `03_plan_style_switcher.md`.

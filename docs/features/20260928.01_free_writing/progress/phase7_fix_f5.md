@@ -1,3 +1,7 @@
+---
+read-when: Read when you want what was fixed in the follow-up items left after the free writing review fixes, or the test that proves each fix.
+---
+
 # Phase 7, fix round F5 (follow-ups): progress
 
 Summary: all seven items are done on `free-writing-f5`. `npm run gate:unit` is green (1786 tests, 0 fail, 2 todo). The 14 specs I touched or that cover the touched code pass in Chromium (224 tests, 0 failed). No full suite. `dist/` was rebuilt for the runs and is not staged.

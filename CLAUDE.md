@@ -1,3 +1,7 @@
+---
+read-when: Starting any change to this repo, or deciding how to run the gate, the tests, CI, or file removal here.
+---
+
 # CLAUDE.md: live-agentic-html-editor
 
 A zero-runtime-dependency Node service plus a vanilla JS review layer that

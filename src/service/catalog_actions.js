@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing what the Library's list, open, star and request actions do, or when one fails.
+ */
+
 // The Library's actions: what catalog.list, open, star and request do once the
 // check block has passed them, and the sweep of the Library's own idle sessions.
 //

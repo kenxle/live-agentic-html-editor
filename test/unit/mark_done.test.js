@@ -1,3 +1,5 @@
+// read-when: Changing Mark as done, which lets a reviewer close an outstanding card themselves, or when its tests fail.
+
 // Mark as done: the reviewer closes an outstanding card themselves.
 //
 // Ken, 2026-10-12: "you should always be able to move a card to done when i

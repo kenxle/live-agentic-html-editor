@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+/*
+ * read-when: Shrinking a review's events.jsonl by dropping superseded draft snapshots, or checking why that repair is safe.
+ */
+
 // A one-time repair: take the superseded draft snapshots out of events.jsonl.
 //
 // Before the draft write-cost fix (docs/features/20260922.01_draft_write_cost),

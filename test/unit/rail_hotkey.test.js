@@ -1,3 +1,6 @@
+// read-when: Changing the chord that opens and closes the review panel, or when its tests fail.
+// not-for: What the press does on screen; see test/browser/rail_hotkey.spec.js.
+
 // Cmd-Shift-1, the chord that opens and closes the review panel.
 //
 // What is checked here is the pure half: the gesture table recognizes the press

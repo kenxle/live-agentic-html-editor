@@ -1,3 +1,6 @@
+// read-when: Changing the rail's Active pane filter (All, Comments, Edits) or where a card lands among the tabs, or when its tests fail.
+// not-for: How the filter looks on screen; see test/browser/active_filter.spec.js.
+
 // Two tabs, and the Active pane's filter, headless.
 //
 // The rail had three tabs (Active, Edits, Done). Hand edits now sit in Active

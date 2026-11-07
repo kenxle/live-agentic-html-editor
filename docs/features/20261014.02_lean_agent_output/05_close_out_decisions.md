@@ -1,3 +1,7 @@
+---
+read-when: Reading the decisions that were left to Ken when lean agent output closed.
+---
+
 # Close-out decisions: lean agent output
 
 Lean agent output has shipped. [PR #69](https://github.com/kenxle/live-agentic-html-editor/pull/69) trims the comment queue, and [PR #70](https://github.com/kenxle/live-agentic-html-editor/pull/70) adds batch replies and omits the agent's own earlier answers from queue checks. [PR #77](https://github.com/kenxle/live-agentic-html-editor/pull/77), the Stop hook consistency test, merged on 2026-10-18 and is on main. Nothing is waiting on you. Last updated 2026-10-21 10:14 EDT.

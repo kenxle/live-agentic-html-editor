@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// read-when: Re-checking that the rebuilt lesson queue takes a choice press when served by the branch's helper.
+//
 // V17: the rebuilt lesson queue, served by the branch's own helper, takes a press.
 //
 // Opens the served queue in Chromium with the layer live, presses the

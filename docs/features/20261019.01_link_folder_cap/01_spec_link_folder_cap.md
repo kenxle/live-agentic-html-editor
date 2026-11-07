@@ -1,3 +1,7 @@
+---
+read-when: Changing how many files a linked folder may expose, or when a link into a folder is refused.
+---
+
 # Linked folder cap
 
 **Status:** shipped. Merged to `main` as [PR #88](https://github.com/kenxle/live-agentic-html-editor/pull/88), built without a review gate at Ken's request. This page is the record.

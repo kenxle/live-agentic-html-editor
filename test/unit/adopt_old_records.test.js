@@ -1,3 +1,5 @@
+// read-when: Changing how a review's old comments show at a page's new address, including records.read and store.adopt, or when its tests fail.
+
 // V31, option A: a review's old comments show at its page's new address.
 //
 // The rail is filled from browser storage, and storage belongs to one origin,

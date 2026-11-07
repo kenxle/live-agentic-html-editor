@@ -1,3 +1,5 @@
+// read-when: Changing where the Library gets the paths it serves and launches from, or when page-supplied source or target paths reach it, or when its tests fail.
+
 "use strict";
 
 // A reviewed page cannot choose what `lahe library serve` serves or where a

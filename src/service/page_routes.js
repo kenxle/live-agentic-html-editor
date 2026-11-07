@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the helper serves pages by site name, or when a page, image or link does not load.
+ */
+
 // Pages served by the helper itself, at http://<name>.lahe.localhost:<port>/<path>.
 //
 // Architecture: docs/features/20261011.02_stable_addresses/02_architecture_stable_addresses.md,

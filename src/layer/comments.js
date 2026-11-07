@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing comment boxes, element-pick mode or the note box, or when a comment attaches to the wrong passage.
+ */
+
 // Comment boxes, element-pick mode, and the untethered note.
 //
 // Owner: 1D. Implements architecture D3 (the gesture vocabulary, browse is the

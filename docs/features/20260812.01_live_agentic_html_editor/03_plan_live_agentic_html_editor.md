@@ -1,3 +1,7 @@
+---
+read-when: Read when you want to know how the original build was split into phases, tasks and checkpoints, or why a test was written.
+---
+
 # Plan: Live Agentic HTML Editor
 
 > **Historical supersession, 2026-08-18:** This plan records the implementation

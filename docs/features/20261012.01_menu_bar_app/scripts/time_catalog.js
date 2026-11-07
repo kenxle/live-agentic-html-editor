@@ -1,3 +1,5 @@
+// read-when: Timing how long the Library list takes to build against the real state folder, read-only.
+//
 // Read-only: time the Library list build against the real state folder.
 var r = require(process.argv[2] + "/src/service/catalog_reader.js");
 var reader = r.createReader({ dir: process.env.HOME + "/.local/state/lahe" });

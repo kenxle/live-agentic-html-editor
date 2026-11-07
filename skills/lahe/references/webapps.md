@@ -1,3 +1,7 @@
+---
+read-when: Reviewing a running app, or a document built from several sources.
+---
+
 # Review apps and generated documents
 
 Keep the app or document's own styles and icon. Edit the source rather than

@@ -1,3 +1,5 @@
+// read-when: Changing how the rail follows a link to a document in another folder through a site mount, or how root Markdown pages get the rail, or when its tests fail.
+
 // Linked documents and root Markdown pages at a stable address (stable
 // addresses Step 3). Carried over from the retired linked_docs_rail.test.js
 // and root_markdown_rail.test.js: the rail follows a link to a document in

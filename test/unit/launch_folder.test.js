@@ -1,3 +1,5 @@
+// read-when: Changing the folder a launched agent starts in, or how the Launch steps pass it to Terminal, or when its tests fail.
+
 "use strict";
 
 // Launch starts the new agent in the document's project folder (Library fix

@@ -1,3 +1,8 @@
+---
+read-when: "Read only for the log of Ken's answers on the free writing cleanup decisions."
+not-for: The decisions page; see 05_cleanup_decisions.md.
+---
+
 # Review log: r7ce589aaa9c4
 
 **Pages reviewed:** /05_cleanup_decisions-9485fee2d3c81c3d.html

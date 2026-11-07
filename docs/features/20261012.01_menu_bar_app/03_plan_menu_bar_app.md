@@ -1,3 +1,7 @@
+---
+read-when: Seeing how the menu bar app work was split into workstreams and pull requests.
+---
+
 # Plan: Menu bar app
 
 ## Summary

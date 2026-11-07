@@ -1,3 +1,5 @@
+// read-when: Changing scripts/compact_draft_history.js, the one-time repair that drops replaced draft events from a review log, or when its tests fail.
+
 // The one-time repair for the draft history that bloated events.jsonl.
 //
 // Before the draft write-cost fix (spec 20260922.01) the browser posted the

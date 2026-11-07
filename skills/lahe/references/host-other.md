@@ -1,3 +1,7 @@
+---
+read-when: Setting up the comment monitor in a host other than Claude Code or Codex.
+---
+
 # Monitor in other hosts
 
 ## Antigravity / AGY

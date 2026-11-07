@@ -1,3 +1,8 @@
+---
+read-when: Read only for the one hand edit Ken made to the unanswered-prominence spec in review.
+not-for: The spec itself; see 01_spec_unanswered_prominence.md.
+---
+
 # Hand edits from the review of this spec
 
 Written when the review ended. One edit.

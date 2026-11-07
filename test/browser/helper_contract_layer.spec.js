@@ -1,3 +1,8 @@
+/*
+read-when: Changing how the layer reacts to a helper on an older contract, or when a stale helper is not made read-only.
+not-for: The CLI half of this check; see test/unit/helper_contract_cli.test.js.
+*/
+
 // The layer half of the helper version check (testing review I7; architecture,
 // "Rollout and old agents"; fix round design call 9).
 //

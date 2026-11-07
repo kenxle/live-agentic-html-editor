@@ -1,3 +1,7 @@
+---
+read-when: Building or checking the install workstream, where the helper starts at login.
+---
+
 ### Workstream: install (Step 5)
 
 **Outcome:** `lahe install` makes the helper start at login and restart if it stops, on macOS, Linux, and Windows. Installed, the helper does not stop itself, the CLI does not spawn a second copy, and a stale helper is replaced at a quiet moment.

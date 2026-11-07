@@ -1,3 +1,8 @@
+/*
+read-when: Reading the stand-in for the export API, or when a hand-edit export spec touches a stub.
+not-for: The real export code; see src/layer/export.js.
+*/
+
 // A ONE-FILE STUB of 3C's pinned export API, so 3D's spec can exercise the
 // hand-edit list export before src/layer/export.js exists.
 //

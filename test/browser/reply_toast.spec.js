@@ -1,3 +1,7 @@
+/*
+read-when: Changing the toast for answers when the rail is closed, or when a flagged answer does not toast.
+*/
+
 // The toast: an answer that reaches a reviewer who keeps the rail closed.
 //
 // Ken works with the rail collapsed, because an open rail covers the page he

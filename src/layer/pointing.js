@@ -1,3 +1,8 @@
+/*
+ * read-when: Changing where a comment points once its words are gone from the page.
+ * not-for: Deciding where an edit is written; see anchor.js.
+ */
+
 // Where a comment POINTS when its words are gone.
 //
 // This module exists because of one sentence in anchor.js, which is still true

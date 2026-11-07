@@ -1,3 +1,7 @@
+/*
+read-when: Changing how a closing window hands the review back, or when the next window waits on a clock.
+*/
+
 // Closing the window hands the review back, and the next window gets it at once.
 //
 // D5 gives a review to one window at a time, and a window that simply goes

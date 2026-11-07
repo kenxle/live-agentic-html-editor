@@ -1,3 +1,7 @@
+/*
+read-when: Changing present mode, which hides the library from view, or when the chord does not bring it back.
+*/
+
 // Present mode: the whole library off the screen, and still working.
 //
 // Ken reviews a reveal.js deck with LAHE and also presents it: "sometimes

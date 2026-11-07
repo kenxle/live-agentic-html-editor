@@ -1,3 +1,7 @@
+---
+read-when: Verifying the Library page and handing a review to an agent.
+---
+
 # Library and hand-off
 
 The Library page lists every review the helper knows, grouped by agent

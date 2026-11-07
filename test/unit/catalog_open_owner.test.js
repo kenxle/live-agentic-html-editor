@@ -1,3 +1,5 @@
+// read-when: Changing the owner check that guards the Library's Open action (src/service/catalog_actions.js), or when its tests fail.
+
 "use strict";
 
 // Open's owner check (Library fix round, SEC4). Open binds a site, which serves

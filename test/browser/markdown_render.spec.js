@@ -1,3 +1,7 @@
+/*
+read-when: Changing how Markdown pages render (diagrams, lists, fonts, tables), or when a rendered page looks wrong.
+*/
+
 "use strict";
 
 const fs = require("node:fs");

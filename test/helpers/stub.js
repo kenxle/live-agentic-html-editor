@@ -1,3 +1,7 @@
+/*
+read-when: Swapping the harness from the stub review layer to the real library, or reading the stub's vocabulary.
+*/
+
 // THE SWAP POINT.
 //
 // Everything in this file talks to the stub review layer in

@@ -1,3 +1,5 @@
+// read-when: Re-capturing the real rail in several states as plain HTML for review.
+//
 // Capture the real rail, in several states, as plain HTML a reviewer can
 // comment on with LAHE itself.
 //

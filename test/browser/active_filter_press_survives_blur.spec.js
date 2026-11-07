@@ -1,3 +1,7 @@
+/*
+read-when: The rail's filter button ignores a press in WebKit, or you are changing how the rail repaints its tabs on focusout.
+*/
+
 // A press on the filter button is not lost to the blur that starts it.
 //
 // WebKit blurs a script-focused button at mousedown. The rail listens for

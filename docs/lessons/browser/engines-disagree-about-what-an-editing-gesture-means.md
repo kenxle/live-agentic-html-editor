@@ -1,4 +1,5 @@
 ---
+read-when: An edit is not recorded or bold, line breaks or clicks misbehave in one browser engine but not another.
 title: The engines disagree about what an editing gesture means, and inputType cannot tell them apart
 category: browser
 symptoms: [edit not recorded, edit discarded as a no-op, paragraph break became a line break, bold did nothing, click vanished with no trace, works in Chromium fails in Firefox]

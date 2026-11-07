@@ -1,3 +1,7 @@
+---
+read-when: Changing how the handled check reads a Markdown page, or when handled is refused for a change that is on the page.
+---
+
 # Spec: the handled check reads the page, not the raw Markdown
 
 ## Problem, user, and context

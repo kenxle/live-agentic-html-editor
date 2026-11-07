@@ -1,3 +1,7 @@
+---
+read-when: Changing how the rail follows a reviewer through a folder of pages.
+---
+
 # The rail should follow the reviewer through a folder of pages
 
 Board row: `LAHE-static-site-folder` in `docs/BULLETIN.md`. Written 2026-09-16 after an agent reviewing a set of wireframe pages found the rail only on the page it had enrolled, and worked around it by enrolling every page one at a time. Ken read the first draft of this page and left notes; this is the rewrite with his decisions folded in. It is built; since stable addresses (2026-10-11) the helper serves the folder itself, and "Stable addresses" at the end says what that changed.

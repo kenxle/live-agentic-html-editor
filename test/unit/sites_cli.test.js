@@ -1,3 +1,5 @@
+// read-when: Changing `lahe review` and `lahe write` on stable addresses, or the single writer rule, or when its tests fail.
+
 // `lahe review` and `lahe write` on stable addresses (Task 1.4 and its step
 // test), and the single writer (V6).
 //

@@ -1,3 +1,7 @@
+/*
+read-when: Changing how a second window on one review is refused, or when the refusal gives no reason.
+*/
+
 // Ranked test 25: a second window on the same review is refused with a reason,
 // in BOTH shapes, plus the one case nothing can refuse.
 //

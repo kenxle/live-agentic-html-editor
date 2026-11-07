@@ -1,3 +1,7 @@
+---
+read-when: Read when you want what was fixed in the shared code, service, CLI and contract side of the free writing review fixes, or the test that proves each fix.
+---
+
 # Phase 7, fix round F3 (shared, service, CLI, contract): progress
 
 **Summary.** Every F3 finding is fixed on `free-writing-f3`, in eight commits (`ce73488` to `62850da`). `npm run gate:unit` is green: 1762 tests, 1760 pass, 0 fail, 2 todo (the base's 2 todo; the base was 1712 tests). One browser spec ran by name in Chromium (`undo_reaches_helper.spec.js`, 3 passed), because the handled check now looks at one kind of take-back. No full browser suite ran. `dist/` was not rebuilt or staged. Five pieces need another group; they are listed at the end.

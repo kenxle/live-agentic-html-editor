@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the reviewer findings on the auto-answer agent plan and how they were answered.
+---
+
 # Reviews: LAHE starts your agent when a comment is ready, plan
 
 Plan under review: `03_plan_lahe_agent_sdk.md`, first draft (commit b2c6473). Four reviewers read it in parallel, with the brief, the architecture, the spike and the code the plan names:

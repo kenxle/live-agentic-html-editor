@@ -1,3 +1,8 @@
+/*
+read-when: Changing the keep flow for a style on a Markdown page, or when keeping a style does not reach the frontmatter.
+not-for: Trying a style on the page itself; see test/browser/style_switcher.spec.js.
+*/
+
 // The whole keep flow, through a real review of a Markdown source (V23), and
 // the style control on a rendered Markdown page (V8, the Markdown half).
 //

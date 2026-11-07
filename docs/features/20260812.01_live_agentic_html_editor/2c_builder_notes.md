@@ -1,3 +1,7 @@
+---
+read-when: Read when changing how saved records are replayed onto a repainted page, or when a replayed edit lands wrong.
+---
+
 # 2C builder notes: replay, history-aware, four branches
 
 Branch `task/2c`, worktree `../lahe-worktrees/2c`. Owns `src/layer/replay.js` plus the

@@ -1,3 +1,7 @@
+/*
+read-when: Changing how replay handles a human and an agent editing at once, or when one overwrites the other.
+*/
+
 // RANKED TEST 2, the headline property: a human and an agent edit at once,
 // and nothing gets clobbered.
 //

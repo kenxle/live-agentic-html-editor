@@ -1,3 +1,6 @@
+// read-when: Changing the export scope rule, label, filename or the list-export seam in src/layer/export.js, or when its tests fail.
+// not-for: The buttons, clipboard and download in a browser; see test/browser/copy_export.spec.js.
+
 // 3C's pure half: the scope rule, the label, the filename, and the seam 3D's
 // list export calls.
 //

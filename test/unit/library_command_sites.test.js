@@ -1,3 +1,5 @@
+// read-when: Changing the address `lahe library` prints for the Library, or when its tests fail.
+
 // `lahe library` prints the Library's own address (stable addresses, Tasks 4.2
 // and 4.3): its name, at the port the helper has proved, as service.json
 // reports it. 80 once the port-80 forward is checked, else the pages port. The

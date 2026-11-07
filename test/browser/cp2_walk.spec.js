@@ -1,3 +1,7 @@
+/*
+read-when: Changing the second stitch-back walk (typing through a morph, reload, replay), or when a typed fix is lost across a reload.
+*/
+
 // CP2: the second stitch-back, as a script.
 //
 // Ranked test 38, and the plan's own words for it:

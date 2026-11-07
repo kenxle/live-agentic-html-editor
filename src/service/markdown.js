@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how Markdown becomes a review page, or when a rendered page looks wrong.
+ */
+
 // Deterministic Markdown-to-review-HTML rendering. Agents never hand-roll this
 // transformation, so list boundaries and block structure do not depend on the
 // agent that happened to open the review.

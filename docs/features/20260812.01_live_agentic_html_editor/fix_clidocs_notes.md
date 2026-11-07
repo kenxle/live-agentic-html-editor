@@ -1,3 +1,7 @@
+---
+read-when: Read when the CLI or its docs have a gap a fresh agent would hit on a cold install, or to see what the cold-install walk found.
+---
+
 # fix-clidocs: the CLI and docs gaps from the cold-install walk
 
 Branch `task/fix-clidocs`. The gaps come from the 2026-08-14 cold-install walk, in

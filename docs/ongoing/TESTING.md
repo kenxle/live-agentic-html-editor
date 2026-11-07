@@ -1,3 +1,7 @@
+---
+read-when: Running or adding tests, or when the gate or a test layer fails.
+---
+
 # Testing
 
 ## Charter

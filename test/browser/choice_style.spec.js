@@ -1,3 +1,7 @@
+/*
+read-when: Changing how choice buttons look from the house stylesheet alone, on screen or in print.
+*/
+
 // The choice group's look, from the house stylesheet alone: no review layer,
 // no helper, no script tag. The fixture is rendered the way the helper renders
 // Markdown and served by a plain static server, so what the test sees is what a

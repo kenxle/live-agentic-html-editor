@@ -1,3 +1,7 @@
+---
+read-when: Changing the ids headings get on a rendered Markdown page, or when an in-page link does not land.
+---
+
 # Markdown heading ids
 
 Board row: LAHE-markdown-heading-ids (2026-09-30). Asked for by Ken on

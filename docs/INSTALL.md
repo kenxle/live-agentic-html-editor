@@ -1,3 +1,7 @@
+---
+read-when: Installing Lahe, setting up the helper, or when an install step fails.
+---
+
 # Install
 
 ## What you need

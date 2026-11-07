@@ -1,3 +1,7 @@
+---
+read-when: Building or checking the step that writes the Mac menu bar app itself.
+---
+
 ## Step 2: The Mac app (workstream macapp, PR 2)
 
 ::: xref

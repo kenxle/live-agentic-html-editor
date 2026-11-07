@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how lahe add puts the layer on a page and mints its token, or when a page's script line is wrong.
+ */
+
 // `lahe add`: put the library on a page, mint that review's token, and make
 // sure a helper is up. This is the install.
 //

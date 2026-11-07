@@ -1,3 +1,8 @@
+/*
+read-when: Changing the anchor engine against a real DOM, or when a comment binds to the wrong element, SVG or heading.
+not-for: The simulated-DOM version of these checks; see test/unit/anchor_engine.test.js.
+*/
+
 // The anchor engine (task 1C) against a real DOM, in a real browser.
 //
 // test/unit/anchor_engine.test.js runs the same bar over a simulated DOM, which

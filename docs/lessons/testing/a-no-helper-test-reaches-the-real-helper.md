@@ -1,4 +1,5 @@
 ---
+read-when: A test that expects no helper fails only on a machine where the real helper is running.
 title: A "no helper running" test reaches the developer's real helper on the default port
 category: testing
 symptoms: [no helper test fails only on my machine, first.acquired is false, window lock refused with no helper, helper contract older refused, test passes in CI but fails locally, "127.0.0.1:7817"]

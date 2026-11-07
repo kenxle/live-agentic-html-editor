@@ -1,3 +1,7 @@
+---
+read-when: Read when a record grows too large, or when changing how oversized records are written or loaded.
+---
+
 # Oversized records
 
 Branch `oversized-records`. The three oversized-record bugs from the [draft persistence analysis](../20260916.05_memory_audit/DRAFT_PERSISTENCE.md) ("Later findings"), fixed for new records. Old records still load and replay. No real data was touched.

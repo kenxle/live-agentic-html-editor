@@ -1,3 +1,5 @@
+// read-when: Changing the wire format: the event log line, reply line, request checks or the script tag, or when its tests fail.
+
 // The wire: the event log line, the reply line, the request checks, and the
 // script tag.
 //

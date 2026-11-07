@@ -1,3 +1,7 @@
+/*
+read-when: Changing the app fixture (the reviewed application), or when the fixture's links, form, login or morph engines misbehave.
+*/
+
 // The app fixture, walked as a real user walks it.
 //
 // Plan task 0C. This spec is the fixture's done bar: three pathnames reached by

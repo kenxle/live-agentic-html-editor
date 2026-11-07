@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+/*
+ * read-when: Measuring what typing unsent comments costs in storage writes and helper posts.
+ */
+
 // One scripted typing session, measured: what a reviewer typing unsent
 // comments costs in browser storage writes, helper posts and review.json
 // rewrites.

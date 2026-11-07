@@ -1,3 +1,7 @@
+---
+read-when: Changing the zoom viewer for diagrams and images, or when zoom misbehaves on a page.
+---
+
 # Zoom into graphs and images
 
 ## Problem

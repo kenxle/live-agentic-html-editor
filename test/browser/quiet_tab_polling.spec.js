@@ -1,3 +1,7 @@
+/*
+read-when: Changing how a hidden tab polls the helper, or when a background tab keeps asking or misses a reply.
+*/
+
 // A tab nobody is looking at stops asking the helper anything.
 //
 // Spec: docs/features/20260928.01_quiet_tab_polling/01_spec_quiet_tab_polling.md.

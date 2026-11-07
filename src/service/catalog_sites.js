@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the Library's Open picks a site and address for a review's document.
+ */
+
 // The Library's side of stable addresses: which site a review's document is
 // served from, what its address is, and how Open binds it.
 //

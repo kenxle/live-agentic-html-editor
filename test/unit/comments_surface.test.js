@@ -1,3 +1,6 @@
+// read-when: Changing the comment box's record, the revision rule or the deferred note in the layer, or when its tests fail.
+// not-for: Painting and picking in a browser; see test/browser/comments_highlights.spec.js.
+
 // 1D's Node-side half: the rules that hold with no browser in the room.
 //
 // The browser half is test/browser/comments_highlights.spec.js, which is where

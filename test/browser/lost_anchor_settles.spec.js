@@ -1,3 +1,7 @@
+/*
+read-when: Changing when a comment is called lost, or when a page that is still drawing leaves a stale lost card.
+*/
+
 // A page that finishes drawing itself after load, and the lost card that used
 // to stick to it.
 //

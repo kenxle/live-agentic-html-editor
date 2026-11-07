@@ -1,3 +1,5 @@
+// read-when: Changing how a failed `lahe review` closes its session without stopping a login-item helper, or when its tests fail.
+
 // A failed `lahe review` on a fresh session closes that session, and used to
 // stop the helper when no other session was open, with no check for an
 // always-on helper. On an installed helper that took every page down until

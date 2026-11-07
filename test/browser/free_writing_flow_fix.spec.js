@@ -1,3 +1,7 @@
+/*
+read-when: Changing how typed lines in a split tail become new blocks, or when typed words land in the wrong block.
+*/
+
 // Free writing, the editing-side fixes from the flow walk
 // (docs/features/20260928.01_free_writing/reviews_impl/flow_walk.md).
 //

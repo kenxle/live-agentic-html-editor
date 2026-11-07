@@ -1,3 +1,7 @@
+---
+read-when: "Read when you want the code-lead's review of whether the brief, architecture and plan were specific enough to build and review against."
+---
+
 # Code-lead review: Live Agentic HTML Editor (brief, architecture, plan)
 
 Reviewed against the three documents, the existing `src/` and `test/` trees, the repo's

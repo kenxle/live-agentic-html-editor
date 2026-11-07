@@ -1,3 +1,6 @@
+// read-when: Changing how `lahe add` replaces an older helper or refuses to replace a newer one, or when its tests fail.
+// not-for: The pure version verdict; see test/unit/protocol_wire.test.js.
+
 // The CLI half of the helper version check (testing review I7).
 //
 // protocol_wire.test.js tests the pure verdict. These run the real

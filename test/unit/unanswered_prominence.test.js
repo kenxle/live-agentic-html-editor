@@ -1,3 +1,5 @@
+// read-when: Changing how cards signal that nobody has picked up the reviewer's comments, or when its tests fail.
+
 // Making it obvious when nobody is picking up the reviewer's comments.
 //
 // Ken, 2026-09-16, looking at "Stored · nobody has picked this up, 10m": "active

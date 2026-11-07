@@ -1,3 +1,7 @@
+---
+read-when: "Read when you want the requirements and bug history mined from the human-review tool's tests and commits."
+---
+
 # human-review: behavioral requirements, bug scars, and reliability theory
 
 Mined from `/Users/kennethstclair/.claude/tools/human-review/` — 18 test files, 45 commits (2026-07-27 to 2026-08-11), `.github/workflows/`, README, SKILL.md.

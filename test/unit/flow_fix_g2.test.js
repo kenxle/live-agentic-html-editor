@@ -1,3 +1,6 @@
+// read-when: Changing how replay places an agent's run and handles a later record on one of its blocks, or when its tests fail.
+// not-for: The browser halves of these fixes; see test/browser/free_writing_flow_fix.spec.js.
+
 // The flow walk's replay-side failures, the pure halves (reviews_impl/flow_walk.md,
 // fix builder G2). The browser halves are in free_writing_flow_fix.spec.js.
 //

@@ -1,3 +1,7 @@
+---
+read-when: Writing anything user-facing, or choosing the words the product uses.
+---
+
 # Brand
 
 ## Charter

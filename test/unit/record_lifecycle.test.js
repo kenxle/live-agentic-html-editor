@@ -1,3 +1,5 @@
+// read-when: Changing the record shape, the lifecycle transition table or the merge rule, or when its tests fail.
+
 // The record shape, the lifecycle transition table with its actor column, the
 // applied-`after` history, and the merge rule.
 //

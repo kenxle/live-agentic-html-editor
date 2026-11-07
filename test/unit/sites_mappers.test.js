@@ -1,3 +1,5 @@
+// read-when: Changing how helper modules (healer, reload, handled check, rebuild, review.json) ask the site registry, or when its tests fail.
+
 // Helper modules ask the registry when the switch is on (stable addresses,
 // Step 2, Tasks 2.1 and 2.2).
 //

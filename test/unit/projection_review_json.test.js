@@ -1,3 +1,5 @@
+// read-when: Changing how the log is projected into review.json and written to disk, or when its tests fail.
+
 // review.json: the log projected into the file an agent reads, and written.
 //
 // Owner: 3A. Ranked test 27 (the contract field byte for byte in the REAL

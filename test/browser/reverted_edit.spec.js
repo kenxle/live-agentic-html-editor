@@ -1,3 +1,7 @@
+/*
+read-when: Changing how a handled edit that a later build took back is treated, or when it reopens.
+*/
+
 // A handled hand edit stays handled when a later build takes it back out.
 //
 // Spec docs/features/20261011.01_stuck_replayed_blocks/01_spec_flag_dont_hold.md,

@@ -1,3 +1,7 @@
+---
+read-when: "Read when you want the architect's review of the second architecture draft, with what it kept and what it asked to restore."
+---
+
 # Architecture review, v2 (continuous flow)
 
 Reviewed: `02_architecture_live_agentic_html_editor.md` against the approved brief (R1-R45), the three

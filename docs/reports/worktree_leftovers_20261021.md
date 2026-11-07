@@ -1,3 +1,7 @@
+---
+read-when: Asking why old worktrees and clones piled up, or what was changed to stop it.
+---
+
 # Why 77 old checkouts piled up, and how to stop it
 
 Updated 2026-10-21 10:52. I cleaned up 50 LAHE worktrees and 27 old clones this morning. This page says why they stayed up and what we're changing. Two fixes are done. The Seneschal change is built, reviewed twice and proven on a throwaway repo. One click from you: merge it.

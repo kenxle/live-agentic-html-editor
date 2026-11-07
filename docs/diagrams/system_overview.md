@@ -1,3 +1,7 @@
+---
+read-when: Getting the overall picture of the browser, helper, store, Library and agent.
+---
+
 # System overview
 
 This is the current picture of what exists and what talks to what: the

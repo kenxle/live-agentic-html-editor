@@ -1,3 +1,7 @@
+---
+read-when: Read when you want to know what the overnight review-session fixes changed and why, or when tracing a flaw back to the live review that found it.
+---
+
 # Review-session fixes: 2026-08-17 overnight workstream. COMPLETE (pending push)
 
 One live review session (Ken reviewing the HeyCatch teardown and a one-pager,

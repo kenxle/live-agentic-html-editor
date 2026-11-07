@@ -1,3 +1,8 @@
+/*
+ * read-when: Changing where and how review.json is written to disk, or its path safety.
+ * not-for: What review.json says; see src/shared/review_format.js.
+ */
+
 // The review file writer: the ONE owner of writing review.json, and the one
 // owner of the path-safety rules.
 //

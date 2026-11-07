@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how install-cli writes the lahe command, or when lahe is not found after installing.
+ */
+
 // `npm run install-cli`: put `lahe` somewhere the shell will actually find it.
 //
 // THE TRAP THIS EXISTS FOR. `npm link` puts the `lahe` symlink in the bin

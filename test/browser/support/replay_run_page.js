@@ -1,3 +1,7 @@
+/*
+read-when: Writing or debugging a replay spec for run records that loads replay straight from the source.
+*/
+
 // A page with replay loaded straight from src/, for the free-writing replay
 // specs (plan Tasks 2.5 to 2.7).
 //

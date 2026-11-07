@@ -1,3 +1,7 @@
+---
+read-when: Changing what an agent session owns or how a session is handed to a new agent.
+---
+
 # Session ownership and handoff
 
 One helper runs per machine, but many agent sessions can use it at once. This

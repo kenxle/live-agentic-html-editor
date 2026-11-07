@@ -1,3 +1,7 @@
+---
+read-when: Read when you want to trace what each build checkpoint and later fix wave actually did, or why a seam between parts was closed the way it was.
+---
+
 # Progress: live agentic HTML editor
 
 Running record of what each phase and checkpoint actually did, newest section at the foot.

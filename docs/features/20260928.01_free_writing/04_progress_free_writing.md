@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the running record of the free writing build, its pull request and what changed from the plan.
+---
+
 # Progress: Free writing
 
 **Done. Free writing is merged and live.** [PR #20](https://github.com/kenxle/live-agentic-html-editor/pull/20) merged as 6f3bc6b, and cleanup is finished. Nothing is waiting on you. Last updated 2026-09-30 17:28.

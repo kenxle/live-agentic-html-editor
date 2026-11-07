@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how lahe monitor wakes Codex, or when queued review work does not reach a Codex conversation.
+ */
+
 // Codex's native queue is the wake channel. One local watcher per conversation
 // waits outside model turns and exits after the host accepts a real batch.
 "use strict";

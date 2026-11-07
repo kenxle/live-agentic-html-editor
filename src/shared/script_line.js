@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the lahe script line is found, placed, replaced or removed in an HTML file.
+ */
+
 // The script line inside an HTML file: finding it, placing it, replacing it,
 // taking it out.
 //

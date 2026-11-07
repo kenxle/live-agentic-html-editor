@@ -1,3 +1,5 @@
+// read-when: Changing the helper's name server for `.lahe` names (src/service/name_server.js), or when its tests fail.
+
 // The helper's name server for `.lahe` (src/service/name_server.js).
 //
 //   V54  Answers names under `.lahe` with loopback (A 127.0.0.1, AAAA ::1),

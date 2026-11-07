@@ -1,3 +1,5 @@
+// read-when: Changing how the helper listens on both loopback addresses, or what it does when the second one is taken by another program, or when its tests fail.
+
 // The helper listens on 127.0.0.1 and on [::1] for each port. When [::1] could
 // not bind because another program held it, the helper went on serving on
 // 127.0.0.1 alone, and a browser that tries ::1 first would load that other

@@ -1,3 +1,7 @@
+---
+read-when: Read before changing how new blocks, runs, anchors or replay work for free writing, or to learn why a choice was made.
+---
+
 # Architecture: Free writing
 
 ## Summary

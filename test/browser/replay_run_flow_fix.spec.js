@@ -1,3 +1,7 @@
+/*
+read-when: Changing replay of a run against the flow walk's failures, or when a placed list raises a clash.
+*/
+
 // Replay of a run record against the flow walk's failures (fix builder G2),
 // on a page with replay loaded straight from src/ (support/replay_run_page.js).
 //

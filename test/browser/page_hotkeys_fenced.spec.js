@@ -1,3 +1,7 @@
+/*
+read-when: Changing which keys reach the page while the reviewer types in the rail, or when a deck reacts to keys typed in a comment box.
+*/
+
 // The page's own keyboard shortcuts, and the places they must not fire.
 //
 // A reviewer on a reveal.js deck types in the library and the deck changes

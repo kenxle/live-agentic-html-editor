@@ -1,3 +1,7 @@
+---
+read-when: Read when changing test quality or CLI and helper hardening, or to see which review findings were fixed there.
+---
+
 # fix-testcli notes: test-quality blockers + CLI/helper hardening
 
 Owner branch: `task/fix-testcli`. Findings 4, 5, 6, 16, 29 (tests) and 14, 15, 19, 21, 23 (CLI/helper).

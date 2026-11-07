@@ -1,3 +1,7 @@
+---
+read-when: Checking which questions about stable addresses were settled and how.
+---
+
 ### Resolved
 
 Settled by Ken on [the decisions page](../../ongoing/STABLE_ADDRESSES.md), 2026-10-11:

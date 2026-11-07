@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the reviewer findings on the auto-answer agent brief and how they were answered.
+---
+
 # Reviews: LAHE agent that cannot forget, brief
 
 Brief under review: `01_brief_lahe_agent_sdk.md`. Inputs the reviewer read: the brief, the crucible and research in this folder, `docs/ongoing/SESSION_OWNERSHIP.md`, `docs/CONTRACTS.md`, and the review rules in `src/shared/review_format.js`. There is no `docs/ongoing/PRD.md`, `docs/ongoing/BRAND.md` or `docs/diagrams/INDEX.md` in this project.

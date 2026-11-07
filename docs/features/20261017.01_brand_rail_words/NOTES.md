@@ -1,3 +1,7 @@
+---
+read-when: Changing the words on the chat bar, or checking which brand words it uses.
+---
+
 # Chat bar labels match the brand words
 
 The chat bar now uses the words in [BRAND.md, Words we use](../../ongoing/BRAND.md#words-we-use).

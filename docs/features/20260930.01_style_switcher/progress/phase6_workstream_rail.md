@@ -1,3 +1,7 @@
+---
+read-when: Looking up how the Document style panel in the rail was built and fixed, round by round.
+---
+
 # Phase 6, Rail workstream (Tasks 2.1 and 2.2)
 
 **Summary.** The Document style panel works on a real review: it lists International Style and the installed styles, one click restyles the page with no reload, a preview survives the agent's rebuild, and "Ask the agent to use" sends one ready note and shows the waiting line until any reply. 16 browser tests pass on Chromium. The one Markdown end-to-end test waits for pull request A. Building this found a real bug in comment boxes, fixed in its own commit (see Needs a decision).

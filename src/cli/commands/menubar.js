@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing lahe menubar show or rebuild, or when the menu bar icon will not come back or rebuild.
+ */
+
 // `lahe menubar show` and `lahe menubar rebuild`: the menu bar icon's two
 // commands (macOS only; src/service/menubar.js does the work).
 //

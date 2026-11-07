@@ -1,3 +1,7 @@
+---
+read-when: Finding which board rows were fixed together in the second small-fixes batch.
+---
+
 # Progress: Small board fixes, second batch
 
 **Building.** Four board rows picked for overnight work on 2026-10-22, shipped as one whetstone change. Nothing is waiting on you.

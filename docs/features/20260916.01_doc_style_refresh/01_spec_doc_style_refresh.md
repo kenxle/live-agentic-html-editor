@@ -1,3 +1,7 @@
+---
+read-when: "Read when changing the stylesheet behind rendered Markdown pages, or to learn why they match the report builder's look."
+---
+
 # Spec: rendered Markdown gets the rebuilt document style, whole
 
 Whetstone spec, 2026-09-16. Follows the style system rebuild that landed in the personal repo today (PR 4 there, `docs/features/20260915.01_style_systems/01_spec_style_system_rebuild.md`).

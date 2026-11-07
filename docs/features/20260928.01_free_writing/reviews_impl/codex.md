@@ -1,3 +1,8 @@
+---
+read-when: Read only for the raw Codex session that reviewed the free writing diff; it is very long.
+not-for: The reviews written up by hand; see FIX_ROUND.md.
+---
+
 OpenAI Codex v0.159.0
 --------
 workdir: /Users/kennethstclair/Documents/workspace/live-agentic-html-editor/.claude/worktrees/free-writing

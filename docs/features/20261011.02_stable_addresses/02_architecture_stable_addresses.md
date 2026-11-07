@@ -1,3 +1,7 @@
+---
+read-when: Changing how the helper serves pages, names sites or stays running, or tracing the stable addresses design.
+---
+
 # Architecture: Stable addresses
 
 ## Summary

@@ -1,4 +1,5 @@
 ---
+read-when: The agent says a review is still active after the reviewer ended it, or no signal arrives when it ends.
 title: Zero work waiting means both "finished" and "caught up", and only one of them needs you
 category: service
 symptoms: [the agent says the review is still active after the reviewer ended it, no signal when the reviewer ends a review, the wake log has no line for it, the drain prints nothing but the reviewer is done, ended_at is set and nothing happened, the monitor wakes on the same thing on every relaunch, status is quiet when it should not be]

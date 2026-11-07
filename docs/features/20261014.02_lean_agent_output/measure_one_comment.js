@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// read-when: Re-measuring what one plain comment costs the agent in characters and tokens.
+//
 // What one plain comment costs the agent, in characters and estimated tokens.
 //
 // Builds a throwaway state folder holding one session, one review and one

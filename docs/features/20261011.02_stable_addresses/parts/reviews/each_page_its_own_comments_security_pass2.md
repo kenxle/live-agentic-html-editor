@@ -1,3 +1,7 @@
+---
+read-when: Reading the second security review of the revised each-page-its-own-comments design.
+---
+
 # Security review, second pass: each page carries its own comments
 
 Reviewed: the revised [each_page_its_own_comments.md](../architecture/each_page_its_own_comments.md), against the [first pass](each_page_its_own_comments_security.md), `src/service/page_routes.js` (`pickReview`, `reviewAnswersOnSite`, `recordsForPage`, `fileForPage`, `serveMarkdown`, `headers`), `src/service/sites.js` `addLinked`, `src/service/reviews.js` `endReview`, `src/cli/commands/add.js` (reuse and `refuseForeign`), the `records.read` route in `src/service/routes.js`, `docs/diagrams/session_ownership.md`, and `skills/lahe/SKILL.md` rule 18.

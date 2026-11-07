@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how the browser tests run, which browsers they cover, or where they look for specs.
+ */
+
 // A helper under test never opens a real Terminal window for Launch a new
 // agent (src/service/catalog_launch.js reads this).
 process.env.LAHE_DIRECT_LAUNCH = "off";

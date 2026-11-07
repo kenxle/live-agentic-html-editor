@@ -1,3 +1,7 @@
+/*
+read-when: Changing how a duplicated tab is told apart from the original window, or when a copied tab gets the review.
+*/
+
 // A DUPLICATED tab is a second window, whatever its window id says.
 //
 // The window id lives in sessionStorage so a same-tab reload can prove it is the

@@ -1,3 +1,7 @@
+/*
+ * read-when: Counting how many lines of the agent contract only a chat agent needs, as the architecture quoted.
+ * not-for: The real per-line audience tag; see src/shared/review_format.js.
+ */
 // A first cut at splitting today's contract into lines only a chat agent needs
 // (waking, monitors, hosts, the reply command) and lines every agent needs.
 // The architecture quotes its counts. The plan replaces this keyword guess with

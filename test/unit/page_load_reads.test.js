@@ -1,3 +1,5 @@
+// read-when: Changing what the helper reads from disk on each page load (meta.json and old page-server records), or when its tests fail.
+
 // Every page load used to read every review's meta.json and every old
 // page-server record, synchronously, to pick the review that answers and the
 // old origins for the script tag. The old records no longer change, so they

@@ -1,3 +1,7 @@
+---
+read-when: Reading Ken's comment on the linked folder scope spec and how it was handled.
+---
+
 # Review log: re038ed80b72f
 
 **Pages reviewed:** /.claude/worktrees/linked-folder-scope/docs/features/20261019.03_linked_folder_scope/01_spec_linked_folder_scope.html

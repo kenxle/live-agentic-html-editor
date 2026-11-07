@@ -1,3 +1,5 @@
+// read-when: Changing how the projection builds a block's text, ends proofreading with Use the fixes, or how the export reads the menu names, or when its tests fail.
+
 // Fix round F3, projection side (free writing, reviews_impl/FIX_ROUND.md):
 // a block's text is its words, the anchor's own change is not cut mid-tag,
 // "Use the fixes" ends proofreading and review.json carries the fixes, and the

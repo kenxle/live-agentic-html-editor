@@ -1,3 +1,5 @@
+// read-when: Changing the Library's stable address (library.lahe.localhost) and the checks it keeps, or when its tests fail.
+
 // The Library at library.lahe.localhost (stable addresses, Task 4.2, row V43).
 //
 // The Library answers at library.lahe.localhost:<pages port> as well as at

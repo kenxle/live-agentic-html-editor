@@ -1,3 +1,7 @@
+/*
+read-when: Writing or debugging a spec for how a card shows a refusal from the helper.
+*/
+
 // A stand-in helper that refuses every run event, for the card's refusal state
 // (free writing, plan Task 3.2: "A refused item is never shown as sent").
 //

@@ -1,3 +1,8 @@
+---
+read-when: "Read when you want the code-lead's first-round review of the free writing plan."
+not-for: The implementation review; see reviews_impl/code_lead.md.
+---
+
 ## Code Review Lead Review (Round 1)
 
 **Short version.** I could review Phase 1 and most of 2C against these docs. I could not review 2A or 2B yet. Four things are missing, and without them the builders would each make up their own answer:

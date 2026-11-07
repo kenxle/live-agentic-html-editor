@@ -1,3 +1,7 @@
+/*
+read-when: Changing the built-document acceptance walk, or when a copy-out of a review no longer matches what was typed with no agent running.
+*/
+
 // AC1, the built-document case, as a script. Ranked test 39, first of three.
 //
 // The criterion, word for word:

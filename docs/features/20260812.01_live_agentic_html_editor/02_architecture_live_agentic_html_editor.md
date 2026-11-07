@@ -1,3 +1,7 @@
+---
+read-when: "Read before changing how the editor's page layer, helper, records or replay are designed, or to learn why a design choice was made."
+---
+
 # Architecture: Live Agentic HTML Editor
 
 ## Summary

@@ -1,3 +1,5 @@
+// read-when: Changing how an agent session carries a human name (`--name`, `lahe session name`) and how the rail banner shows it, or when its tests fail.
+
 // A LAHE agent session can carry the human's name for it.
 //
 // Ken runs many agents at once, and "s_9a3835ce54bc9e66" does not say which

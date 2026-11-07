@@ -1,3 +1,7 @@
+/*
+read-when: Writing or debugging a spec whose tests each expect an empty rail on the same page.
+*/
+
 // A fresh review on the same page, for specs whose tests each expect an empty
 // rail.
 //

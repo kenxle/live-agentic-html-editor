@@ -1,3 +1,7 @@
+---
+read-when: Changing what the Stop hook tells an agent about waiting until there is work.
+---
+
 # Spec: the Stop hook says one launch waits until there is work
 
 ## Progress

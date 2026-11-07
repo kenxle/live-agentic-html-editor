@@ -1,3 +1,8 @@
+---
+read-when: "Read only for the log of Ken's review comments on the free writing progress page."
+not-for: The progress page itself; see 04_progress_free_writing.md.
+---
+
 # Review log: r854e84e9884b
 
 **Pages reviewed:** /04_progress_free_writing-9add023a906f9af5.html

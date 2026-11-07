@@ -1,3 +1,5 @@
+// read-when: Changing how the real events.append route refuses a run event, or when the stand-in refusals elsewhere drift from it.
+
 // A refused run event, answered by the REAL events.append route.
 //
 // Testing review I10. The refusal tests elsewhere (draft_flush_cadence, the

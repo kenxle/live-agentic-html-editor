@@ -1,3 +1,6 @@
+// read-when: Changing the style switcher's page-side rules (ids, colours, note words, storage key, panel words), or when its tests fail.
+// not-for: The link, restyle and panel on screen; see test/browser/style_switcher.spec.js.
+
 // The style switcher's page side, without a browser: the id and colour rules,
 // the list the layer re-checks, the note's words, the marker and the waiting
 // test, the storage key, and the panel's words for each state.

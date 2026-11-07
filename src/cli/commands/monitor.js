@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing lahe monitor and its exit codes, or when it stops waiting too early or keeps waiting after it should stop.
+ */
+
 // `lahe monitor`: wait locally for new session work, say it is there, and exit.
 //
 // This process, not an LLM timer, pays for idle polling. Empty status checks

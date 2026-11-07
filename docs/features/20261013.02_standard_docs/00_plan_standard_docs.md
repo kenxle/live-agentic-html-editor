@@ -1,3 +1,7 @@
+---
+read-when: Bringing Lahe's docs up to the standard doc set, or asking why the cleanup was held.
+---
+
 # Bringing LAHE's docs up to your standard set
 
 **On hold.** You have specced a skill pack for managing projects, and this cleanup will be its first test run once it is ready. Nothing below has been started.

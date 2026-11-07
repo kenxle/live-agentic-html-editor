@@ -1,3 +1,7 @@
+---
+read-when: Read when an italic edit disappears after a reload, or when changing how replay finds the element an edit belongs to.
+---
+
 # Italics that came back after a reload
 
 Report, review r88dec64b8451: "using the italics button still doesn't stick after the reload."

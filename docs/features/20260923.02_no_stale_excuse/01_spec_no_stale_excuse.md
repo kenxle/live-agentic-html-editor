@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the agent contract wording about old cards, or when an agent refuses an item because its card is stale.
+---
+
 # No stale excuse
 
 An agent may not refuse a reviewer's item because the card it sits on is old.

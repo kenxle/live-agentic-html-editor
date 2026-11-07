@@ -1,4 +1,5 @@
 ---
+read-when: gh pr merge exits with an error after merging, or the remote branch is still there.
 title: gh pr merge --delete-branch stops when a worktree holds the branch, and the remote branch stays
 category: process
 symptoms: [gh pr merge failed after merging, "cannot delete branch", "used by worktree", remote branch still on GitHub after merge, PR merged but command exited non-zero, delete-branch error]

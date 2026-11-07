@@ -1,3 +1,7 @@
+---
+read-when: Reading Ken's comments on the stable addresses architecture page.
+---
+
 # Review log: rb9f7c1db2dd2
 
 **Pages reviewed:** /02_architecture_stable_addresses.html

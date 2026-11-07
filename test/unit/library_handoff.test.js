@@ -1,3 +1,5 @@
+// read-when: Changing the hand-off message builder used by the rail and the Library (AGENT_LIVENESS.handoffMessage), or when its tests fail.
+
 "use strict";
 
 // The Library's hand-off message (story walk, Library fix round; merged into

@@ -1,3 +1,7 @@
+---
+read-when: Verifying direct edits, new writing and blank-page notes.
+---
+
 # Editing and writing
 
 A reviewer changes words directly on the page. The change goes to the agent as

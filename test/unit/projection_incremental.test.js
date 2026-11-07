@@ -1,3 +1,5 @@
+// read-when: Changing the projection's resumable fold, or when a piecewise fold differs from a fold from the top.
+
 // The resumable fold: folding a log in pieces has to land on the same bytes as
 // folding it from the top.
 //

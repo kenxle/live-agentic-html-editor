@@ -1,3 +1,7 @@
+---
+read-when: Changing the default document style, or tracing how it was built.
+---
+
 # Default document style build
 
 Board row: `LAHE-default-doc-style` in `docs/BULLETIN.md` (Ken, 2026-09-11).

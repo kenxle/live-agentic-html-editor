@@ -1,3 +1,7 @@
+---
+read-when: Reading Ken's comments on the moved-file spec and how each was handled.
+---
+
 # Review log: r0cc22aa34d24
 
 **Pages reviewed:** /01_spec_comments_follow_moved_file.md

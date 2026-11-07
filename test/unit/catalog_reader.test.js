@@ -1,3 +1,5 @@
+// read-when: Changing the catalog reader that builds the Library's list from the state folder (src/service/catalog_reader.js), or when its tests fail.
+
 "use strict";
 
 // The catalog reader: builds the Library's list from the state dir.

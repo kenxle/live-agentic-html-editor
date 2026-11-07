@@ -1,3 +1,5 @@
+// read-when: Changing the harness stub's vocabulary, or the kernel names it has to match, or when its tests fail.
+
 // The stub's vocabulary is pinned to the kernel's.
 //
 // test/fixtures/assets/harness-stub.js deliberately does not require or bundle

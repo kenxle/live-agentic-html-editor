@@ -1,3 +1,7 @@
+---
+read-when: Changing what the agent is shown for a reviewer comment, or when the comment output looks too long.
+---
+
 # Lean agent output
 
 Cut what one reviewer comment costs the agent in tokens, without losing anything

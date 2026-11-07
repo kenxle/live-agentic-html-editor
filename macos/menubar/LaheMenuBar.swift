@@ -1,3 +1,5 @@
+// read-when: Changing the Mac menu bar icon or its menu, or when the count or a menu entry looks wrong.
+
 // Lahe menu bar app: the icon and menu that show what is waiting on Ken.
 //
 // It asks the helper's summary.read route every 5 seconds and when the menu

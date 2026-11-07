@@ -1,3 +1,7 @@
+---
+read-when: Reading Ken's comment on the delete-list-item spec and how it was handled.
+---
+
 # Review log: r67c888bc5919
 
 **Pages reviewed:** /01_spec_delete_list_item-1845c9e3106c602d.html

@@ -1,3 +1,7 @@
+---
+read-when: Read when changing the app fixture the browser tests walk, or to learn how it imitates a dev server.
+---
+
 # 0C builder notes: the app fixture
 
 Branch `task/0c-fixture`, worktree `../lahe-worktrees/0c`. Status: **done, gate green.**

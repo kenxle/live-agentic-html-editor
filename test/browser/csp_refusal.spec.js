@@ -1,3 +1,7 @@
+/*
+read-when: Changing how the page names a content-policy refusal versus a helper that is down, or when the wrong cause is shown.
+*/
+
 // Ranked test 23: a CSP refusal is named distinctly from a helper that is down.
 //
 // Owner: 2D (living in the page). Driven by a REAL Content-Security-Policy

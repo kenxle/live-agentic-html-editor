@@ -1,3 +1,5 @@
+// read-when: Changing `lahe add` (the install command, its output, the script line it writes or the helper it starts), or when its tests fail.
+
 // `lahe add`: the install command. Task 3B.
 //
 // These tests run the REAL command through the real entry point

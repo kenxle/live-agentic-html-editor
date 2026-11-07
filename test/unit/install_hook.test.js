@@ -1,3 +1,5 @@
+// read-when: Changing how `npm run install-skills` installs the Stop hook into Claude Code settings, or when its tests fail.
+
 // `npm run install-skills` also installs `lahe hook stop` as a Claude Code Stop
 // hook (docs/features/20261006.02_rearm_guard). Every test here works on a temp
 // home; none of them reads or writes the real ~/.claude/settings.json.

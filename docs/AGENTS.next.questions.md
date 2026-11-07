@@ -1,3 +1,7 @@
+---
+read-when: Reading the open questions raised when the agent playbook was rebuilt.
+---
+
 # New agent playbook: seven questions before it replaces the old one
 
 The rebuilt playbook is `docs/AGENTS.next.md`, on your outline. It is about 5,400 tokens, down from about 13,800. The old `AGENTS.md` is untouched. Every rule in the old file is accounted for in `docs/AGENTS.next.coverage.md` (217 rows: kept, merged, moved, or dropped with a reason). These are the calls the writer could not make alone. Answer on this page; one line each is plenty.

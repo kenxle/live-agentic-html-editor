@@ -1,3 +1,7 @@
+/*
+read-when: Changing the toast that announces a collision on reload, or when a conflict is not told on the page.
+*/
+
 // The conflict toast, in Ken's case.
 //
 // Ken asked the agent to add a module to his article and kept writing in the

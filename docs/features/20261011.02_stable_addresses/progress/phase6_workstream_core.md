@@ -1,3 +1,7 @@
+---
+read-when: Looking up how the core workstream was built, tested and fixed.
+---
+
 # Workstream core: progress
 
 ## Summary

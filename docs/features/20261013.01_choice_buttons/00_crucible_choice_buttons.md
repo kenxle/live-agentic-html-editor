@@ -1,3 +1,7 @@
+---
+read-when: Asking why choice buttons exist, or which approach Ken picked before the brief.
+---
+
 # Crucible: choice buttons on a document
 
 Date: 2026-10-17

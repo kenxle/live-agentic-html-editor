@@ -1,3 +1,8 @@
+---
+read-when: Changing the Library page, its catalog or its requests, or when it lists the wrong reviews.
+not-for: Handling a Library request as an agent; see skills/lahe/references/library.md.
+---
+
 # The Library
 
 Read this before touching `src/service/catalog_*.js`, `src/layer/catalog/`, or `src/cli/commands/library.js`. The feature folder (`docs/features/20260922.02_lahe_library/`) is the history of why; this page is how it works now. Where the two differ, this page and the code win.

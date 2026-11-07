@@ -1,3 +1,7 @@
+---
+read-when: Changing how styles are installed, served or carried on a page, or tracing the switcher's design.
+---
+
 # Architecture: Style switcher
 
 ## Summary

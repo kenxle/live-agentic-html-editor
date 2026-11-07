@@ -1,3 +1,7 @@
+---
+read-when: Choosing how Lahe reaches a page, or when the rail or edits do not arrive for a served setup.
+---
+
 # How LAHE gets into a page: the serving architectures
 
 When a person reviews a document in their browser and their agent acts on

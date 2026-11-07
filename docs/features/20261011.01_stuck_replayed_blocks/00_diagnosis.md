@@ -1,3 +1,7 @@
+---
+read-when: Old words stay on a page after a restructure, or you are tracing how replay lets the page differ from the file.
+---
+
 # Old words stuck on the page after a restructure
 
 ## Status

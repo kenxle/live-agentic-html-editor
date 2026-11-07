@@ -1,3 +1,5 @@
+// read-when: Changing how often helper.log repeats the "not injecting" line and auth refusals for a page, or when its tests fail.
+
 // Two more helper.log lines any page could repeat without end: the "not
 // injecting" line (a page's image requests can trigger it) and the Host,
 // token and origin refusals from auth. Each is now logged once per distinct

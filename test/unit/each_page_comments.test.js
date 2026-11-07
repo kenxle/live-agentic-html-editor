@@ -1,3 +1,5 @@
+// read-when: Changing how each page of a review carries its own comments (page spellings, records.read, redirects of link addresses), or when its tests fail.
+
 // Each page carries its own comments (each_page_its_own_comments.md, Parts 2
 // and 3), helper side.
 //

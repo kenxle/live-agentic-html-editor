@@ -1,3 +1,5 @@
+// read-when: Changing how Markdown links are classified, translated or rendered inert (src/service/markdown_links.js), or when its tests fail.
+
 "use strict";
 
 const test = require("node:test");

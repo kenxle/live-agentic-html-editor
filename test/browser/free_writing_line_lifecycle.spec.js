@@ -1,3 +1,7 @@
+/*
+read-when: Changing when the Write here line shows or goes, or when it floats on the page with no edit open.
+*/
+
 // "+ Write here" never outlives its edit (phase 7, fix H3).
 //
 // Ken, on a real notes page: "a leftover +write here that's floating in like

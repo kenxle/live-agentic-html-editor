@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing lahe style add or list, or when an installed style is refused.
+ */
+
 // lahe style add and lahe style list.
 // Owner: Style switcher 1.2. See docs/features/20260930.01_style_switcher/,
 // architecture "Key Flows", Install.

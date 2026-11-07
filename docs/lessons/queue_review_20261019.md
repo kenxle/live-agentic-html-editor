@@ -1,3 +1,7 @@
+---
+read-when: Reviewing the lessons and CLAUDE.md rules proposed at the close of the linked folder work.
+---
+
 # Lessons queue and CLAUDE.md proposals
 
 Close-out of the linked folder work. Six proposed lessons are waiting, and there are three proposed rules for CLAUDE.md. Each needs your call: comment on its section. My recommendation is in each one.

@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+/*
+ * read-when: Counting the stored records that are oversized in the review logs on this machine.
+ */
+
 // How many stored records are oversized today, per cause, and how many bytes
 // that costs. READ-ONLY: it opens every review log for reading and writes one
 // CSV under /private/tmp. It never writes, moves or rewrites a log.

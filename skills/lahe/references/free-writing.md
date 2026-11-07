@@ -1,3 +1,7 @@
+---
+read-when: An item carries new blocks, removed blocks or a proofread request.
+---
+
 # Place new writing and proofreading
 
 Read this when an item has `new_blocks`, `remove_blocks` or `proofread`.

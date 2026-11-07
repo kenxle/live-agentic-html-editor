@@ -1,3 +1,7 @@
+---
+read-when: Checking the integrated choice buttons branch against the brief, architecture and plan.
+---
+
 # Requirements check: choice buttons
 
 An independent check of the integrated branch `feat/choice-buttons` against the brief (R1 to R19, AI Behavior, Non-Goals), the architecture and the plan. Read-only: nothing was edited, and the browser suite was not run.

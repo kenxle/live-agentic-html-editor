@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how comment highlights are painted, or when a highlight is missing or alters the page.
+ */
+
 // Highlights that do not change the page, and the library's one contact
 // surface with the page's own document.
 //

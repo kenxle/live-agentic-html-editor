@@ -1,3 +1,7 @@
+---
+read-when: Read when you want to know what the human-review tool does on its agent and server side, as research for the design.
+---
+
 # human-review: agent-facing and server-facing feature spec
 
 Extracted read-only from the `petergyang/human-review` clone at

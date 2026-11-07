@@ -1,3 +1,5 @@
+// read-when: Changing the shared text normalizer in src/shared/normalize.js, or when anything that imports it breaks.
+
 // The one normalizer. These tests are the reason four other tasks are allowed
 // to import it without arguing about it.
 

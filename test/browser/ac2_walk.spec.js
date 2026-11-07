@@ -1,3 +1,7 @@
+/*
+read-when: Changing the dev-server acceptance walk, or when the library on a morphing multi-page app changes what a click does.
+*/
+
 // AC2, Ken's dev-server story, as a script. Ranked test 39, second of three.
 //
 // The criterion, word for word:

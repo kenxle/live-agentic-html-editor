@@ -1,3 +1,5 @@
+// read-when: Changing the menu bar app's build recipe, login item or rebuild tick (src/service/menubar.js), or when its tests fail.
+
 // The menu bar app's build recipe, login item and rebuild tick
 // (src/service/menubar.js; menu bar plan V21 to V25).
 //

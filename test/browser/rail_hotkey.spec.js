@@ -1,3 +1,7 @@
+/*
+read-when: Changing the chord that opens and closes the rail, or when the keyboard toggle misbehaves.
+*/
+
 // Cmd-Shift-1: opening and closing the review panel without the mouse.
 //
 // Ken: "we need a hotkey to toggle the rail. Ideally left hand only, that

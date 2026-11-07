@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the event log or the helper log, or tracing which check refused a request.
+ */
+
 // events.jsonl: the append-only log, and the helper's own log.
 //
 // Owner: 1A. Architecture D5 (durability is browser storage plus an append-only

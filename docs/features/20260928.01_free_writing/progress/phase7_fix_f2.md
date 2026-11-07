@@ -1,3 +1,7 @@
+---
+read-when: Read when you want what was fixed in the replay side of the free writing review fixes, or the test that proves each fix.
+---
+
 # Phase 7, fix round F2 (replay): progress
 
 **Summary.** Every F2 finding is fixed on `free-writing-f2`, except the parts FIX_ROUND.md gives to other groups (listed below). `npm run gate:unit` is green: 1724 tests, 1722 pass, 0 fail, 2 todo (the base's 2). The named Chromium specs pass: 115 tests across ten files, with one flake in `no_duplicate_text` that passed alone and three times on repeat. `dist/` was rebuilt locally for the seams and old specs, then put back; it is not committed. No screenshots: nothing drawn on screen changed.

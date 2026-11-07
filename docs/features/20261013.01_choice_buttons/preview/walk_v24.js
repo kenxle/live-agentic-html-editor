@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// read-when: Walking the whole choice press loop once through a preview helper.
+//
 // The whole loop, walked once (plan Task 4.4, verification row V24).
 //
 //   1. Serve a copy of the choice fixture through the PREVIEW helper (the

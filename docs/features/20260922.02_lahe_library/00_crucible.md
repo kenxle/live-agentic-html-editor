@@ -1,3 +1,7 @@
+---
+read-when: Read when you want to know why the Library was chosen as the way to list reviewed documents, and which alternatives were weighed.
+---
+
 # Crucible: LAHE Library
 
 Date: 2026-09-22

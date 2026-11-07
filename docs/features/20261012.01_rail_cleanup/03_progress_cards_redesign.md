@@ -1,3 +1,7 @@
+---
+read-when: Changing how rail cards look as a chat of reviewer and agent bubbles.
+---
+
 # Thread cards, redesigned
 
 **Summary.** The cards in the review rail now read like a chat. Your words sit on the right in a tinted bubble. The agent's words sit on the left in a plain bubble. Each bubble has one small caption above it with the name and the time. The agent's changed files are behind a hover on its name. A long thread folds its older messages behind one "Show earlier messages" line. A card you have read no longer says "1 new" when you fold it again.

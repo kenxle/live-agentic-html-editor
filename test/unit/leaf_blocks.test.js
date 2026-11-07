@@ -1,3 +1,5 @@
+// read-when: Changing the string block reader or the run matcher in the replay walk, or when its tests fail.
+
 // The string block reader and the run matcher (free-writing architecture,
 // Replay after a rebuild: "The walk", "Where the walk stops", and the
 // presence table's first row).

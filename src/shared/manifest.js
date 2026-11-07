@@ -1,3 +1,7 @@
+/*
+ * read-when: Adding a file under src or changing the order the layer bundle is built in.
+ */
+
 // The file manifest: one owner per file, and the bundle's concatenation order.
 //
 // Owner: 0A-kernel, and FROZEN AT CP0. Read by scripts/build-layer.js,

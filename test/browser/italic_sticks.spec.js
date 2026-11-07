@@ -1,3 +1,7 @@
+/*
+read-when: Changing how removing italics survives a reload, or when taken-off italics come back.
+*/
+
 // Taking italics off a paragraph sticks after the reload.
 //
 // The report, review r88dec64b8451 on 2026-09-22: "using the italics button

@@ -1,3 +1,6 @@
+// read-when: Changing Present mode's chord or how the choice is remembered, or when its tests fail.
+// not-for: What Present mode does on screen; see test/browser/present_mode.spec.js.
+
 // Present mode, without a browser: the chord, and the choice being remembered.
 //
 // The on-screen half (the surface going display:none, the washes emptying, the

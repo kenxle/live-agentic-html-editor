@@ -1,3 +1,7 @@
+/*
+read-when: Changing the takeover button for a refused window, or when a taken-over review cannot be used.
+*/
+
 // The takeover walk: the real boot, the real button, a live holder.
 //
 // Born from the first real use (2026-08-14). Ken's window was refused while a

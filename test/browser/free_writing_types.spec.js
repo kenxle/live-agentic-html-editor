@@ -1,3 +1,7 @@
+/*
+read-when: Changing block types, the bar's menu, hotkeys or lists in free writing, or when a block type lands wrongly.
+*/
+
 // Free writing, plan Task 2.2: block types, the bar's menu, hotkeys, lists,
 // and the ceiling.
 //

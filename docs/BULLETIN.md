@@ -1,3 +1,7 @@
+---
+read-when: Finding or claiming work on the repo's task board, or recording a loose end.
+---
+
 # lahe board
 
 Internal task board for this repo. Append-only, newest first; see rows for

@@ -1,3 +1,7 @@
+/*
+ * read-when: Lint reports a function declared twice at a file's top level, or you are changing that check.
+ */
+
 // Lint check 1b: a function declared twice at a file's top level.
 //
 // Compiled, never run: the file's text goes inside a strict-mode block inside a

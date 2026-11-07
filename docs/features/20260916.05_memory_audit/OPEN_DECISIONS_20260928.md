@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the decisions still waiting on Ken from the performance and token work, such as the wake banner an agent sees.
+---
+
 # What I still need from you
 
 **Project:** LAHE, the live agentic HTML editor. **Feature:** the performance and token work (the memory audit), which began 2026-09-16 after Claude Code kept stopping LAHE monitors for low memory. Its hub is [the memory audit page](MEMORY_AUDIT_20260916.md).

@@ -1,3 +1,8 @@
+---
+read-when: Read only to see what reviewers said about the first, discarded architecture draft.
+not-for: The current architecture reviews; see 02_architecture_live_agentic_html_editor_reviews.md.
+---
+
 # Architecture reviews
 
 Both reviewers read the brief, the PM review, the three research files on the tool being replaced, and

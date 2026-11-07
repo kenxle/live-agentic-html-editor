@@ -1,3 +1,7 @@
+---
+read-when: Building or restyling anything a person sees, such as color, type, spacing or components.
+---
+
 # Style guide
 
 ## Charter

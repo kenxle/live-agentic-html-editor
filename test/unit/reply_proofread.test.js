@@ -1,3 +1,5 @@
+// read-when: Changing `lahe reply --proofread --suggest`, or when its tests fail.
+
 // `lahe reply --proofread --suggest <block> <from> <to>` (free-writing plan
 // Task 2.12, architecture "The proofreading reply").
 //

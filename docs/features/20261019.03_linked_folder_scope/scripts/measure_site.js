@@ -1,3 +1,5 @@
+// read-when: Walking a real Lahe site and listing every file its pages reference under a source mount.
+//
 // Walk a real Lahe site the way a reviewer's browser would, and list every
 // file the rendered pages reference under a /.lahe-source/ mount.
 //

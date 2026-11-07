@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing where the helper keeps its files and the rules on that folder, or when it refuses a state directory.
+ */
+
 // The state directory: where the helper keeps everything, and the rules that
 // keep it from being talked into writing somewhere else.
 //

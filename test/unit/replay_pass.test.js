@@ -1,3 +1,6 @@
+// read-when: Changing replay's branches and counters at the pass level (src/layer/replay.js), or when its tests fail.
+// not-for: Replay against a real page that reverts the tool's writes; see test/browser/replay_branches.spec.js.
+
 // Replay's four branches at the PASS level, over a simulated DOM.
 //
 // Owner: 2C. The browser half of the same bar is test/browser/replay_branches.spec.js

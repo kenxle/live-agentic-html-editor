@@ -1,3 +1,5 @@
+// read-when: Changing what an agent is told about reworded or older cards, or when an agent refuses a reworded item as stale, or when its tests fail.
+
 // The staleness excuse: an agent refusing a reworded item because its card was
 // created yesterday.
 //

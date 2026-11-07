@@ -1,3 +1,7 @@
+---
+read-when: Building or checking the core workstream, where the helper serves every page itself.
+---
+
 ### Workstream: core (Steps 1 to 3)
 
 **Outcome:** the helper serves every page Lahe serves itself, at `<name>.lahe.localhost:<port>/<path>`, with today's paths and rail rules, and no per-session page-server process.

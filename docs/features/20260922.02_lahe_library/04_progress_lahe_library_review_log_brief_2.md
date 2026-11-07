@@ -1,3 +1,8 @@
+---
+read-when: "Read only for the log of Ken's second review on the Library brief, architecture and wireframes."
+not-for: The brief itself; see 01_brief_lahe_library.md.
+---
+
 # Review log: rff27faca1192
 
 **Pages reviewed:** /01_brief_lahe_library.html, /02_architecture_lahe_library.html, /wireframes/a-by-day/index.html, /wireframes/b-nested/index.html, /wireframes/c-projects/index.html

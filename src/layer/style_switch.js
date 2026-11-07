@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the page side of the style switcher, or when a previewed style does not apply or stick.
+ */
+
 // The document style switcher, page side: try an installed style on this page
 // with no reload, keep the choice per page, and know when the agent has been
 // asked to make it permanent.

@@ -1,3 +1,7 @@
+---
+read-when: Changing how an edit finds the right element on a page, or when a comment lands on the wrong element.
+---
+
 # How a Live Agentic HTML Editor (Lahe) Identifies the Correct DOM Elements for Editing, aka Fingerprinting
 
 **Status: living document.**

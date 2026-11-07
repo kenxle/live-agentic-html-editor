@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing the item states and who may move an item between them.
+ */
+
 // The item lifecycle transition table, and who may make each transition.
 //
 // Owner: 0A-kernel. Imported by: the store (1B), the helper's projection (3A),

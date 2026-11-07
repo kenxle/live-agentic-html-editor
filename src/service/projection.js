@@ -1,3 +1,8 @@
+/*
+ * read-when: Changing how the event log folds into review state and review.json, or when review state looks wrong.
+ * not-for: The exact bytes of review.json; see src/shared/review_format.js.
+ */
+
 // The projection: the append-only log read back into the current state of a
 // review, and from there into `review.json` and into the reply state the
 // library polls.

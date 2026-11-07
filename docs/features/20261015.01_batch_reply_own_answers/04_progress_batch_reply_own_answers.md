@@ -1,3 +1,7 @@
+---
+read-when: Finding what the batch reply change shipped and how its cost was measured.
+---
+
 # Progress: Batch reply and own answers
 
 **Done.** The drain no longer hands the agent its own earlier answers, and `lahe reply --batch` answers many items in one command. Nothing is waiting on you. Shipped in [PR #70](https://github.com/kenxle/live-agentic-html-editor/pull/70). Last updated 2026-10-17 12:35.

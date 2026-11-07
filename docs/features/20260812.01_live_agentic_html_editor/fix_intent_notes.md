@@ -1,3 +1,7 @@
+---
+read-when: Read when changing how reviewer intent is kept apart from page data, or how agent names are bounded.
+---
+
 # fix-intent notes (D12 data-vs-intent path)
 
 Owner: fix-intent worktree, branch `task/fix-intent`.

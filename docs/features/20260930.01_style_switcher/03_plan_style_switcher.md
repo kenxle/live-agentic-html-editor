@@ -1,3 +1,7 @@
+---
+read-when: Seeing how the style switcher work was split into slices, tasks and builders.
+---
+
 # Plan: Style switcher
 
 Two slices, landed as two pull requests in order. The first makes installed styles real: install, serve, render. It works on its own, since a style line an agent writes by hand then shows. The second adds the rail's Document style panel and the keep request, which need the first. Verification rows are cited as V1, V2 and so on; each is defined once, in the [Test List](#test-list).

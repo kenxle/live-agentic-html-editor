@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the phases of the release-hardening work and what each was to fix.
+---
+
 # Release-hardening plan
 
 ## Phase 1: correctness and dead-code cleanup

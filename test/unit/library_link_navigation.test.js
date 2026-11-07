@@ -1,3 +1,5 @@
+// read-when: Changing how a top-level navigation to the Library page is allowed or refused by Fetch Metadata headers, or when its tests fail.
+
 // Any top-level navigation to the Library page opens it: a link in a document
 // or an email, a bookmark, a typed address, from any site. The browser says so
 // with Sec-Fetch-Mode navigate and Sec-Fetch-Dest document, whatever

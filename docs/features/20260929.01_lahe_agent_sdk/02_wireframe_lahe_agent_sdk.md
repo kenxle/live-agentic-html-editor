@@ -1,3 +1,7 @@
+---
+read-when: Read when you want the written wireframe notes and the three auto-answer control directions.
+---
+
 # Wireframe: LAHE starts your agent when a comment is ready
 
 Date: 2026-09-29

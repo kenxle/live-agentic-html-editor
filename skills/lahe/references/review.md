@@ -1,3 +1,7 @@
+---
+read-when: Starting a review of a page, folder or Markdown file, or draining and watching it.
+---
+
 # Start and watch a review
 
 ## Get ready and serve the page

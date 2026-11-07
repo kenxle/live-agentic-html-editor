@@ -1,3 +1,7 @@
+/*
+ * read-when: Changing how pandoc renders Markdown, or when a page shows fenced divs as plain text.
+ */
+
 // Pandoc, when the machine has it, renders Markdown for review.
 //
 // WHY PANDOC. The feature-forge and research-report builds turn Markdown into

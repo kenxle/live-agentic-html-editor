@@ -1,3 +1,5 @@
+// read-when: Changing `lahe library serve <request-id>`, which serves a pickup row's path safely, or when its tests fail.
+
 "use strict";
 
 // `lahe library serve <request-id> --session <id>` (Library fix round, SEC2).

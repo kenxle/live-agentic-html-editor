@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+/*
+ * read-when: Changing what npm run lint checks, or when lint fails on a rule that is not plain syntax.
+ */
+
 // The lint gate. Zero dependencies, five checks, and it runs all of them before
 // it exits so one failure does not hide the others.
 //

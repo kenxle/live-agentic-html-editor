@@ -1,3 +1,7 @@
+/*
+read-when: Changing the rail's one status line about stored work and replies, or when it claims an agent is reading that is not.
+*/
+
 // The rail's one status line: is my work stored, and has anything come back?
 //
 // This is the surface that exists because a chat can lie. An agent reported

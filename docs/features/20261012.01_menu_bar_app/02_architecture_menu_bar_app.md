@@ -1,3 +1,7 @@
+---
+read-when: Changing the helper's summary answer or how the Mac app is built and installed, or tracing the menu bar design.
+---
+
 # Architecture: Menu bar app
 
 ## Summary

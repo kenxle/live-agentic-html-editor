@@ -1,3 +1,7 @@
+---
+read-when: Read when you want to know where the editor stood before release and what the readiness audit found lacking.
+---
+
 # Release-readiness audit
 
 Date: 2026-08-18

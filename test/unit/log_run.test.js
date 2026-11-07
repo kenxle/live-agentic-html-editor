@@ -1,3 +1,5 @@
+// read-when: Changing how the helper checks and stores a run record at append, or when a forged run event gets through, or when its tests fail.
+
 // The helper's check on a run record, at append (free-writing plan Task 2.8).
 //
 // A forged run event is refused with its code and never reaches events.jsonl

@@ -1,3 +1,7 @@
+---
+read-when: Read when changing install, the add command or the first-run flow, or when first-time setup misbehaves.
+---
+
 # 3B builder notes: install, add, and first-run
 
 Branch `task/3b`, worktree `../lahe-worktrees/3b`, cut after CP2. Everything below was run with Node

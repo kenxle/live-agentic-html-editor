@@ -1,3 +1,7 @@
+/*
+read-when: Changing comment creation, element pick, the untethered note or highlights, or when the page renders differently with the library on.
+*/
+
 // 1D: comments, element-pick, the untethered note, and the highlights that do
 // not change the page.
 //

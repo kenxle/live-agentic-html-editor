@@ -1,3 +1,7 @@
+/*
+read-when: Changing how highlights repaint after a reload, or when an outstanding comment is not tinted on the page.
+*/
+
 // Highlights after a reload.
 //
 // Found by a real-browser walker on 2026-08-14. Comment on a passage of a static

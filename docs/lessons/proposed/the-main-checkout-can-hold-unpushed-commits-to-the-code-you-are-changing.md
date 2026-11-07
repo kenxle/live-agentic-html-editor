@@ -1,4 +1,5 @@
 ---
+read-when: Before and after numbers look wrong, or a worktree branch rebases into a conflict nobody caused.
 title: The main checkout can hold unpushed commits to the code you are changing
 category: process
 symptoms: [old code gives numbers that make no sense, before and after comparison looks wrong, "main is ahead of origin/main", rebase conflict in a file nobody else touched, worktree branch off origin/main misses a fix, two fixes for the same bug]

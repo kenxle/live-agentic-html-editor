@@ -1,3 +1,7 @@
+---
+read-when: Asking what Lahe is, who it is for and which principles hold for every feature.
+---
+
 # Product brief
 
 ## Charter

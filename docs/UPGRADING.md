@@ -1,3 +1,7 @@
+---
+read-when: Moving an existing Lahe install to a newer version, or when an upgrade breaks addresses.
+---
+
 # Upgrading
 
 ## From 0.2 to 0.3: stable addresses

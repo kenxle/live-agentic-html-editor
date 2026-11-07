@@ -1,3 +1,7 @@
+---
+read-when: Finding where the rail cleanup stands, which pull requests landed and what is left.
+---
+
 # Progress: Rail cleanup
 
 **Closed.** Ten pull requests (#49 through #58) cleaned up the rail from Ken's comments on a mockup of it, and all are merged to main with a green full gate after the last one. Nothing is waiting on you. Last updated 2026-10-13 09:28.

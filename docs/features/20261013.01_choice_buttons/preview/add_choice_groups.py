@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Rebuild the lesson queue with a choice group under every lesson (plan Task 4.3).
+"""
+read-when: Rebuilding a lesson queue page with a choice group under each lesson.
+
+Rebuild the lesson queue with a choice group under every lesson (plan Task 4.3).
 
 Reads a lesson-queue Markdown page of the shape the lessons skill writes: a
 `### <lesson title>` heading, a paragraph or two, a line starting with

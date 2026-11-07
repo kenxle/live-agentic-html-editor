@@ -1,3 +1,7 @@
+/*
+read-when: Changing End review on the rail and what it does with unfinished work, or when ending a review loses a keystroke or an edit.
+*/
+
 // End review: the door on the rail, and what pressing it actually does.
 //
 // D10 has said since the architecture was written that a review ends when the
