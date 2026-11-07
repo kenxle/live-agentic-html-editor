@@ -1683,7 +1683,7 @@
       // The two buttons
       // ----------------------------------------------------------------------
 
-      /** Send: the Cmd-Enter path, called by the key and by the button alike. */
+      /** Send: the send key's path, called by the key and by the button alike. */
       function commitFromControl() {
         var next = markReady();
         // A box has done its job and goes. A session in a card's own note stays
@@ -1710,8 +1710,8 @@
       }
 
       /**
-       * Send is offered only when there is something to send. The keyboard path
-       * is untouched: Cmd-Enter does what it has always done.
+       * Send is offered only when there is something to send, and the send key
+       * agrees: in an empty box it does nothing.
        */
       function paintSendable() {
         if (!sendEl) return null;
@@ -1742,6 +1742,9 @@
         });
         if (got.gesture === gestures.GESTURE.MARK_READY) {
           if (got.preventDefault) event.preventDefault();
+          // Nothing to send, so the key does what the disabled Send button
+          // does: nothing. Enter is easy to hit by reflex in a fresh box.
+          if (!readInput().trim()) return;
           // The very function the Send button calls. The card's own note stays
           // where it is with the reviewer still in it: they are looking at the
           // words they just committed, and typing on is the next rewording.
@@ -2676,7 +2679,7 @@
       node.setAttribute("data-lahe-note-editor", "");
       node.setAttribute("role", "textbox");
       node.setAttribute("aria-multiline", "true");
-      node.setAttribute("aria-label", "Your comment. " + hintReady(store.readSendKey()));
+      node.setAttribute("aria-label", noteLabel());
       node.setAttribute("spellcheck", "false");
       entry.off.push(
         listenOn(node, "focus", function () {
@@ -2709,6 +2712,18 @@
       });
       delete noteEditors[id];
       return true;
+    }
+
+    // The words a card announces, for the reviewer's send key. Set when the
+    // card is built, and again when the reviewer changes the key.
+    function noteLabel() {
+      return "Your comment. " + hintReady(store.readSendKey());
+    }
+
+    function refreshSendKeyLabels() {
+      eachNoteEditor(function (entry) {
+        entry.node.setAttribute("aria-label", noteLabel());
+      });
     }
 
     function eachNoteEditor(fn) {
@@ -3359,6 +3374,7 @@
       PILL_CLASS: PILL_CLASS,
       POPOVER_KEYS: POPOVER_KEYS,
       hintReady: hintReady,
+      refreshSendKeyLabels: refreshSendKeyLabels,
       setReview: setReview,
       setPage: setPage,
       onChange: onChange,

@@ -1077,13 +1077,6 @@
     "color:#fff;font-size:11.5px;font-weight:500;line-height:1.4;text-align:left;white-space:normal;" +
     "letter-spacing:0;text-transform:none;box-shadow:0 6px 18px rgba(0,0,0,.25);z-index:10;pointer-events:none}";
 
-  /**
-   * Label one send button for the Hold state.
-   *
-   * @param {Element} button a button carrying SEND_ATTR
-   * @param {boolean} held whether Hold is on for this review
-   * @param {string} [label] the button's own word when not held ("Send" by default)
-   */
   // The send key the tip names: the reviewer's setting, which the rail sets at
   // boot and again when the reviewer changes it.
   var sendTip = SEND_WORDS.TIP;
@@ -1093,6 +1086,13 @@
     return sendTip;
   }
 
+  /**
+   * Label one send button for the Hold state.
+   *
+   * @param {Element} button a button carrying SEND_ATTR
+   * @param {boolean} held whether Hold is on for this review
+   * @param {string} [label] the button's own word when not held ("Send" by default)
+   */
   function paintSendButton(button, held, label) {
     if (!button) return;
     if (label) button.setAttribute("data-lahe-label", label);

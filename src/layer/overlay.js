@@ -2253,6 +2253,7 @@
     // wants to (data-lahe-start="hidden", which boot passes in).
     var presenting = opts.present === true || readPresentPreference();
     var presentHandlers = [];
+    var sendKeyHandlers = [];
     // How wide the reviewer dragged the rail, or null while they have left it
     // at its default. Held UNCLAMPED: the clamp belongs to the viewport that is
     // on screen right now, and a window dragged narrow and then wide again
@@ -6370,6 +6371,13 @@
       var next = store && typeof store.writeSendKey === "function" ? store.writeSendKey(key) : gestures.normalizeSendKey(key);
       renderShortcuts();
       repaintHoldChrome();
+      sendKeyHandlers.slice().forEach(function (fn) {
+        try {
+          fn(next);
+        } catch (err) {
+          // One listener failing must not stop the rest hearing it.
+        }
+      });
       return next;
     }
 
@@ -6381,6 +6389,8 @@
       closeMenu(false);
       closeStylePanel(false);
       closePdfTray(false);
+      // Drawn fresh: another window of this document may have changed the key.
+      renderShortcuts();
       shortcutsOpen = true;
       dom.keysPanel.setAttribute("data-shown", "open");
       shortcutsOutsideListener = function (event) {
@@ -7350,6 +7360,15 @@
     }
 
     /** Tell me when the library is hidden or brought back. Returns an unsubscribe. */
+    function onSendKey(fn) {
+      if (typeof fn !== "function") throw new TypeError("onSendKey: a function is required");
+      sendKeyHandlers.push(fn);
+      return function () {
+        var at = sendKeyHandlers.indexOf(fn);
+        if (at !== -1) sendKeyHandlers.splice(at, 1);
+      };
+    }
+
     function onPresent(fn) {
       if (typeof fn !== "function") throw new TypeError("onPresent: a function is required");
       presentHandlers.push(fn);
@@ -8579,6 +8598,7 @@
       setPresenting: setPresenting,
       isPresenting: isPresenting,
       onPresent: onPresent,
+      onSendKey: onSendKey,
       // The rail's width, and the room everything else leaves for it.
       width: width,
       setWidth: setRailWidth,

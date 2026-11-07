@@ -411,7 +411,7 @@ work.
 | `page.visited` | First visit to an origin plus pathname. Carries the page title and `page_seq` |
 | `item.created` | The reviewer started a comment or an edit |
 | `item.content` | A content change, **including every draft keystroke batch** |
-| `item.ready` | Cmd-Enter, or an edit committing. Only ready items are actionable |
+| `item.ready` | sending a comment (Enter, or Cmd-Enter by setting), or an edit committing. Only ready items are actionable |
 | `item.deleted` | The reviewer deleted their own outstanding work |
 | `item.reopened` | `handled` back to `ready` (R38) |
 | `item.closed` | `{item, rev}`, no record. The reviewer chose "Mark as done" on the card's state chip. The projection moves the item to `handled` with `closed_by: "reviewer"` only when it is still `ready` or `not_handled` at exactly that `rev`; a stale or misplaced close is dropped and reported, like a stale reply. The page check never runs on it, and every later reply to the item is refused. review.json shows it as `closed_by_reviewer: true` |
@@ -444,7 +444,7 @@ and how much of a sentence a `kill -9` mid-draft can cost (`protocol.FLUSH`):
   holds back an item only when every event it has queued is a draft, so a ready never goes ahead of
   its own older draft. The floor is a deadline from the item's last draft post.
 - **Immediately, past the draft floor, on** leaving the box (`blur`), hiding the tab (`hide`),
-  navigation, and unload. **Immediately on** Cmd-Enter (`ready`), for that item; other items' drafts
+  navigation, and unload. **Immediately on** sending (`ready`), for that item; other items' drafts
   keep their floor. A request that arrives while a post is in flight is remembered and runs the
   moment that post finishes. Hold still gates all of these except releasing Hold and ending a review.
 

@@ -185,6 +185,15 @@ test("isSendPress is the same rule for the rail's own message boxes", () => {
   assert.equal(gestures.isSendPress({ key: "Enter", metaKey: true }), true);
 });
 
+test("isSendEvent reads a real keydown, including Safari's input-method code", () => {
+  assert.equal(gestures.isSendEvent({ key: "Enter" }), true);
+  assert.equal(gestures.isSendEvent({ key: "Enter", keyCode: 229 }), false);
+  assert.equal(gestures.isSendEvent({ key: "Enter", isComposing: true }), false);
+  assert.equal(gestures.isSendEvent({ key: "Enter", shiftKey: true }), false);
+  assert.equal(gestures.isSendEvent({ key: "Enter" }, "mod_enter"), false);
+  assert.equal(gestures.isSendEvent({ key: "Enter", ctrlKey: true }, "mod_enter"), true);
+});
+
 test("the send key's words follow the setting", () => {
   assert.equal(gestures.normalizeSendKey(undefined), gestures.SEND_KEY.ENTER);
   assert.equal(gestures.normalizeSendKey("nonsense"), gestures.SEND_KEY.ENTER);

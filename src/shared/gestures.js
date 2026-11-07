@@ -376,9 +376,6 @@
         return decide(GESTURE.NONE, true, false, "a new line in the comment box, or an input method finishing a character");
       }
       if (e.key === "Enter" && mod) {
-        if (e.inCommentBox === true) {
-          return decide(GESTURE.MARK_READY, false, true, "Cmd-Enter marks this comment ready for the agent (R7)");
-        }
         if (e.editing === true) {
           return decide(GESTURE.COMMIT_EDIT, false, true, "Cmd-Enter commits the open edit and gives the block back to the page");
         }
