@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.4.0+fed5ce9dba7d
+ * version 0.4.0+d9474bb84a4d
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.4.0+fed5ce9dba7d";
+  g.LAHE.version = "0.4.0+d9474bb84a4d";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -7165,9 +7165,6 @@
         return decide(GESTURE.NONE, true, false, "a new line in the comment box, or an input method finishing a character");
       }
       if (e.key === "Enter" && mod) {
-        if (e.inCommentBox === true) {
-          return decide(GESTURE.MARK_READY, false, true, "Cmd-Enter marks this comment ready for the agent (R7)");
-        }
         if (e.editing === true) {
           return decide(GESTURE.COMMIT_EDIT, false, true, "Cmd-Enter commits the open edit and gives the block back to the page");
         }
@@ -19100,13 +19097,6 @@
     "color:#fff;font-size:11.5px;font-weight:500;line-height:1.4;text-align:left;white-space:normal;" +
     "letter-spacing:0;text-transform:none;box-shadow:0 6px 18px rgba(0,0,0,.25);z-index:10;pointer-events:none}";
 
-  /**
-   * Label one send button for the Hold state.
-   *
-   * @param {Element} button a button carrying SEND_ATTR
-   * @param {boolean} held whether Hold is on for this review
-   * @param {string} [label] the button's own word when not held ("Send" by default)
-   */
   // The send key the tip names: the reviewer's setting, which the rail sets at
   // boot and again when the reviewer changes it.
   var sendTip = SEND_WORDS.TIP;
@@ -19116,6 +19106,13 @@
     return sendTip;
   }
 
+  /**
+   * Label one send button for the Hold state.
+   *
+   * @param {Element} button a button carrying SEND_ATTR
+   * @param {boolean} held whether Hold is on for this review
+   * @param {string} [label] the button's own word when not held ("Send" by default)
+   */
   function paintSendButton(button, held, label) {
     if (!button) return;
     if (label) button.setAttribute("data-lahe-label", label);
@@ -22378,6 +22375,7 @@
     // wants to (data-lahe-start="hidden", which boot passes in).
     var presenting = opts.present === true || readPresentPreference();
     var presentHandlers = [];
+    var sendKeyHandlers = [];
     // How wide the reviewer dragged the rail, or null while they have left it
     // at its default. Held UNCLAMPED: the clamp belongs to the viewport that is
     // on screen right now, and a window dragged narrow and then wide again
@@ -26495,6 +26493,13 @@
       var next = store && typeof store.writeSendKey === "function" ? store.writeSendKey(key) : gestures.normalizeSendKey(key);
       renderShortcuts();
       repaintHoldChrome();
+      sendKeyHandlers.slice().forEach(function (fn) {
+        try {
+          fn(next);
+        } catch (err) {
+          // One listener failing must not stop the rest hearing it.
+        }
+      });
       return next;
     }
 
@@ -26506,6 +26511,8 @@
       closeMenu(false);
       closeStylePanel(false);
       closePdfTray(false);
+      // Drawn fresh: another window of this document may have changed the key.
+      renderShortcuts();
       shortcutsOpen = true;
       dom.keysPanel.setAttribute("data-shown", "open");
       shortcutsOutsideListener = function (event) {
@@ -27475,6 +27482,15 @@
     }
 
     /** Tell me when the library is hidden or brought back. Returns an unsubscribe. */
+    function onSendKey(fn) {
+      if (typeof fn !== "function") throw new TypeError("onSendKey: a function is required");
+      sendKeyHandlers.push(fn);
+      return function () {
+        var at = sendKeyHandlers.indexOf(fn);
+        if (at !== -1) sendKeyHandlers.splice(at, 1);
+      };
+    }
+
     function onPresent(fn) {
       if (typeof fn !== "function") throw new TypeError("onPresent: a function is required");
       presentHandlers.push(fn);
@@ -28704,6 +28720,7 @@
       setPresenting: setPresenting,
       isPresenting: isPresenting,
       onPresent: onPresent,
+      onSendKey: onSendKey,
       // The rail's width, and the room everything else leaves for it.
       width: width,
       setWidth: setRailWidth,
@@ -40606,7 +40623,7 @@
       // The two buttons
       // ----------------------------------------------------------------------
 
-      /** Send: the Cmd-Enter path, called by the key and by the button alike. */
+      /** Send: the send key's path, called by the key and by the button alike. */
       function commitFromControl() {
         var next = markReady();
         // A box has done its job and goes. A session in a card's own note stays
@@ -40633,8 +40650,8 @@
       }
 
       /**
-       * Send is offered only when there is something to send. The keyboard path
-       * is untouched: Cmd-Enter does what it has always done.
+       * Send is offered only when there is something to send, and the send key
+       * agrees: in an empty box it does nothing.
        */
       function paintSendable() {
         if (!sendEl) return null;
@@ -40665,6 +40682,9 @@
         });
         if (got.gesture === gestures.GESTURE.MARK_READY) {
           if (got.preventDefault) event.preventDefault();
+          // Nothing to send, so the key does what the disabled Send button
+          // does: nothing. Enter is easy to hit by reflex in a fresh box.
+          if (!readInput().trim()) return;
           // The very function the Send button calls. The card's own note stays
           // where it is with the reviewer still in it: they are looking at the
           // words they just committed, and typing on is the next rewording.
@@ -41599,7 +41619,7 @@
       node.setAttribute("data-lahe-note-editor", "");
       node.setAttribute("role", "textbox");
       node.setAttribute("aria-multiline", "true");
-      node.setAttribute("aria-label", "Your comment. " + hintReady(store.readSendKey()));
+      node.setAttribute("aria-label", noteLabel());
       node.setAttribute("spellcheck", "false");
       entry.off.push(
         listenOn(node, "focus", function () {
@@ -41632,6 +41652,18 @@
       });
       delete noteEditors[id];
       return true;
+    }
+
+    // The words a card announces, for the reviewer's send key. Set when the
+    // card is built, and again when the reviewer changes the key.
+    function noteLabel() {
+      return "Your comment. " + hintReady(store.readSendKey());
+    }
+
+    function refreshSendKeyLabels() {
+      eachNoteEditor(function (entry) {
+        entry.node.setAttribute("aria-label", noteLabel());
+      });
     }
 
     function eachNoteEditor(fn) {
@@ -42282,6 +42314,7 @@
       PILL_CLASS: PILL_CLASS,
       POPOVER_KEYS: POPOVER_KEYS,
       hintReady: hintReady,
+      refreshSendKeyLabels: refreshSendKeyLabels,
       setReview: setReview,
       setPage: setPage,
       onChange: onChange,
@@ -54150,7 +54183,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.4.0+fed5ce9dba7d";
+  var VERSION = "0.4.0+d9474bb84a4d";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -55110,6 +55143,11 @@
       editing.bind({ page: page });
       if (tab && typeof tab.ensureNoteBox === "function") tab.ensureNoteBox();
     }
+
+    // A card announces the send key, so it hears when the reviewer changes it.
+    rail.onSendKey(function () {
+      comments.refreshSendKeyLabels();
+    });
 
     rail.onPresent(function (presenting) {
       applyPresent(presenting);
