@@ -1947,10 +1947,16 @@
     // would hide a regression in that race rather than reporting it. Replay's
     // own writes never land here, because schedule() refuses while the write
     // epoch is open.
+    //
+    // The batch goes to replay's gate rather than straight to schedule: a batch
+    // made only of changes inside an svg, a canvas, a script or a style (a live
+    // chart redrawing on hover) arms one quiet pass instead of a pass per
+    // frame. Any other batch reaches schedule exactly as before. See
+    // replay.noteMutations.
     var pageObserver = null;
     if (typeof win.MutationObserver === "function" && doc.body) {
-      pageObserver = new win.MutationObserver(function () {
-        ns.replay.schedule(ns.replay.REASON.MUTATION);
+      pageObserver = new win.MutationObserver(function (records) {
+        ns.replay.noteMutations(records);
       });
       pageObserver.observe(doc.body, { childList: true, characterData: true, subtree: true });
     }
@@ -2289,6 +2295,8 @@
         injector.teardown();
         if (pageObserver) pageObserver.disconnect();
         pageObserver = null;
+        // And the quiet pass it may have left held (replay.noteMutations).
+        ns.replay.cancelQuietPass();
         protect.uninstall();
         editing.teardown();
         zoom.teardown();

@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Live chart</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; margin: 2rem; max-width: 60rem; }
+    #chart-wrap { border: 1px solid #d8dee8; display: inline-block; }
+    #chart-wrap svg { display: block; }
+  </style>
+</head>
+<body>
+  <!--
+    A long page with a chart that redraws itself on every hover, the shape of
+    the Plotly page that hung (board row LAHE-mousemove-rereads-page-text).
+
+    The svg is unnamed on purpose: no id, no aria-label, no title, no text. An
+    element comment on it is anchored on its drawing, which is the expensive
+    signature. Every hover rewrites the hover layer INSIDE the svg, so the page
+    observer sees a childList mutation whose target is inside the svg.
+
+    Query knobs:
+      ?sections=N   how many sections of generated prose (default 20)
+      ?bars=N       how many bars the drawing has (default 120)
+      ?depth=N      wrap each section in N nested divs (default 0), for a
+                    page as deep as a generated tree view
+      ?hover=stuck  draw a hover label at load and leave it there until
+                    window.__chart.clearHover() is called
+
+    window.__chart is the test's handle:
+      redraws            how many hover redraws have run
+      hoverAt(i)         one redraw of the hover layer, for bar i
+      clearHover()       empty the hover layer (the drawing as it was at load)
+      redrawFrames(n)    n hover redraws, one per animation frame; resolves after
+      revertItem(id)     put a paragraph back to the text the page loaded with,
+                         which is what a framework re-render does to an edit
+      touchOutside(text) change the status line, a text change outside the svg
+      followMouse        false stops the mouse drawing the hover layer, so a
+                         pick on the svg mints the drawing as it loaded
+  -->
+  <main>
+    <h1>Quarterly notes</h1>
+    <p id="status">Status: idle</p>
+
+    <section id="todo-section">
+      <h2>What we are changing</h2>
+      <p id="todo-1">Move the weekly sync to Tuesday mornings so the west coast can join.</p>
+      <p id="todo-2">Retire the old dashboard once the new one has a month of clean numbers.</p>
+      <p id="todo-3">Write down who owns the release checklist before the next launch.</p>
+    </section>
+
+    <section id="chart-section">
+      <h2>Requests per day</h2>
+      <div id="chart-wrap"></div>
+    </section>
+
+    <section id="article"></section>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+      var params = new URLSearchParams(location.search);
+      var sections = Number(params.get("sections") || 20);
+      var bars = Number(params.get("bars") || 120);
+      var depth = Number(params.get("depth") || 0);
+      var NS = "http://www.w3.org/2000/svg";
+
+      // Prose, deterministic, every paragraph distinct.
+      var words = ("the team found that a slower rollout gave support more room to answer "
+        + "questions before they piled up and the numbers held steady through the second "
+        + "week while the old system kept running beside it for anyone who needed it").split(" ");
+      var seed = 7;
+      function next() {
+        seed = (seed * 1103515245 + 12345) % 2147483648;
+        return seed;
+      }
+      var article = document.getElementById("article");
+      for (var s = 0; s < sections; s += 1) {
+        var section = document.createElement("section");
+        var h = document.createElement("h2");
+        h.textContent = "Section " + (s + 1);
+        section.appendChild(h);
+        for (var p = 0; p < 10; p += 1) {
+          var para = document.createElement("p");
+          var out = ["Note " + (s + 1) + "." + (p + 1) + ":"];
+          for (var w = 0; w < 28; w += 1) out.push(words[next() % words.length]);
+          para.textContent = out.join(" ") + ".";
+          section.appendChild(para);
+        }
+        var holder = section;
+        for (var d = 0; d < depth; d += 1) {
+          var wrap = document.createElement("div");
+          wrap.appendChild(holder);
+          holder = wrap;
+        }
+        article.appendChild(holder);
+      }
+
+      // The drawing.
+      var width = 600;
+      var height = 240;
+      var svg = document.createElementNS(NS, "svg");
+      svg.setAttribute("width", String(width));
+      svg.setAttribute("height", String(height));
+      svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+      var plot = document.createElementNS(NS, "g");
+      plot.setAttribute("class", "plot");
+      var barWidth = width / bars;
+      for (var b = 0; b < bars; b += 1) {
+        var value = 20 + (next() % 200);
+        var rect = document.createElementNS(NS, "path");
+        var x = (b * barWidth).toFixed(2);
+        var y = (height - value).toFixed(2);
+        rect.setAttribute("d", "M" + x + "," + height + "V" + y + "H" + (b * barWidth + barWidth * 0.8).toFixed(2) + "V" + height + "Z");
+        rect.setAttribute("fill", "#3c56a5");
+        rect.setAttribute("data-bar", String(b));
+        plot.appendChild(rect);
+      }
+      svg.appendChild(plot);
+      var hover = document.createElementNS(NS, "g");
+      hover.setAttribute("class", "hoverlayer");
+      svg.appendChild(hover);
+      document.getElementById("chart-wrap").appendChild(svg);
+
+      var chart = { redraws: 0, followMouse: true };
+      var originals = {};
+      Array.prototype.forEach.call(document.querySelectorAll("#todo-section p"), function (el) {
+        originals[el.id] = el.textContent;
+      });
+
+      // What Plotly does on hover: throw the hover layer's children away and
+      // draw new ones.
+      chart.hoverAt = function (i) {
+        var index = ((i % bars) + bars) % bars;
+        while (hover.firstChild) hover.removeChild(hover.firstChild);
+        var label = document.createElementNS(NS, "g");
+        var box = document.createElementNS(NS, "path");
+        var x = index * barWidth;
+        box.setAttribute("d", "M" + x.toFixed(2) + ",10h60v24h-60Z");
+        box.setAttribute("fill", "#fff");
+        box.setAttribute("stroke", "#111");
+        label.appendChild(box);
+        var line = document.createElementNS(NS, "path");
+        line.setAttribute("d", "M" + x.toFixed(2) + ",34V" + height);
+        line.setAttribute("stroke", "#111");
+        label.appendChild(line);
+        hover.appendChild(label);
+        chart.redraws += 1;
+      };
+      chart.clearHover = function () {
+        while (hover.firstChild) hover.removeChild(hover.firstChild);
+      };
+      chart.redrawFrames = function (n) {
+        return new Promise(function (resolve) {
+          var left = n;
+          function step() {
+            if (left <= 0) {
+              resolve(chart.redraws);
+              return;
+            }
+            chart.hoverAt(n - left);
+            left -= 1;
+            requestAnimationFrame(step);
+          }
+          requestAnimationFrame(step);
+        });
+      };
+      chart.revertItem = function (id) {
+        document.getElementById(id).textContent = originals[id];
+      };
+      chart.touchOutside = function (text) {
+        document.getElementById("status").firstChild.nodeValue = text;
+      };
+      svg.addEventListener("mousemove", function (event) {
+        if (!chart.followMouse) return;
+        var r = svg.getBoundingClientRect();
+        chart.hoverAt(Math.floor(((event.clientX - r.left) / r.width) * bars));
+      });
+      svg.addEventListener("mouseleave", function () {
+        if (!chart.followMouse) return;
+        chart.clearHover();
+      });
+      if (params.get("hover") === "stuck") chart.hoverAt(3);
+      window.__chart = chart;
+    })();
+  </script>
+</body>
+</html>
