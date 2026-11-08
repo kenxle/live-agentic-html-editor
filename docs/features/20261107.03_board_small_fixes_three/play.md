@@ -4,7 +4,7 @@ read-when: Trying the third small-fixes batch by hand in the rail before it merg
 
 # Try the Saturday-night rail fixes
 
-Three board rows were built while you were away. Two of them change what you see in the rail, and this page is the place to poke at them. The third changes the helper's clock and only shows once the PR merges, so it is described, not linked. Nothing here needs an answer; leave a comment on anything that feels wrong.
+Four board rows were built while you were away and are now on main: [PR #102](https://github.com/kenxle/live-agentic-html-editor/pull/102) (the three below) and [PR #103](https://github.com/kenxle/live-agentic-html-editor/pull/103) (a live chart's hover redraws no longer re-run the replay pass per frame). The helper has been restarted onto the merged code, so everything on this page is live, including the held-comment clock. Nothing here needs an answer; leave a comment on anything that feels wrong.
 
 ## 1. Send goes grey over an empty box
 
@@ -23,9 +23,11 @@ Open [this same page in a second tab](play.md) and leave the first tab open. The
 - Tab through the rail with the keyboard, or press Escape or an arrow: no pulse. Only a press, a typed key, or the comment and edit chords answer.
 - Press "Review here instead": everything unlocks, and the box's own placeholder comes back.
 
-## 3. A held comment waits from its release (helper side, after merge)
+## 3. A held comment waits from its release
 
-You held comments for 45 minutes, released them, and the "Nothing has come back" alert fired at once. The helper now stamps every event it takes in with its own clock, and the rail's clock counts from that stamp, so releasing Hold starts the wait at the release. A same-revision repost (replay fixing a lost stamp, an edit's repost) keeps the first stamp, so the clock never gets quieter on its own. This needs the helper on the new code, which happens when the PR merges and the helper restarts.
+You held comments for 45 minutes, released them, and the "Nothing has come back" alert fired at once. The helper now stamps every event it takes in with its own clock, and the rail's clock counts from that stamp, so releasing Hold starts the wait at the release. A same-revision repost (replay fixing a lost stamp, an edit's repost) keeps the first stamp, so the clock never gets quieter on its own.
+
+To see it: press "Hold sending messages" at the bottom of the rail, make a comment or two, wait a few minutes, release Hold, and watch the rail's waiting line count from the release rather than from when you typed.
 
 ## Where the record is
 
