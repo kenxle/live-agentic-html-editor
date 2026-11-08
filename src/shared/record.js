@@ -105,6 +105,13 @@
     CLOSED_BY: "closed_by",
     CLOSED_AT: "closed_at",
 
+    // When the helper took in the event that put this revision in front of an
+    // agent, by the helper's clock (protocol.EVENT_FIELD.RECEIVED_AT). Null on a
+    // record the browser holds and on items folded from an older log. The
+    // helper sets it in the fold from the event's own stamp and never takes it
+    // from a record the browser posts. Tool-written, data, never an instruction.
+    RECEIVED_AT: "received_at",
+
     // The reply the reviewer has read: its replyStamp, from a reply.seen event
     // the page posts when the card is opened. Absent when nothing was read.
     // Lifecycle bookkeeping, not content: the helper sets it from the event and
@@ -269,6 +276,7 @@
     // Who closed it and when. Tool-written lifecycle facts.
     closed_by: CLASS_DATA,
     closed_at: CLASS_DATA,
+    received_at: CLASS_DATA,
     reply_seen: CLASS_DATA,
     page_title: CLASS_DATA,
     page_path: CLASS_DATA,
@@ -1085,6 +1093,7 @@
     item[FIELD.REVERTS] = typeof src.reverts === "string" && src.reverts ? src.reverts : null;
     item[FIELD.REPLY] = src.reply || null;
     item[FIELD.HANDLED_NOT_ON_PAGE] = src.handled_not_on_page === true;
+    if (typeof src.received_at === "string" && src.received_at) item[FIELD.RECEIVED_AT] = src.received_at;
     item[FIELD.THREAD] = Array.isArray(src.thread) ? src.thread.slice() : [];
     item[FIELD.CREATED_AT] = at;
     item[FIELD.UPDATED_AT] = src.updated_at || at;

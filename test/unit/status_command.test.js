@@ -306,7 +306,7 @@ test("an item line still carries everything that locates it", async () => {
   // (docs/features/20261014.02_lean_agent_output).
   const events = logModule.createEventLog({ dir }).read("rev1");
   const projected = status.leanValue(projectionModule.project("rev1", events).pages[0].items[0]);
-  const dropped = ["region_label", "card_first_created_at"];
+  const dropped = ["region_label", "card_first_created_at", "waiting_since"];
   Object.keys(projected).forEach((key) => {
     if (dropped.includes(key)) return;
     const carried = reviewFormat.DATA_FIELDS.includes(key) ? line.page[key] : line[key];

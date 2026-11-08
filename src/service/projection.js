@@ -186,6 +186,15 @@ function foldEvents(state, events, options) {
       var closedHere = !!prev && closedRev[next[F.ID]] === next[F.REV];
       delete next[F.CLOSED_BY];
       delete next[F.CLOSED_AT];
+      // WHEN THE HELPER GOT THIS EVENT is the helper's stamp on the envelope,
+      // never a value the browser wrote into the record. A line from an older
+      // helper carries none, and the item then keeps whatever it had (null for
+      // an item that never had one), so the waiting clock falls back to the
+      // reviewer's own time, as it did before the stamp existed.
+      var receivedAt = event[protocol.EVENT_FIELD.RECEIVED_AT];
+      delete next[F.RECEIVED_AT];
+      if (typeof receivedAt === "string" && receivedAt) next[F.RECEIVED_AT] = receivedAt;
+      else if (prev && prev[F.RECEIVED_AT]) next[F.RECEIVED_AT] = prev[F.RECEIVED_AT];
       // A continuation is composed against the reply the browser last saw.
       // Another same-revision reply may have become the helper's deterministic
       // winner before this event arrived. Keep that winner in the archived

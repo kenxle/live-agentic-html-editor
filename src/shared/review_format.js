@@ -715,7 +715,24 @@
     // for what it means, and the card's birthday is named for what it is not.
     out.reviewer_last_changed_at = it[F.UPDATED_AT] || it[F.CREATED_AT] || null;
     out.card_first_created_at = it[F.CREATED_AT] || null;
+    // WHEN AN AGENT COULD FIRST HAVE SEEN THIS WORDING: the later of the
+    // reviewer's change and the helper taking the event in. A comment held in
+    // the browser for an hour (Hold) or stuck behind an unreachable helper was
+    // changed long before anyone could act on it, and the rail's "nothing has
+    // come back" clock counts from here, not from reviewer_last_changed_at, so
+    // releasing Hold does not set the alert off at once. Equal to
+    // reviewer_last_changed_at whenever the event arrived as it was made.
+    out.waiting_since = laterOf(out.reviewer_last_changed_at, it[F.RECEIVED_AT]);
     return out;
+  }
+
+  /** The later of two ISO times; either may be missing. */
+  function laterOf(a, b) {
+    var left = typeof a === "string" && a ? a : null;
+    var right = typeof b === "string" && b ? b : null;
+    if (!left) return right;
+    if (!right) return left;
+    return right > left ? right : left;
   }
 
   /** The six locating facts, defaulted so every item carries the same shape. */
