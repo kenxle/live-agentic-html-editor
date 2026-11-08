@@ -141,19 +141,33 @@ test.describe("a live chart on a reviewed page", () => {
   test("thirty redraws inside the commented svg do not run thirty replay passes", async ({ page }) => {
     const counts = await page.evaluate(async function () {
       var before = window.__lahe.counters.replayPasses;
+      var started = performance.now();
       var redraws = await window.__chart.redrawFrames(30);
       // Read in the same turn the last redraw finished in, so the quiet pass
       // that follows cannot have run yet.
-      return { before: before, after: window.__lahe.counters.replayPasses, redraws: redraws };
+      return {
+        before: before,
+        after: window.__lahe.counters.replayPasses,
+        redraws: redraws,
+        elapsed: performance.now() - started,
+        maxWait: window.LAHE.replay.QUIET_MAX_WAIT_MS
+      };
     });
     expect(counts.redraws).toBeGreaterThanOrEqual(30);
-    // Before the gate this was one pass per redraw. Two allows for a pass the
-    // edits above had already scheduled and for the maximum wait on a slow
-    // machine; neither is one per redraw.
-    expect(counts.after - counts.before).toBeLessThanOrEqual(2);
+    // Before the gate this was one pass per redraw. The limit allows one pass
+    // the edits above may already have scheduled, plus one for each maximum
+    // wait the burst lasted on a slow machine; none of that is one per redraw.
+    expect(counts.after - counts.before).toBeLessThanOrEqual(1 + Math.floor(counts.elapsed / counts.maxWait));
 
     // One quiet pass follows once the svg stops changing.
     await waitForCounter(page, "replayPasses", counts.after + 1);
+  });
+
+  test("teardown drops a held quiet pass", async ({ page }) => {
+    await page.evaluate(() => window.__chart.redrawFrames(5));
+    expect(await page.evaluate(() => window.LAHE.replay.quietPassPending())).toBe(true);
+    await page.evaluate(() => window.__lahe.teardown());
+    expect(await page.evaluate(() => window.LAHE.replay.quietPassPending())).toBe(false);
   });
 
   test("a real text change outside the svg runs a pass at once, in the middle of a redraw burst", async ({ page }) => {

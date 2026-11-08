@@ -86,6 +86,19 @@ test("a mutation outside every skipped tag is not inert, including the one that 
   assert.equal(replay.isInertMutation({ type: "childList", target: null }), false, "no target");
 });
 
+test("a change on a detached node is held only when the walk up passes through a skipped tag", () => {
+  // A framework that removed a subtree and then wrote into it: the record's
+  // target has no path to the body any more.
+  const detachedP = element("P", null);
+  const detachedSvg = element("svg", null);
+  const g = element("g", detachedSvg);
+  const label = element("path", g);
+  assert.equal(replay.isInertMutation(childList(detachedP)), false, "the walk stops at a paragraph: not held");
+  assert.equal(replay.isInertMutation(characterData(text(detachedP))), false, "its text: not held");
+  assert.equal(replay.isInertMutation(childList(label)), true, "the walk passes through the detached svg: held");
+  assert.equal(replay.isInertMutation(childList(detachedSvg)), true, "the detached svg itself: held");
+});
+
 test("a batch is inert only when every record in it is", () => {
   const n = page();
   assert.equal(replay.isInertBatch([childList(n.g), characterData(text(n.path))]), true);
@@ -202,6 +215,49 @@ test("cancel drops the armed pass: a pass that ran read the page after those mut
   assert.deepEqual(scheduled, []);
   clock.advance(1);
   assert.deepEqual(scheduled, [6250]);
+});
+
+test("the gate reads the page's timer functions when it arms, not when it was made", () => {
+  // A page (or Playwright's fake clock) can replace setTimeout after the
+  // layer booted. The held pass must go on the clock that is current then,
+  // or a test's fake clock never fires it and its clearTimeout never finds it.
+  const n = page();
+  const scheduled = [];
+  const gate = replay.createMutationGate({
+    schedule: function () {
+      scheduled.push("pass");
+      return true;
+    },
+    now: function () {
+      return 0;
+    },
+    quietMs: 250,
+    maxWaitMs: 2000
+  });
+  const realSet = global.setTimeout;
+  const realClear = global.clearTimeout;
+  const armed = [];
+  const cleared = [];
+  global.setTimeout = function (fn, ms) {
+    armed.push({ fn: fn, ms: ms });
+    return armed.length;
+  };
+  global.clearTimeout = function (id) {
+    cleared.push(id);
+  };
+  try {
+    gate.note([childList(n.g)]);
+    gate.note([childList(n.g)]);
+    gate.cancel();
+  } finally {
+    global.setTimeout = realSet;
+    global.clearTimeout = realClear;
+  }
+  assert.equal(armed.length, 2, "both arms went to the swapped setTimeout");
+  assert.equal(armed[0].ms, 250);
+  assert.deepEqual(cleared, [1, 2], "the re-arm and the cancel went to the swapped clearTimeout");
+  armed[1].fn();
+  assert.deepEqual(scheduled, ["pass"], "and the swapped clock's timer runs the held pass");
 });
 
 // --- replay's own gate --------------------------------------------------------
