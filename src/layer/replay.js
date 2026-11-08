@@ -505,11 +505,13 @@
   //
   // The anchor engine never reads inside a tag in anchor.SKIP_TAGS: an svg or
   // a canvas is a leaf it compares by signature, and a script or a style holds
-  // no prose. So a change whose target is inside one of those changes no
-  // record's words and no record's neighbours. It can change one thing: the
-  // drawing an element comment on that svg was minted from, which is how such
-  // a comment is lost while a hover label is drawn and found again when the
-  // label goes. That needs a pass after the svg settles, not one per frame.
+  // no prose. So a change whose target is inside one of those cannot move
+  // where any record is found. It can change two things: the drawing an
+  // element comment on that svg was minted from (which is how such a comment
+  // is lost while a hover label is drawn and found again when the label goes),
+  // and the text domValueOf reads for an edited block holding an inline svg
+  // with words in it. Both need a pass after the svg settles, not one per
+  // frame.
   //
   // So a batch made only of such changes arms ONE quiet pass instead of
   // scheduling one now. It runs QUIET_MS after the last held change, and never
