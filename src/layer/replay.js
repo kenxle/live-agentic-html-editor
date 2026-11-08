@@ -493,6 +493,136 @@
     return timer;
   }
 
+  // ---------------------------------------------------------------------------
+  // The page observer's gate: changes a pass has no use for right away
+  // ---------------------------------------------------------------------------
+  //
+  // A live chart rewrites its svg on every hover (Plotly does, on every mouse
+  // move). Each rewrite used to schedule a whole pass, and a pass re-resolves
+  // every saved record against the page, so a long page with one comment on
+  // the chart and two edits hung while the reviewer moved the mouse (board row
+  // LAHE-mousemove-rereads-page-text, docs/features/20261107.02_observer_perf).
+  //
+  // The anchor engine never reads inside a tag in anchor.SKIP_TAGS: an svg or
+  // a canvas is a leaf it compares by signature, and a script or a style holds
+  // no prose. So a change whose target is inside one of those changes no
+  // record's words and no record's neighbours. It can change one thing: the
+  // drawing an element comment on that svg was minted from, which is how such
+  // a comment is lost while a hover label is drawn and found again when the
+  // label goes. That needs a pass after the svg settles, not one per frame.
+  //
+  // So a batch made only of such changes arms ONE quiet pass instead of
+  // scheduling one now. It runs QUIET_MS after the last held change, and never
+  // later than QUIET_MAX_WAIT_MS after the first, so a chart that never stops
+  // redrawing still gets a pass every couple of seconds rather than none. Any
+  // pass that runs first takes the held one with it, because it read the page
+  // after those changes. A batch with even one change outside goes through
+  // schedule() exactly as before, epoch rule and all.
+  var QUIET_MS = 250;
+  var QUIET_MAX_WAIT_MS = 2000;
+
+  function skipTags() {
+    return (anchorEngine && anchorEngine.SKIP_TAGS) || {};
+  }
+
+  /** Is this node, or any element above it, a tag the anchor engine never reads inside? */
+  function insideSkippedTag(node) {
+    var tags = skipTags();
+    var at = node && node.nodeType === 1 ? node : node ? node.parentNode : null;
+    while (at && typeof at.tagName === "string") {
+      if (Object.prototype.hasOwnProperty.call(tags, at.tagName.toLowerCase())) return true;
+      at = at.parentElement || at.parentNode || null;
+    }
+    return false;
+  }
+
+  /**
+   * A MutationRecord whose target is inside an svg, a canvas, a script, a
+   * style or another skipped tag. The record that ADDS or REMOVES the svg is
+   * not one: its target is the svg's parent, and the element a comment is
+   * bound to may be the one that went.
+   */
+  function isInertMutation(rec) {
+    return !!rec && !!rec.target && insideSkippedTag(rec.target);
+  }
+
+  /** Every record inert. An empty or missing batch is not, which keeps the old behaviour: a pass. */
+  function isInertBatch(records) {
+    if (!records || !records.length) return false;
+    for (var i = 0; i < records.length; i += 1) {
+      if (!isInertMutation(records[i])) return false;
+    }
+    return true;
+  }
+
+  /**
+   * The gate, with its clock and its scheduler handed in so a test can drive
+   * it on a fake clock. Replay keeps one, below.
+   *
+   * @param {Object} options {schedule, setTimeout, clearTimeout, now, quietMs, maxWaitMs}
+   *   `schedule` runs when a batch is not inert, and when a held pass is due
+   * @returns {Object} {note(records), cancel(), pending()}
+   */
+  function createMutationGate(options) {
+    var o = options || {};
+    var run = o.schedule;
+    var setT = o.setTimeout || setTimeout;
+    var clearT = o.clearTimeout || clearTimeout;
+    var now = o.now || Date.now;
+    var quietMs = typeof o.quietMs === "number" ? o.quietMs : QUIET_MS;
+    var maxWaitMs = typeof o.maxWaitMs === "number" ? o.maxWaitMs : QUIET_MAX_WAIT_MS;
+    var timer = null;
+    var since = 0;
+
+    function cancel() {
+      if (timer !== null) clearT(timer);
+      timer = null;
+      since = 0;
+    }
+
+    function fire() {
+      timer = null;
+      since = 0;
+      run();
+    }
+
+    function note(records) {
+      if (!isInertBatch(records)) return run();
+      var at = now();
+      if (timer === null) since = at;
+      else clearT(timer);
+      var wait = Math.max(0, Math.min(quietMs, since + maxWaitMs - at));
+      timer = setT(fire, wait);
+      // Node only, so a unit test's held pass does not hold the process open.
+      if (timer && typeof timer.unref === "function") timer.unref();
+      return false;
+    }
+
+    return {
+      note: note,
+      cancel: cancel,
+      pending: function () {
+        return timer !== null;
+      }
+    };
+  }
+
+  var mutationGate = createMutationGate({
+    schedule: function () {
+      return schedule(REASON.MUTATION);
+    }
+  });
+
+  /**
+   * The page observer's entry point. index.js hands over each batch of
+   * MutationRecords; see the gate above for which ones wait.
+   *
+   * @returns {boolean} true when a pass was scheduled now
+   */
+  function noteMutations(records) {
+    return mutationGate.note(records);
+  }
+
   /**
    * Runs one pass, in PASS_ORDER.
    *
@@ -507,6 +637,9 @@
    */
   function runPass(reason, override) {
     counters.passes += 1;
+    // This pass reads the page as it is now, after any change the gate was
+    // holding, so the held quiet pass has nothing left to do.
+    mutationGate.cancel();
     var ctx = contextFor(override);
     var hooks = ctx.hooks || {};
     var summary = {
@@ -4148,6 +4281,16 @@
     },
     locate: locate,
     schedule: schedule,
+    noteMutations: noteMutations,
+    isInertMutation: isInertMutation,
+    isInertBatch: isInertBatch,
+    createMutationGate: createMutationGate,
+    QUIET_MS: QUIET_MS,
+    QUIET_MAX_WAIT_MS: QUIET_MAX_WAIT_MS,
+    // Read-only, for the unit tests: is a quiet pass held right now.
+    quietPassPending: function () {
+      return mutationGate.pending();
+    },
     runPass: runPass,
     compare: compare,
     applyRecord: applyRecord,
