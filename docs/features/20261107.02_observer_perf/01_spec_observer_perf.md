@@ -24,13 +24,17 @@ Plotly rewrites its svg on every hover. So on Seneschal's knowledge tree page, w
 
 ## Approach
 
-**Hold changes the anchor engine cannot see.** The anchor engine never reads inside a tag in `anchor.SKIP_TAGS`. An svg or a canvas is a leaf compared by its signature; a script or a style has no prose. So a change whose target is inside one of those cannot move where any record is found. It can change two things, and neither needs a pass per frame: the drawing an element comment on that svg was minted from, and the text replay compares for an edited block that holds an inline svg with words in it.
+**Hold changes the text walk cannot see.** The anchor engine's text walk never reads inside a tag in `anchor.SKIP_TAGS`. An svg or a canvas is a leaf compared by its signature; a script or a style has no prose. So a change whose target is inside one of those cannot move a text anchor. It can change two things, and both wait for the quiet pass rather than a pass per frame:
+
+- an element comment on that svg: `signatureOf` reads inside the svg (its title, desc, text including a foreignObject's, and the drawing), so a change there can move the comment between lost and found;
+- an edited block's text compare, when the block holds an inline svg with words in it (`domValueOf` reads them).
 
 The observer now hands each batch to `replay.noteMutations(records)`:
 
 - A batch with any change outside those tags goes to `schedule(MUTATION)`, exactly as before.
 - A batch made only of changes inside them arms one quiet pass. It runs 250 ms after the last held change, and never later than 2 s after the first, so a chart that never stops redrawing still gets a pass every 2 s.
-- Any pass that runs first cancels the held one, since it read the page after those changes.
+- Any pass that runs first cancels the held one, since it read the page after those changes. The boot handle's teardown cancels it too (`replay.cancelQuietPass`).
+- The gate looks up `setTimeout` and `clearTimeout` each time it arms or cancels, as `defer()` does, so a fake clock installed after boot holds the whole pass.
 
 The change that adds or replaces the svg itself is not held: its target is the svg's parent, and the element a comment is bound to may be the one that went.
 
@@ -45,8 +49,9 @@ The change that adds or replaces the svg itself is not held: its target is the s
 
 | Test | What it proves | Red before the fix |
 |---|---|---|
-| [observer_gate.test.js](../../../test/unit/observer_gate.test.js) | Which changes are held (inside svg, foreignObject, canvas, style, script) and which are not (a paragraph, the svg's parent, the body, an empty batch); the gate's timing on a fake clock (a burst gives one pass after it, a mixed batch schedules at once, a chart that never stops gets a pass every 2 s, cancel drops the held pass); replay's own gate with real timers | All 9 failed: the functions did not exist |
-| [live_chart_observer.spec.js](../../../test/browser/live_chart_observer.spec.js), first test | Real boot, one element comment on the svg, two committed edits: 30 redraws inside the svg run at most 2 passes, then one quiet pass follows. Counts passes, no clock | 15 passes for 30 redraws |
+| [observer_gate.test.js](../../../test/unit/observer_gate.test.js) | Which changes are held (inside svg, foreignObject, canvas, style, script) and which are not (a paragraph, the svg's parent, the body, an empty batch); a change on a detached node, held only when the walk up passes through an svg; the gate's timing on a fake clock (a burst gives one pass after it, a mixed batch schedules at once, a chart that never stops gets a pass every 2 s, cancel drops the held pass); the gate using the setTimeout current when it arms; replay's own gate with real timers | The first 9 failed: the functions did not exist. The swapped-timer test failed on the first version of the gate. The detached-node tests passed on it |
+| [live_chart_observer.spec.js](../../../test/browser/live_chart_observer.spec.js), first test | Real boot, one element comment on the svg, two committed edits: 30 redraws inside the svg run at most one pass plus one per 2 s the burst took, then one quiet pass follows. Counts passes against the burst's own length | 15 passes for 30 redraws |
+| Same spec, teardown test | Five redraws hold a quiet pass; the boot handle's teardown drops it | Failed on the first version of the gate: still held after teardown |
 | Same spec, second test | A paragraph reverted by the page during a 60-frame redraw burst is written back before the burst ends | Passed before and after (a guard) |
 | Same spec, third test | A comment on the svg, reloaded with a hover label stuck on, is reported lost; clearing the label (a change inside the svg only) brings it back | Passed before and after (a guard). With the held pass made to do nothing, it timed out, so it does catch a gate that drops held changes |
 
