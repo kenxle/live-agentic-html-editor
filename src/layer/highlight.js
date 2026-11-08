@@ -1126,10 +1126,108 @@
     return buttons.length;
   }
 
+  // ---------------------------------------------------------------------------
+  // Locked controls (board row LAHE-readonly-click-feedback)
+  // ---------------------------------------------------------------------------
+  //
+  // A window that is read-only because the review is open in another window
+  // used to `disabled` its boxes and Send buttons. A disabled control swallows
+  // the click, so a reviewer who had dismissed the refusal panel got a dead box
+  // that said nothing: Ken "just kept clicking going WHY CAN'T I TYPE IN THIS
+  // BOX". A LOCKED control keeps its events, so its owner can answer the click
+  // with the way out (rail.nudgeRefusal), and it says where the review is in
+  // its own placeholder before anyone clicks.
+  var LOCKED_ATTR = "data-lahe-locked";
+  var LOCKED_WORDS = {
+    PLACEHOLDER: "Open in another window",
+    TIP: "This review is open in another window. Press “Review here instead” in the panel above to work here."
+  };
+  var LOCKED_CSS =
+    "[" + LOCKED_ATTR + "='true']{opacity:.55;cursor:not-allowed}" +
+    "textarea[" + LOCKED_ATTR + "='true']{background:var(--surface,transparent)}";
+
+  /**
+   * Mark a textarea or button as locked, or unlock it. Idempotent: calling it
+   * twice with the same value changes nothing, and unlocking puts the control's
+   * own placeholder back.
+   *
+   * @param {Element} control a textarea, input or button
+   * @param {boolean} locked
+   */
+  function setLocked(control, locked) {
+    if (!control || typeof control.setAttribute !== "function") return;
+    var isField = "readOnly" in control && typeof control.value === "string";
+    var was = control.getAttribute(LOCKED_ATTR) === "true";
+    if (locked && !was) {
+      control.setAttribute(LOCKED_ATTR, "true");
+      control.setAttribute("aria-disabled", "true");
+      // The tip rides on the field only: a Send button's tip is paintSendButton's.
+      if (isField) {
+        control.setAttribute("title", LOCKED_WORDS.TIP);
+        control.setAttribute("data-lahe-placeholder", control.getAttribute("placeholder") || "");
+        control.setAttribute("placeholder", LOCKED_WORDS.PLACEHOLDER);
+        control.readOnly = true;
+      }
+    } else if (!locked && was) {
+      control.removeAttribute(LOCKED_ATTR);
+      control.removeAttribute("aria-disabled");
+      if (isField) {
+        control.removeAttribute("title");
+        control.setAttribute("placeholder", control.getAttribute("data-lahe-placeholder") || "");
+        control.removeAttribute("data-lahe-placeholder");
+        control.readOnly = false;
+      }
+    }
+  }
+
+  function isLocked(control) {
+    return !!(control && typeof control.getAttribute === "function" && control.getAttribute(LOCKED_ATTR) === "true");
+  }
+
+  /**
+   * A key that would have typed into the box or sent it: a printable key,
+   * Enter, Backspace or Delete, with no Cmd, Ctrl or Alt. Tab, Escape and the
+   * arrows are how a keyboard reviewer moves through the rail, and a chord is
+   * the document's, so none of those is a reason to nudge (review finding 4).
+   */
+  function isTypingKey(event) {
+    if (!event || event.metaKey || event.ctrlKey || event.altKey) return false;
+    var key = typeof event.key === "string" ? event.key : "";
+    return key.length === 1 || key === "Enter" || key === "Backspace" || key === "Delete";
+  }
+
+  /**
+   * Send is offered only when there is something to send. Disabled on a blank
+   * or whitespace-only box, and on the states the caller passes (answered,
+   * held is not one: a held Send still sends, into the queue). A LOCKED Send
+   * is never disabled, so the click can be answered (board row
+   * LAHE-send-disabled-when-empty).
+   *
+   * @param {Element} send the button
+   * @param {Element} field the box it sends
+   * @param {boolean} [off] another reason the button is off (answered, say)
+   */
+  function paintSendForField(send, field, off) {
+    if (!send) return;
+    if (isLocked(send)) {
+      send.disabled = false;
+      return;
+    }
+    var text = field && typeof field.value === "string" ? field.value : "";
+    send.disabled = !!off || !text.trim();
+  }
+
   return {
     SEND_ATTR: SEND_ATTR,
     SEND_WORDS: SEND_WORDS,
     SEND_TIP_CSS: SEND_TIP_CSS,
+    LOCKED_ATTR: LOCKED_ATTR,
+    LOCKED_WORDS: LOCKED_WORDS,
+    LOCKED_CSS: LOCKED_CSS,
+    setLocked: setLocked,
+    isLocked: isLocked,
+    isTypingKey: isTypingKey,
+    paintSendForField: paintSendForField,
     paintSendButton: paintSendButton,
     paintSendButtons: paintSendButtons,
     setSendTip: setSendTip,

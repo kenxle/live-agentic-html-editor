@@ -1110,7 +1110,16 @@
     PAGE_PATH: "page_path",
     PAGE_TITLE: "page_title",
     PAGE_SEQ: "page_seq",
-    SOURCE_HINT: "source_hint"
+    SOURCE_HINT: "source_hint",
+    // WHEN THE HELPER TOOK THE EVENT IN, by the helper's own clock. The helper
+    // stamps it at append and overwrites anything a client sent under this
+    // name, so it is the one time on an event a page cannot choose. `ts` is
+    // when the browser made the event, which for a held comment can be most of
+    // an hour before anyone could have seen it (Hold queues the event in the
+    // browser, docs/features/20260917.01_hold_toggle); the waiting clock on the
+    // rail starts here instead, so releasing Hold never trips the overdue alert
+    // at once (board row LAHE-held-release-waiting-clock).
+    RECEIVED_AT: "received_at"
   };
 
   // IDEMPOTENCE IS BY event_id, NEVER BY (item, rev). Drafts do not bump rev and

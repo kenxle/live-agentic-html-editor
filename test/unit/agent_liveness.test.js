@@ -530,7 +530,11 @@ test("replies.poll answers with how long it has been, not with a claim", () => {
 
 test("a reopened item is as old as its last transition, not as old as the comment", () => {
   const dir = tempDir();
-  const log = logModule.createEventLog({ dir: dir });
+  // The helper's clock sits behind the backdated record below, so the reopen
+  // is not read as arriving after it was made. (An event that arrives later
+  // than the reviewer's change waits from its arrival instead; see
+  // held_release_clock.test.js.)
+  const log = logModule.createEventLog({ dir: dir, now: () => Date.now() - 120 * 1000 });
   const reviews = reviewsModule.createReviews({ dir: dir, log: log });
   const store = agentSessions.createStore({ dir: dir });
   store.create({ id: "s_old" });

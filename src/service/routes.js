@@ -700,8 +700,17 @@ function unansweredWork(request, deps) {
       });
       if (!record.isUnansweredReady(item)) return;
       out.unanswered += 1;
-      // These are PROJECTED items, so the names are the projection's: when the
-      // reviewer last changed the item, then the card's first-created time.
+      // These are PROJECTED items, so the names are the projection's: when an
+      // agent could first have seen this wording (waiting_since, which is the
+      // reviewer's change or the helper taking it in, whichever is later), then
+      // the reviewer's change, then the card's first-created time.
+      //
+      // A HELD COMMENT WAITS FROM ITS RELEASE, NOT ITS COMMIT. Ken held his
+      // comments through 45 minutes of work, released them all, and the rail
+      // said nothing had come back on them at once: the clock ran from when he
+      // committed each one, which was before any agent could have seen it
+      // (board row LAHE-held-release-waiting-clock). The same holds for an
+      // event stuck behind an unreachable helper.
       //
       // AN ITEM THE HANDLED CHECK HELD OPEN IS DATED FROM THE REPLY. It is
       // unanswered work, so it belongs in the count above, but nobody has been
@@ -711,6 +720,7 @@ function unansweredWork(request, deps) {
       // said, and eventually offer to take the work elsewhere.
       var at =
         (item.handled_not_on_page === true && item[record.FIELD.REPLY] && item[record.FIELD.REPLY].at) ||
+        item.waiting_since ||
         item.reviewer_last_changed_at ||
         item.card_first_created_at ||
         null;

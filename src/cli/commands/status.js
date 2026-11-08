@@ -625,7 +625,10 @@ function withoutFields(object, fields) {
 }
 
 var DRAIN_DROPPED_PAGE_FIELDS = ["origin", "title", reviewFormat.PROJECTED.REGION_LABEL];
-var DRAIN_DROPPED_FIELDS = ["agent_session_id", "card_first_created_at"];
+// waiting_since is the rail's clock (when an agent could first have seen the
+// wording); the drain line keeps reviewer_last_changed_at, which is the one an
+// agent reads, and leaves this one off the same way it leaves off the birthday.
+var DRAIN_DROPPED_FIELDS = ["agent_session_id", "card_first_created_at", "waiting_since"];
 
 /**
  * The context with any side the quote already holds taken out.

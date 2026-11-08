@@ -1345,6 +1345,17 @@
     ".refusal__btn:hover{filter:brightness(1.06)}",
     ".refusal__btn[disabled]{opacity:.6;cursor:default}",
     ".refusal__btn[hidden]{display:none}",
+    // THE NUDGE. A click or keypress on a locked box in a read-only window
+    // answers at once: the panel comes back if it was dismissed, and its
+    // button pulses twice so the eye lands on the way out (board row
+    // LAHE-readonly-click-feedback). One attribute, set for the length of the
+    // animation and then taken off, so the next nudge can run it again.
+    ".refusal[data-nudge='true']{animation:lahe-refusal-nudge .9s ease-out}",
+    ".refusal[data-nudge='true'] .refusal__btn{animation:lahe-refusal-btn-nudge .9s ease-out}",
+    "@keyframes lahe-refusal-nudge{0%,100%{box-shadow:0 0 0 0 rgba(180,120,30,0)}",
+    "20%,60%{box-shadow:0 0 0 3px rgba(180,120,30,.45)}40%,80%{box-shadow:0 0 0 1px rgba(180,120,30,.2)}}",
+    "@keyframes lahe-refusal-btn-nudge{0%,100%{transform:scale(1)}20%,60%{transform:scale(1.06)}40%,80%{transform:scale(1)}}",
+    "@media (prefers-reduced-motion:reduce){.refusal[data-nudge='true'],.refusal[data-nudge='true'] .refusal__btn{animation:none}}",
 
     // The confirm before the door. There is no window.confirm anywhere in this
     // library: a browser dialog is the page's chrome, not the rail's, and it
@@ -2874,7 +2885,7 @@
       refusalDismiss.setAttribute("type", "button");
       refusalDismiss.setAttribute("aria-label", "Dismiss");
       refusalDismiss.addEventListener("click", function () {
-        hideRefusal();
+        dismissRefusal();
       });
       refusalTitle.appendChild(refusalDismiss);
       refusal.appendChild(refusalTitle);
@@ -5949,8 +5960,63 @@
       return true;
     }
 
+    // THE REVIEWER CLOSED THE PANEL, but the window is still refused. The
+    // reason is kept so a nudge (a click in a locked box) can bring the panel
+    // back with the same words. Only the real way out (hideRefusal, on the
+    // takeover or on the other window letting go) forgets the refusal.
+    var dismissedRefusal = null;
+
+    function dismissRefusal() {
+      var kept = refusalInfo;
+      var out = hideRefusal();
+      dismissedRefusal = kept;
+      return out;
+    }
+
+    /**
+     * The answer to a click, focus or keypress on something a read-only window
+     * cannot do: the panel is shown again if it was dismissed, the rail opens,
+     * the panel scrolls into view and its button pulses. Nothing happens in a
+     * window that is not refused, so every caller can call it without asking.
+     *
+     * @returns {boolean} whether this window was refused and the panel was nudged
+     */
+    function nudgeRefusal() {
+      var info = refusalInfo || dismissedRefusal;
+      if (!info) return false;
+      if (!refusalInfo) showRefusal(info);
+      else setCollapsed(false, false);
+      if (!dom) return true;
+      if (typeof dom.refusal.scrollIntoView === "function") {
+        try {
+          dom.refusal.scrollIntoView({ block: "nearest" });
+        } catch (err) {
+          // An old engine without the options form; the panel is already open.
+        }
+      }
+      // Restart the animation on a repeated nudge: taking the attribute off
+      // and putting it back in the same frame does not restart it, so the
+      // attribute goes back on in the next frame.
+      dom.refusal.removeAttribute("data-nudge");
+      var raf = typeof requestAnimationFrame === "function"
+        ? requestAnimationFrame
+        : function (fn) { fn(); };
+      raf(function () {
+        if (!dom) return;
+        dom.refusal.setAttribute("data-nudge", "true");
+      });
+      clearTimeout(nudgeTimer);
+      nudgeTimer = setTimeout(function () {
+        if (dom) dom.refusal.removeAttribute("data-nudge");
+      }, NUDGE_MS);
+      return true;
+    }
+    var nudgeTimer = null;
+    var NUDGE_MS = 950;
+
     function hideRefusal() {
       refusalInfo = null;
+      dismissedRefusal = null;
       if (!dom) return false;
       dom.refusal.removeAttribute("data-shown");
       // Reset the button out of its "Moving the review here…" pending state,
@@ -8712,6 +8778,12 @@
       markRefusalPending: markRefusalPending,
       refusalShown: refusalShown,
       refusalButtonInfo: refusalButtonInfo,
+      dismissRefusal: dismissRefusal,
+      nudgeRefusal: nudgeRefusal,
+      // Self-report for the closed root: is the panel mid-nudge right now?
+      refusalNudged: function () {
+        return !!(dom && dom.refusal.getAttribute("data-nudge") === "true");
+      },
       renderNoteInfo: renderNoteInfo,
       setStatusLine: setStatusLine,
       getStatusLine: getStatusLine,
@@ -8736,6 +8808,10 @@
     DOT_WORDS: DOT_WORDS,
     HELPER_RESTART_MESSAGE: HELPER_RESTART_MESSAGE,
     paintSendButton: highlightModule.paintSendButton,
+    paintSendForField: highlightModule.paintSendForField,
+    setLocked: highlightModule.setLocked,
+    isLocked: highlightModule.isLocked,
+    isTypingKey: highlightModule.isTypingKey,
     COLLAPSED_LINE_MAX: COLLAPSED_LINE_MAX,
     CHEVRON_ICON: CHEVRON_ICON,
     collapsedLineText: collapsedLineText,

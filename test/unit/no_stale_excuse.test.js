@@ -249,7 +249,10 @@ test("lahe session dates the oldest unanswered item by the rework, not the card"
   const reviewsModule = require("../../src/service/reviews.js");
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-session-age-"));
-  const log = logModule.createEventLog({ dir: dir });
+  // The helper's clock sits behind the backdated record, so the rework is not
+  // read as arriving after it was made (an event that arrives later waits
+  // from its arrival; see held_release_clock.test.js).
+  const log = logModule.createEventLog({ dir: dir, now: () => Date.parse(A_MINUTE_AGO) - 60 * 1000 });
   const reviews = reviewsModule.createReviews({ dir: dir, log: log });
   agentSessions.createStore({ dir: dir }).create({ id: "s_one" });
   reviews.create({ id: "r_one", agent_session_id: "s_one" });
