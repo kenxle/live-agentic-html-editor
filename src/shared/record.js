@@ -1093,7 +1093,8 @@
     item[FIELD.REVERTS] = typeof src.reverts === "string" && src.reverts ? src.reverts : null;
     item[FIELD.REPLY] = src.reply || null;
     item[FIELD.HANDLED_NOT_ON_PAGE] = src.handled_not_on_page === true;
-    if (typeof src.received_at === "string" && src.received_at) item[FIELD.RECEIVED_AT] = src.received_at;
+    // RECEIVED_AT is deliberately not copied: the helper's fold is the only
+    // writer, and a record the browser builds never carries it.
     item[FIELD.THREAD] = Array.isArray(src.thread) ? src.thread.slice() : [];
     item[FIELD.CREATED_AT] = at;
     item[FIELD.UPDATED_AT] = src.updated_at || at;

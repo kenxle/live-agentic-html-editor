@@ -133,6 +133,22 @@ async function focusRailBox(page, id, selector) {
   );
 }
 
+/** A real press on a node inside a card, at its on-screen geometry (the root is closed). */
+async function clickRailNode(page, id, selector) {
+  const rect = await page.evaluate(
+    (args) => {
+      const rail = window.__lahe.rail;
+      const card = rail.getCard(args.id);
+      if (card && card.pane) rail.selectTab(card.pane);
+      const node = rail.cardNode(args.id);
+      const r = node.querySelector(args.selector).getBoundingClientRect();
+      return { x: r.x, y: r.y, width: r.width, height: r.height };
+    },
+    { id, selector }
+  );
+  await page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height / 2);
+}
+
 function railState(page) {
   return page.evaluate(() => {
     const h = window.__lahe.handle;
@@ -194,6 +210,28 @@ test.describe("Send greys out over an empty box", () => {
     await page.keyboard.press("Backspace");
     state = await boxState(page, item.id, ADD.box, ADD.send);
     expect(state.sendDisabled, "emptied again, Send goes off again").toBe(true);
+
+    // After a send the box is empty again, and so is its Send: the refresh
+    // the send sets off painted the box while it still held the words
+    // (review finding 2).
+    await page.keyboard.type("also the lede");
+    await page.keyboard.press("Enter");
+    await pollPage(page, (id) => window.__lahe.itemById(id).rev === 2, item.id, { message: "the message to send as revision 2" });
+    state = await boxState(page, item.id, ADD.box, ADD.send);
+    expect(state.value, "the box is cleared by the send").toBe("");
+    expect(state.sendDisabled, "and Send is off over the empty box").toBe(true);
+
+    fs.mkdirSync(SHOTS, { recursive: true });
+    await page.mouse.move(1, 1);
+    await page.screenshot({ path: path.join(SHOTS, "send_off_light.png") });
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.evaluate(() => {
+      document.documentElement.style.background = "#14161b";
+      document.body.style.background = "#14161b";
+      document.body.style.color = "#e6e6e6";
+      window.__lahe.rail.refreshScheme();
+    });
+    await page.screenshot({ path: path.join(SHOTS, "send_off_dark.png") });
   });
 
   test("a restored draft in the add box enables Send on reload", async ({ page }) => {
@@ -306,18 +344,26 @@ test.describe("a read-only window answers a click in a locked box", () => {
       let state = await railState(winB);
       expect(state.refusalShown, "dismissed").toBe(false);
 
-      await focusRailBox(winB, open.id, ADD.box);
+      await clickRailNode(winB, open.id, ADD.box);
       await pollPage(winB, () => window.__lahe.handle.rail.refusalShown() && window.__lahe.handle.rail.refusalNudged(), undefined, {
-        message: "the panel to come back and pulse on a tab into the locked box"
+        message: "the panel to come back and pulse on a click in the locked box"
       });
       state = await railState(winB);
       expect(state.button.visible, "the way out is on screen").toBe(true);
 
-      // Typing into the locked box types nothing and nudges again.
+      // Moving with the keyboard is not a reason to pulse: focus, Escape, an
+      // arrow and Tab leave the panel quiet once the click's pulse has ended.
       await pollPage(winB, () => !window.__lahe.handle.rail.refusalNudged(), undefined, {
         message: "the first pulse to end",
         timeoutMs: 5000
       });
+      await focusRailBox(winB, open.id, ADD.box);
+      await winB.keyboard.press("Escape");
+      await winB.keyboard.press("ArrowLeft");
+      expect(await winB.evaluate(() => window.__lahe.handle.rail.refusalNudged()), "focus, Escape and an arrow do not pulse").toBe(false);
+
+      // Typing into the locked box types nothing and does pulse.
+      await focusRailBox(winB, open.id, ADD.box);
       await winB.keyboard.type("x");
       await pollPage(winB, () => window.__lahe.handle.rail.refusalNudged(), undefined, {
         message: "a keypress in the locked box to pulse the panel"
@@ -327,12 +373,7 @@ test.describe("a read-only window answers a click in a locked box", () => {
 
       // A real press on the locked Send, at its on-screen geometry.
       await winB.evaluate(() => window.__lahe.handle.rail.dismissRefusal());
-      const rect = await winB.evaluate((id) => {
-        const node = window.__lahe.rail.cardNode(id);
-        const r = node.querySelector(".lahe-rail-add .lahe-rail-send").getBoundingClientRect();
-        return { x: r.x, y: r.y, width: r.width, height: r.height };
-      }, open.id);
-      await winB.mouse.click(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      await clickRailNode(winB, open.id, ADD.send);
       await pollPage(winB, () => window.__lahe.handle.rail.refusalShown() && window.__lahe.handle.rail.refusalNudged(), undefined, {
         message: "a click on the locked Send to bring the panel back"
       });
@@ -395,7 +436,7 @@ test.describe("a read-only window answers a click in a locked box", () => {
             window.__lahe.rail.refreshScheme();
           });
         }
-        await focusRailBox(winB, open.id, ADD.box);
+        await clickRailNode(winB, open.id, ADD.box);
         await pollPage(winB, () => window.__lahe.handle.rail.refusalNudged(), undefined, { message: "the pulse" });
         fs.mkdirSync(SHOTS, { recursive: true });
         await winB.screenshot({ path: path.join(SHOTS, dark ? "readonly_nudge_dark.png" : "readonly_nudge_light.png") });

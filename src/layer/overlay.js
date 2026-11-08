@@ -8811,6 +8811,7 @@
     paintSendForField: highlightModule.paintSendForField,
     setLocked: highlightModule.setLocked,
     isLocked: highlightModule.isLocked,
+    isTypingKey: highlightModule.isTypingKey,
     COLLAPSED_LINE_MAX: COLLAPSED_LINE_MAX,
     CHEVRON_ICON: CHEVRON_ICON,
     collapsedLineText: collapsedLineText,

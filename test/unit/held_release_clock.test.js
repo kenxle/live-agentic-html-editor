@@ -112,6 +112,39 @@ test("an event that arrived as it was made leaves waiting_since equal to the rev
   assert.equal(projected.waiting_since, COMMITTED, "the later of the two, so a slow browser clock never moves it earlier");
 });
 
+test("a same-revision repost that changes no words keeps the first stamp, so the clock never gets quieter", () => {
+  // Replay reposts an item at its revision when a lost stamp is found again,
+  // and an edit reposts with `existing: true`. Neither is the reviewer doing
+  // anything, and neither may move the waiting clock forward (review finding 1).
+  const item = aComment();
+  const first = {};
+  first[protocol.EVENT_FIELD.RECEIVED_AT] = RELEASED;
+  const later = {};
+  later[protocol.EVENT_FIELD.RECEIVED_AT] = "2026-10-15T16:00:00.000Z";
+  const repost = Object.assign(
+    protocol.newEvent({
+      event: protocol.EVENT.ITEM_CONTENT,
+      event_id: "ev_repost",
+      review: "r_held",
+      item: item[record.FIELD.ID],
+      rev: item[record.FIELD.REV],
+      page_path: item[record.FIELD.PAGE_PATH],
+      page_title: item[record.FIELD.PAGE_TITLE],
+      page_seq: item[record.FIELD.PAGE_SEQ],
+      payload: { draft: false, record: item, existing: true }
+    }),
+    later
+  );
+  const projected = projectionModule.project("r_held", [readyEvent(item, "ev_first", first), repost]).pages[0].items[0];
+  assert.equal(projected.waiting_since, RELEASED, "the repost did not restart the wait");
+
+  // A new revision is new work, and takes the new stamp.
+  const reworded = aComment({ id: item[record.FIELD.ID], rev: 2, note: "reworded" });
+  const rewordEvent = readyEvent(reworded, "ev_rev2", later);
+  const again = projectionModule.project("r_held", [readyEvent(item, "ev_first_b", first), rewordEvent]).pages[0].items[0];
+  assert.equal(again.waiting_since, "2026-10-15T16:00:00.000Z");
+});
+
 test("waiting_since is a data field, never an instruction", () => {
   assert.equal(record.fieldClass("received_at"), record.CLASS_DATA);
   assert.equal(reviewFormat.DATA_FIELDS.includes("waiting_since"), false, "it is not page text either; it sits with the other times");

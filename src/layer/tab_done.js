@@ -1530,9 +1530,10 @@
         });
         input.addEventListener("keydown", function (event) {
           if (isReadOnly()) {
-            // Nothing types in a locked box; a plain key still gets the way
-            // out. Chords ride past to the document's own listener.
-            if (!event.metaKey && !event.ctrlKey && !event.altKey) nudgeRefusal();
+            // Nothing types in a locked box; a key that would have typed or
+            // sent still gets the way out. Tab, the arrows, Escape and every
+            // chord are left alone (highlight.js isTypingKey).
+            if (overlayModule.isTypingKey(event)) nudgeRefusal();
             return;
           }
           if (gestures.isSendEvent(event, store && store.readSendKey ? store.readSendKey() : undefined)) {
@@ -1540,12 +1541,10 @@
             submitFollowup(id, input.value);
           }
         });
-        // A press or a tab into a locked composer answers at once (board row
-        // LAHE-readonly-click-feedback).
+        // A press on a locked composer answers at once (board row
+        // LAHE-readonly-click-feedback). Focus alone does not, so tabbing
+        // through the rail is quiet; the first key typed answers instead.
         node.addEventListener("pointerdown", function () {
-          if (isReadOnly()) nudgeRefusal();
-        });
-        node.addEventListener("focusin", function () {
           if (isReadOnly()) nudgeRefusal();
         });
         node.appendChild(input);

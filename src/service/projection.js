@@ -191,10 +191,22 @@ function foldEvents(state, events, options) {
       // helper carries none, and the item then keeps whatever it had (null for
       // an item that never had one), so the waiting clock falls back to the
       // reviewer's own time, as it did before the stamp existed.
+      //
+      // ONLY A NEW REVISION, OR THE MOVE INTO READY, TAKES A FRESH STAMP. The
+      // browser reposts an item at the same revision without changing a word
+      // (replay's lost-stamp post, an edit's `existing: true` repost), and a
+      // fresh stamp on each of those would move the waiting clock forward and
+      // make the "nothing has come back" alert quieter every time the page
+      // repainted (review finding 1). The clock may never get shorter on its
+      // own; a same-revision post keeps the stamp it had.
       var receivedAt = event[protocol.EVENT_FIELD.RECEIVED_AT];
       delete next[F.RECEIVED_AT];
-      if (typeof receivedAt === "string" && receivedAt) next[F.RECEIVED_AT] = receivedAt;
-      else if (prev && prev[F.RECEIVED_AT]) next[F.RECEIVED_AT] = prev[F.RECEIVED_AT];
+      var freshStamp =
+        !prev ||
+        next[F.REV] !== prev[F.REV] ||
+        (record.isReady(next) && !record.isReady(prev));
+      if (prev && prev[F.RECEIVED_AT]) next[F.RECEIVED_AT] = prev[F.RECEIVED_AT];
+      if (freshStamp && typeof receivedAt === "string" && receivedAt) next[F.RECEIVED_AT] = receivedAt;
       // A continuation is composed against the reply the browser last saw.
       // Another same-revision reply may have become the helper's deterministic
       // winner before this event arrived. Keep that winner in the archived

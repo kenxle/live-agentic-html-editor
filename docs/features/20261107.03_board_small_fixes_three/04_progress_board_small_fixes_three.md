@@ -31,7 +31,7 @@ Nothing is waiting on you. One choice to know about: a read-only window's boxes 
 | 0 Size it | done: three small rows, one PR | 2026-11-07 |
 | 2 Spec | done, above | 2026-11-07 |
 | 5 Build | done: each new test red on the old code, green on the new | 2026-11-07 |
-| 6 Code review and verify | pending | |
+| 6 Code review and verify | review done, fixes in (below); gate at the checkpoint | 2026-11-07 |
 | 7 Ship and land | pending | |
 | 8 Close out | pending | |
 
@@ -44,6 +44,21 @@ The refused (second) window from the browser test, a moment after the reviewer t
 ![Light: a locked add-another-message box reading Open in another window, Send greyed, and the refusal panel below with its Review here instead button](readonly_nudge_light.png)
 
 ![Dark: the same window in the dark scheme](readonly_nudge_dark.png)
+
+The holder window right after a message was sent from the "Add another message" box: the box is empty again and its Send is off, like the page note's Send below it.
+
+![Light: an empty add-another-message box with Send greyed out](send_off_light.png)
+
+![Dark: the same card in the dark scheme](send_off_dark.png)
+
+### Review
+
+One independent reviewer, two blockers, both confirmed with probes and both fixed:
+
+- A same-revision repost that changes no words (replay's lost-stamp post, an edit's `existing: true` repost) took a fresh helper stamp and moved the waiting clock forward, making the alert quieter on every repaint. The fold now takes a fresh stamp only on a new revision or the move into ready. New unit test: "a same-revision repost that changes no words keeps the first stamp".
+- After a send from the add box, Send stayed enabled over the empty box because the refresh painted it before the box was cleared. The box is repainted after the clear. The Active-tab test now sends and checks.
+
+Also from the review: `lahe session list` dates the oldest unanswered item from `waiting_since` like the rail; a plain Tab, Escape or arrow in a locked box no longer pulses (only a key that would have typed or sent does, and focus alone never does); `record.newItem` no longer copies `received_at` from a browser record; the skill's feedback reference names `waiting_since`; Send-off screenshots added. Left as is: the screenshot tests rewrite the tracked PNGs on every gate run, which is the standing pattern (board row LAHE-gate-rewrites-doc-screenshots).
 
 ### Where the pieces live
 

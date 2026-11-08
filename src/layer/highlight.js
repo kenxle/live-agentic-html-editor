@@ -1185,6 +1185,18 @@
   }
 
   /**
+   * A key that would have typed into the box or sent it: a printable key,
+   * Enter, Backspace or Delete, with no Cmd, Ctrl or Alt. Tab, Escape and the
+   * arrows are how a keyboard reviewer moves through the rail, and a chord is
+   * the document's, so none of those is a reason to nudge (review finding 4).
+   */
+  function isTypingKey(event) {
+    if (!event || event.metaKey || event.ctrlKey || event.altKey) return false;
+    var key = typeof event.key === "string" ? event.key : "";
+    return key.length === 1 || key === "Enter" || key === "Backspace" || key === "Delete";
+  }
+
+  /**
    * Send is offered only when there is something to send. Disabled on a blank
    * or whitespace-only box, and on the states the caller passes (answered,
    * held is not one: a held Send still sends, into the queue). A LOCKED Send
@@ -1214,6 +1226,7 @@
     LOCKED_CSS: LOCKED_CSS,
     setLocked: setLocked,
     isLocked: isLocked,
+    isTypingKey: isTypingKey,
     paintSendForField: paintSendForField,
     paintSendButton: paintSendButton,
     paintSendButtons: paintSendButtons,

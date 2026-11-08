@@ -783,6 +783,10 @@
           }
         }
         input.value = "";
+        // The refresh appendToNote set off painted the box while it still
+        // held the words; painted again now it is empty, so Send goes off
+        // (review finding 2).
+        paintAddBox(box);
       }
 
       input.addEventListener("input", function () {
@@ -792,10 +796,11 @@
       });
       input.addEventListener("keydown", function (event) {
         if (isReadOnly()) {
-          // The box is read-only, so nothing types; the press still gets its
-          // answer. Rail chords (Cmd-Shift-1, Cmd-Shift-X) are the document's
-          // and ride past on capture, so only a plain key nudges.
-          if (!event.metaKey && !event.ctrlKey && !event.altKey) nudgeRefusal();
+          // The box is read-only, so nothing types; a key that would have
+          // typed or sent still gets its answer. Tab, the arrows, Escape and
+          // every chord are left alone, so a keyboard reviewer moving through
+          // the rail is not pulsed at every stop.
+          if (highlightModule.isTypingKey(event)) nudgeRefusal();
           return;
         }
         // The same send key as every other box in the rail.
@@ -804,13 +809,11 @@
           submit();
         }
       });
-      // A click or a tab into a locked box: the same answer. pointerdown
-      // rather than click so the answer comes on the press, and focusin so a
-      // keyboard reviewer gets it too.
+      // A press on a locked box gets the same answer, on the press rather than
+      // the click. Focus alone does not: a keyboard reviewer tabbing through
+      // the rail would be pulsed at every stop, and the first key they type
+      // answers them instead.
       box.addEventListener("pointerdown", function () {
-        if (isReadOnly()) nudgeRefusal();
-      });
-      box.addEventListener("focusin", function () {
         if (isReadOnly()) nudgeRefusal();
       });
 
