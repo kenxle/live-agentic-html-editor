@@ -489,6 +489,9 @@
     ".lahe-followup{display:flex;flex-direction:column;gap:7px;padding-top:8px}",
     ".lahe-followup textarea{box-sizing:border-box;width:100%;min-height:72px;resize:vertical;border:1px solid var(--line);border-radius:7px;padding:8px 9px;background:var(--paper);color:var(--ink);font:inherit;line-height:1.4}",
     ".lahe-followup textarea:focus{outline:2px solid var(--accent);outline-offset:1px}",
+    // A read-only window's composer: locked, not disabled, so a click still
+    // gets its answer (highlight.js setLocked).
+    ".lahe-followup [data-lahe-locked='true']{opacity:.55;cursor:not-allowed}",
     ".lahe-followup .cardacts{justify-content:flex-end}",
 
     // The question. An agent turn like any other, on the agent's side, made
@@ -1520,37 +1523,73 @@
         input.setAttribute("rows", "3");
         input.setAttribute("placeholder", "Add a new message");
         input.value = store.readFollowupDraft(reviewId, id);
-        input.disabled = isReadOnly();
         input.addEventListener("input", function () {
           if (isReadOnly()) return;
           store.writeFollowupDraft(reviewId, id, input.value);
+          paintComposer(node);
         });
         input.addEventListener("keydown", function (event) {
+          if (isReadOnly()) {
+            // Nothing types in a locked box; a plain key still gets the way
+            // out. Chords ride past to the document's own listener.
+            if (!event.metaKey && !event.ctrlKey && !event.altKey) nudgeRefusal();
+            return;
+          }
           if (gestures.isSendEvent(event, store && store.readSendKey ? store.readSendKey() : undefined)) {
             event.preventDefault();
             submitFollowup(id, input.value);
           }
+        });
+        // A press or a tab into a locked composer answers at once (board row
+        // LAHE-readonly-click-feedback).
+        node.addEventListener("pointerdown", function () {
+          if (isReadOnly()) nudgeRefusal();
+        });
+        node.addEventListener("focusin", function () {
+          if (isReadOnly()) nudgeRefusal();
         });
         node.appendChild(input);
         var actions = el("div", "cardacts");
         var send = el("button", "cardact", "Send");
         send.setAttribute("type", "button");
         overlayModule.paintSendButton(send, !!(store && typeof store.isHeld === "function" && store.isHeld(reviewId)), "Send");
-        send.disabled = isReadOnly();
         send.addEventListener("click", function () {
           submitFollowup(id, input.value);
         });
         actions.appendChild(send);
         node.appendChild(actions);
         composers[id] = node;
+        paintComposer(node);
         ensureStyle(node);
         rail.attachCardContinuation(id, node);
       } else {
         var saved = store.readFollowupDraft(reviewId, id);
         var field = composers[id].querySelector("textarea");
         if (field && field !== field.getRootNode().activeElement && field.value !== saved) field.value = saved;
+        paintComposer(composers[id]);
       }
       return composers[id];
+    }
+
+    /**
+     * The composer's Send and lock. Send is off while the box is blank or
+     * whitespace only (board row LAHE-send-disabled-when-empty), and comes back
+     * on input, including a restored draft. In a read-only window both controls
+     * are locked rather than disabled, so a click still gets the way out.
+     */
+    function paintComposer(node) {
+      if (!node) return;
+      var field = node.querySelector("textarea");
+      var send = node.querySelector("button");
+      if (!field || !send) return;
+      var locked = isReadOnly();
+      overlayModule.setLocked(field, locked);
+      overlayModule.setLocked(send, locked);
+      overlayModule.paintSendForField(send, field, false);
+    }
+
+    function nudgeRefusal() {
+      if (rail && typeof rail.nudgeRefusal === "function") rail.nudgeRefusal();
     }
 
     function focusComposer(id) {
@@ -1629,8 +1668,13 @@
      */
     function submitFollowup(id, text) {
       var item = itemById(id);
+      // A read-only window answers the press with the way out, whatever is in
+      // the box (board row LAHE-readonly-click-feedback).
+      if (isReadOnly()) {
+        nudgeRefusal();
+        return item;
+      }
       if (!item || !item[record.FIELD.REPLY] || !String(text || "").trim()) return item;
-      if (isReadOnly()) return item;
       lifecycle.assertTransition(item[record.FIELD.STATE], record.STATE.READY, lifecycle.ACTOR.REVIEWER);
       return continueItem(item, record.followUp(item, String(text)), "Follow-up sent. It is back in front of the agent.");
     }
@@ -2572,10 +2616,7 @@
       focusFollowup: focusComposer,
       setReadOnly: function () {
         Object.keys(composers).forEach(function (id) {
-          var input = composers[id].querySelector("textarea");
-          var send = composers[id].querySelector("button");
-          if (input) input.disabled = isReadOnly();
-          if (send) send.disabled = isReadOnly();
+          paintComposer(composers[id]);
         });
       },
       followup: function (id) {

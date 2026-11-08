@@ -303,6 +303,9 @@
     "border:1px solid var(--line);background:var(--paper);color:var(--ink-soft);cursor:pointer}",
     ".lahe-rail-send:hover{background:var(--surface);color:var(--ink)}",
     ".lahe-rail-send[disabled]{opacity:.55;cursor:default}",
+    // A read-only window's box and Send: locked, not disabled, so a click still
+    // gets its answer (highlight.js setLocked).
+    ".lahe-rail-add [data-lahe-locked='true']{opacity:.55;cursor:not-allowed}",
     // COMMENTS FILED IN ANOTHER REVIEW (each page carries its own comments,
     // Part 3). Read-only: no input, no buttons, nothing that writes.
     ".lahe-rail-others{display:flex;flex-direction:column;gap:10px;padding:4px 0 2px}",
@@ -335,6 +338,10 @@
     // feature: the box still sends, it just does not survive a reload.
     var store = opts.store || null;
     var reviewId = opts.reviewId || null;
+    // Whether this window is read-only (the review is open in another window).
+    // Boot passes the same answer the Done tab gets; a tab mounted on its own
+    // is never read-only.
+    var isReadOnly = typeof opts.isReadOnly === "function" ? opts.isReadOnly : function () { return false; };
     // The rail's Active pane, when 1B's rail is what this tab lives in. With a
     // host, this file draws the tab's CONTENTS and nothing else: no panel of
     // its own, no pill, no chrome. Without one it falls back to its own panel
@@ -755,6 +762,12 @@
       input.value = keepsDrafts() ? store.readFollowupDraft(reviewId, id) : "";
 
       function submit() {
+        // A READ-ONLY WINDOW ANSWERS THE CLICK with the way out, instead of
+        // doing nothing (board row LAHE-readonly-click-feedback).
+        if (isReadOnly()) {
+          nudgeRefusal();
+          return;
+        }
         var text = input.value;
         if (!text.trim()) return;
         // Storage first, then the box: appendToNote writes the record, and
@@ -773,14 +786,32 @@
       }
 
       input.addEventListener("input", function () {
+        if (isReadOnly()) return;
         if (keepsDrafts()) store.writeFollowupDraft(reviewId, id, input.value);
+        paintAddBox(box);
       });
       input.addEventListener("keydown", function (event) {
+        if (isReadOnly()) {
+          // The box is read-only, so nothing types; the press still gets its
+          // answer. Rail chords (Cmd-Shift-1, Cmd-Shift-X) are the document's
+          // and ride past on capture, so only a plain key nudges.
+          if (!event.metaKey && !event.ctrlKey && !event.altKey) nudgeRefusal();
+          return;
+        }
         // The same send key as every other box in the rail.
         if (gestures.isSendEvent(event, sendKeySetting())) {
           event.preventDefault();
           submit();
         }
+      });
+      // A click or a tab into a locked box: the same answer. pointerdown
+      // rather than click so the answer comes on the press, and focusin so a
+      // keyboard reviewer gets it too.
+      box.addEventListener("pointerdown", function () {
+        if (isReadOnly()) nudgeRefusal();
+      });
+      box.addEventListener("focusin", function () {
+        if (isReadOnly()) nudgeRefusal();
       });
 
       var acts = el("div", "lahe-rail-addacts");
@@ -793,7 +824,44 @@
 
       box.appendChild(input);
       box.appendChild(acts);
+      paintAddBox(box);
       return box;
+    }
+
+    /**
+     * The box's Send and lock, from what the box can see: its own words, the
+     * answered mark its row keeps on it, and whether this window is read-only.
+     *
+     * Send is off on an empty or whitespace-only box (board row
+     * LAHE-send-disabled-when-empty): an enabled Send over nothing looks like
+     * it will do something, and before this a click did nothing. Answered keeps
+     * it off as before. Locked (read-only window) is never `disabled`, so the
+     * click can be answered with the way out.
+     */
+    function paintAddBox(box) {
+      if (!box) return;
+      var field = box.querySelector("textarea");
+      var send = box.querySelector(".lahe-rail-send");
+      if (!field || !send) return;
+      var answered = box.getAttribute("data-answered") === "true";
+      var locked = isReadOnly();
+      highlightModule.setLocked(field, locked);
+      highlightModule.setLocked(send, locked);
+      field.disabled = !locked && answered;
+      highlightModule.paintSendForField(send, field, answered);
+    }
+
+    function nudgeRefusal() {
+      if (rail && typeof rail.nudgeRefusal === "function") rail.nudgeRefusal();
+    }
+
+    /** Every add box, repainted: boot calls this on the way into and out of read-only. */
+    function setReadOnly() {
+      var root = listEl || panel || providedHost;
+      if (!root || typeof root.querySelectorAll !== "function") return 0;
+      var boxes = root.querySelectorAll(".lahe-rail-add");
+      for (var i = 0; i < boxes.length; i += 1) paintAddBox(boxes[i]);
+      return boxes.length;
     }
 
     /**
@@ -873,10 +941,8 @@
       var add = row.querySelector(".lahe-rail-add");
       if (add) {
         add.hidden = answered || item[record.FIELD.STATE] !== record.STATE.READY;
-        var field = add.querySelector("textarea");
-        if (field) field.disabled = answered;
-        var send = add.querySelector(".lahe-rail-send");
-        if (send) send.disabled = answered;
+        add.setAttribute("data-answered", answered ? "true" : "false");
+        paintAddBox(add);
       }
       var del = row.querySelector('[data-lahe-act="delete"]');
       if (del && hosted) del.hidden = answered;
@@ -925,10 +991,8 @@
       var add = row.querySelector(".lahe-rail-add");
       if (add) {
         add.hidden = !!item[record.FIELD.REPLY] || item[record.FIELD.STATE] !== record.STATE.READY;
-        var field = add.querySelector("textarea");
-        if (field) field.disabled = !!item[record.FIELD.REPLY];
-        var send = add.querySelector(".lahe-rail-send");
-        if (send) send.disabled = !!item[record.FIELD.REPLY];
+        add.setAttribute("data-answered", item[record.FIELD.REPLY] ? "true" : "false");
+        paintAddBox(add);
       }
 
       // Once an agent has answered, Delete would take the whole exchange with
@@ -1191,6 +1255,7 @@
       focusNote: focusNote,
       noteBox: noteBox,
       ensureNoteBox: ensureNoteBox,
+      setReadOnly: setReadOnly,
       collapse: collapse,
       isCollapsed: isCollapsed,
       bounds: bounds,
