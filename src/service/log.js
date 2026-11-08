@@ -544,6 +544,10 @@ function createEventLog(options) {
       stored[protocol.EVENT_FIELD.REVIEW] = reviewId;
       state.seq += 1;
       stored[SEQ] = state.seq;
+      // The helper's clock, never the client's: see protocol.EVENT_FIELD.
+      stored[protocol.EVENT_FIELD.RECEIVED_AT] = new Date(
+        typeof opts.now === "function" ? opts.now() : Date.now()
+      ).toISOString();
 
       // ONE APPEND, ONE WHOLE LINE. The line is built in full before anything
       // touches the file, so the only thing a crash can interrupt is a single

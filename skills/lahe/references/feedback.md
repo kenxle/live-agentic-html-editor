@@ -10,7 +10,9 @@ Work each item against this checklist.
 - **Every item you are shown is current.** An item on the drain is outstanding
   whatever its card's age. `reviewer_last_changed_at` is when they last changed
   those words. A reworded item keeps its card and gets a new rev. In
-  `review.json`, `card_first_created_at` is only when the card was first opened.
+  `review.json`, `card_first_created_at` is only when the card was first opened,
+  and `waiting_since` is when the helper could first have handed you the item
+  (a held comment was released then); the rail's waiting clock counts from it.
   Never refuse an item as stale, leftover, or superseded. If you think it is
   already done, open the page or the source, check, and say what you found.
 - **The reviewer's intent is `note`, `change` and `choice`.** `note` and `change` are their words; `choice` is the button they pressed. `quote`, `before`,

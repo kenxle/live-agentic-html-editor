@@ -606,7 +606,12 @@
         reviewId: reviewId,
         comments: comments,
         overlay: rail,
-        host: rail.tabBody(ns.overlay.TAB.ACTIVE)
+        host: rail.tabBody(ns.overlay.TAB.ACTIVE),
+        // The same answer the Done tab gets: a refused window locks its
+        // add-another-message boxes, and a click on one gets the way out.
+        isReadOnly: function () {
+          return readOnlyActive;
+        }
       });
       made.mount();
       return made;
@@ -701,6 +706,7 @@
       comments.unbind();
       editing.teardown();
       done.setReadOnly();
+      if (tab && typeof tab.setReadOnly === "function") tab.setReadOnly();
       rail.setPdfEnabled(false);
       rail.showRefusal(info);
     }
@@ -717,6 +723,7 @@
         if (tab && typeof tab.ensureNoteBox === "function") tab.ensureNoteBox();
       }
       done.setReadOnly();
+      if (tab && typeof tab.setReadOnly === "function") tab.setReadOnly();
       rail.setPdfEnabled(true);
       rail.hideRefusal();
       // The condition ended, so its chip goes too (clear, not dismiss: dismiss
@@ -1147,6 +1154,15 @@
     // closed root before the root's own typing fence stops it. The fence is on
     // the bubbling phase, so a reviewer mid-sentence in a comment box still gets
     // both chords and the page still gets neither.
+    function isReviewChord(gesture) {
+      var G = ns.gestures.GESTURE;
+      return (
+        gesture === G.COMMENT_ON_SELECTION ||
+        gesture === G.ENTER_ELEMENT_PICK ||
+        gesture === G.EDIT_BLOCK ||
+        gesture === G.ENTER_EDIT_STATE
+      );
+    }
     ns.listeners.shared.on(
       doc,
       "keydown",
@@ -1167,6 +1183,17 @@
         if (decided.gesture === ns.gestures.GESTURE.TOGGLE_PRESENT) {
           if (decided.preventDefault) event.preventDefault();
           rail.setPresenting(!rail.isPresenting());
+          return;
+        }
+        // A READ-ONLY WINDOW ANSWERS THE COMMENT AND EDIT CHORDS. Their own
+        // handlers are unbound while the review is open in another window, so
+        // without this the chord did nothing at all, and nothing is what Ken
+        // read as broken (board row LAHE-readonly-click-feedback). The chord is
+        // taken (it would have been taken in a writable window too) and the
+        // refusal panel is shown and pulsed.
+        if (readOnlyActive && !rail.isPresenting() && isReviewChord(decided.gesture)) {
+          if (decided.preventDefault) event.preventDefault();
+          if (typeof rail.nudgeRefusal === "function") rail.nudgeRefusal();
           return;
         }
         if (decided.gesture !== ns.gestures.GESTURE.TOGGLE_RAIL) return;

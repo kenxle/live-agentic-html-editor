@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.4.0+d87cafc72d0b
+ * version 0.4.0+06775b2a0e53
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.4.0+d87cafc72d0b";
+  g.LAHE.version = "0.4.0+06775b2a0e53";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 /*
@@ -3037,6 +3037,13 @@
     CLOSED_BY: "closed_by",
     CLOSED_AT: "closed_at",
 
+    // When the helper took in the event that put this revision in front of an
+    // agent, by the helper's clock (protocol.EVENT_FIELD.RECEIVED_AT). Null on a
+    // record the browser holds and on items folded from an older log. The
+    // helper sets it in the fold from the event's own stamp and never takes it
+    // from a record the browser posts. Tool-written, data, never an instruction.
+    RECEIVED_AT: "received_at",
+
     // The reply the reviewer has read: its replyStamp, from a reply.seen event
     // the page posts when the card is opened. Absent when nothing was read.
     // Lifecycle bookkeeping, not content: the helper sets it from the event and
@@ -3201,6 +3208,7 @@
     // Who closed it and when. Tool-written lifecycle facts.
     closed_by: CLASS_DATA,
     closed_at: CLASS_DATA,
+    received_at: CLASS_DATA,
     reply_seen: CLASS_DATA,
     page_title: CLASS_DATA,
     page_path: CLASS_DATA,
@@ -4017,6 +4025,8 @@
     item[FIELD.REVERTS] = typeof src.reverts === "string" && src.reverts ? src.reverts : null;
     item[FIELD.REPLY] = src.reply || null;
     item[FIELD.HANDLED_NOT_ON_PAGE] = src.handled_not_on_page === true;
+    // RECEIVED_AT is deliberately not copied: the helper's fold is the only
+    // writer, and a record the browser builds never carries it.
     item[FIELD.THREAD] = Array.isArray(src.thread) ? src.thread.slice() : [];
     item[FIELD.CREATED_AT] = at;
     item[FIELD.UPDATED_AT] = src.updated_at || at;
@@ -9070,7 +9080,16 @@
     PAGE_PATH: "page_path",
     PAGE_TITLE: "page_title",
     PAGE_SEQ: "page_seq",
-    SOURCE_HINT: "source_hint"
+    SOURCE_HINT: "source_hint",
+    // WHEN THE HELPER TOOK THE EVENT IN, by the helper's own clock. The helper
+    // stamps it at append and overwrites anything a client sent under this
+    // name, so it is the one time on an event a page cannot choose. `ts` is
+    // when the browser made the event, which for a held comment can be most of
+    // an hour before anyone could have seen it (Hold queues the event in the
+    // browser, docs/features/20260917.01_hold_toggle); the waiting clock on the
+    // rail starts here instead, so releasing Hold never trips the overdue alert
+    // at once (board row LAHE-held-release-waiting-clock).
+    RECEIVED_AT: "received_at"
   };
 
   // IDEMPOTENCE IS BY event_id, NEVER BY (item, rev). Drafts do not bump rev and
@@ -10945,7 +10964,24 @@
     // for what it means, and the card's birthday is named for what it is not.
     out.reviewer_last_changed_at = it[F.UPDATED_AT] || it[F.CREATED_AT] || null;
     out.card_first_created_at = it[F.CREATED_AT] || null;
+    // WHEN AN AGENT COULD FIRST HAVE SEEN THIS WORDING: the later of the
+    // reviewer's change and the helper taking the event in. A comment held in
+    // the browser for an hour (Hold) or stuck behind an unreachable helper was
+    // changed long before anyone could act on it, and the rail's "nothing has
+    // come back" clock counts from here, not from reviewer_last_changed_at, so
+    // releasing Hold does not set the alert off at once. Equal to
+    // reviewer_last_changed_at whenever the event arrived as it was made.
+    out.waiting_since = laterOf(out.reviewer_last_changed_at, it[F.RECEIVED_AT]);
     return out;
+  }
+
+  /** The later of two ISO times; either may be missing. */
+  function laterOf(a, b) {
+    var left = typeof a === "string" && a ? a : null;
+    var right = typeof b === "string" && b ? b : null;
+    if (!left) return right;
+    if (!right) return left;
+    return right > left ? right : left;
   }
 
   /** The six locating facts, defaulted so every item carries the same shape. */
@@ -19236,10 +19272,108 @@
     return buttons.length;
   }
 
+  // ---------------------------------------------------------------------------
+  // Locked controls (board row LAHE-readonly-click-feedback)
+  // ---------------------------------------------------------------------------
+  //
+  // A window that is read-only because the review is open in another window
+  // used to `disabled` its boxes and Send buttons. A disabled control swallows
+  // the click, so a reviewer who had dismissed the refusal panel got a dead box
+  // that said nothing: Ken "just kept clicking going WHY CAN'T I TYPE IN THIS
+  // BOX". A LOCKED control keeps its events, so its owner can answer the click
+  // with the way out (rail.nudgeRefusal), and it says where the review is in
+  // its own placeholder before anyone clicks.
+  var LOCKED_ATTR = "data-lahe-locked";
+  var LOCKED_WORDS = {
+    PLACEHOLDER: "Open in another window",
+    TIP: "This review is open in another window. Press “Review here instead” in the panel above to work here."
+  };
+  var LOCKED_CSS =
+    "[" + LOCKED_ATTR + "='true']{opacity:.55;cursor:not-allowed}" +
+    "textarea[" + LOCKED_ATTR + "='true']{background:var(--surface,transparent)}";
+
+  /**
+   * Mark a textarea or button as locked, or unlock it. Idempotent: calling it
+   * twice with the same value changes nothing, and unlocking puts the control's
+   * own placeholder back.
+   *
+   * @param {Element} control a textarea, input or button
+   * @param {boolean} locked
+   */
+  function setLocked(control, locked) {
+    if (!control || typeof control.setAttribute !== "function") return;
+    var isField = "readOnly" in control && typeof control.value === "string";
+    var was = control.getAttribute(LOCKED_ATTR) === "true";
+    if (locked && !was) {
+      control.setAttribute(LOCKED_ATTR, "true");
+      control.setAttribute("aria-disabled", "true");
+      // The tip rides on the field only: a Send button's tip is paintSendButton's.
+      if (isField) {
+        control.setAttribute("title", LOCKED_WORDS.TIP);
+        control.setAttribute("data-lahe-placeholder", control.getAttribute("placeholder") || "");
+        control.setAttribute("placeholder", LOCKED_WORDS.PLACEHOLDER);
+        control.readOnly = true;
+      }
+    } else if (!locked && was) {
+      control.removeAttribute(LOCKED_ATTR);
+      control.removeAttribute("aria-disabled");
+      if (isField) {
+        control.removeAttribute("title");
+        control.setAttribute("placeholder", control.getAttribute("data-lahe-placeholder") || "");
+        control.removeAttribute("data-lahe-placeholder");
+        control.readOnly = false;
+      }
+    }
+  }
+
+  function isLocked(control) {
+    return !!(control && typeof control.getAttribute === "function" && control.getAttribute(LOCKED_ATTR) === "true");
+  }
+
+  /**
+   * A key that would have typed into the box or sent it: a printable key,
+   * Enter, Backspace or Delete, with no Cmd, Ctrl or Alt. Tab, Escape and the
+   * arrows are how a keyboard reviewer moves through the rail, and a chord is
+   * the document's, so none of those is a reason to nudge (review finding 4).
+   */
+  function isTypingKey(event) {
+    if (!event || event.metaKey || event.ctrlKey || event.altKey) return false;
+    var key = typeof event.key === "string" ? event.key : "";
+    return key.length === 1 || key === "Enter" || key === "Backspace" || key === "Delete";
+  }
+
+  /**
+   * Send is offered only when there is something to send. Disabled on a blank
+   * or whitespace-only box, and on the states the caller passes (answered,
+   * held is not one: a held Send still sends, into the queue). A LOCKED Send
+   * is never disabled, so the click can be answered (board row
+   * LAHE-send-disabled-when-empty).
+   *
+   * @param {Element} send the button
+   * @param {Element} field the box it sends
+   * @param {boolean} [off] another reason the button is off (answered, say)
+   */
+  function paintSendForField(send, field, off) {
+    if (!send) return;
+    if (isLocked(send)) {
+      send.disabled = false;
+      return;
+    }
+    var text = field && typeof field.value === "string" ? field.value : "";
+    send.disabled = !!off || !text.trim();
+  }
+
   return {
     SEND_ATTR: SEND_ATTR,
     SEND_WORDS: SEND_WORDS,
     SEND_TIP_CSS: SEND_TIP_CSS,
+    LOCKED_ATTR: LOCKED_ATTR,
+    LOCKED_WORDS: LOCKED_WORDS,
+    LOCKED_CSS: LOCKED_CSS,
+    setLocked: setLocked,
+    isLocked: isLocked,
+    isTypingKey: isTypingKey,
+    paintSendForField: paintSendForField,
     paintSendButton: paintSendButton,
     paintSendButtons: paintSendButtons,
     setSendTip: setSendTip,
@@ -21565,6 +21699,17 @@
     ".refusal__btn:hover{filter:brightness(1.06)}",
     ".refusal__btn[disabled]{opacity:.6;cursor:default}",
     ".refusal__btn[hidden]{display:none}",
+    // THE NUDGE. A click or keypress on a locked box in a read-only window
+    // answers at once: the panel comes back if it was dismissed, and its
+    // button pulses twice so the eye lands on the way out (board row
+    // LAHE-readonly-click-feedback). One attribute, set for the length of the
+    // animation and then taken off, so the next nudge can run it again.
+    ".refusal[data-nudge='true']{animation:lahe-refusal-nudge .9s ease-out}",
+    ".refusal[data-nudge='true'] .refusal__btn{animation:lahe-refusal-btn-nudge .9s ease-out}",
+    "@keyframes lahe-refusal-nudge{0%,100%{box-shadow:0 0 0 0 rgba(180,120,30,0)}",
+    "20%,60%{box-shadow:0 0 0 3px rgba(180,120,30,.45)}40%,80%{box-shadow:0 0 0 1px rgba(180,120,30,.2)}}",
+    "@keyframes lahe-refusal-btn-nudge{0%,100%{transform:scale(1)}20%,60%{transform:scale(1.06)}40%,80%{transform:scale(1)}}",
+    "@media (prefers-reduced-motion:reduce){.refusal[data-nudge='true'],.refusal[data-nudge='true'] .refusal__btn{animation:none}}",
 
     // The confirm before the door. There is no window.confirm anywhere in this
     // library: a browser dialog is the page's chrome, not the rail's, and it
@@ -23094,7 +23239,7 @@
       refusalDismiss.setAttribute("type", "button");
       refusalDismiss.setAttribute("aria-label", "Dismiss");
       refusalDismiss.addEventListener("click", function () {
-        hideRefusal();
+        dismissRefusal();
       });
       refusalTitle.appendChild(refusalDismiss);
       refusal.appendChild(refusalTitle);
@@ -26169,8 +26314,63 @@
       return true;
     }
 
+    // THE REVIEWER CLOSED THE PANEL, but the window is still refused. The
+    // reason is kept so a nudge (a click in a locked box) can bring the panel
+    // back with the same words. Only the real way out (hideRefusal, on the
+    // takeover or on the other window letting go) forgets the refusal.
+    var dismissedRefusal = null;
+
+    function dismissRefusal() {
+      var kept = refusalInfo;
+      var out = hideRefusal();
+      dismissedRefusal = kept;
+      return out;
+    }
+
+    /**
+     * The answer to a click, focus or keypress on something a read-only window
+     * cannot do: the panel is shown again if it was dismissed, the rail opens,
+     * the panel scrolls into view and its button pulses. Nothing happens in a
+     * window that is not refused, so every caller can call it without asking.
+     *
+     * @returns {boolean} whether this window was refused and the panel was nudged
+     */
+    function nudgeRefusal() {
+      var info = refusalInfo || dismissedRefusal;
+      if (!info) return false;
+      if (!refusalInfo) showRefusal(info);
+      else setCollapsed(false, false);
+      if (!dom) return true;
+      if (typeof dom.refusal.scrollIntoView === "function") {
+        try {
+          dom.refusal.scrollIntoView({ block: "nearest" });
+        } catch (err) {
+          // An old engine without the options form; the panel is already open.
+        }
+      }
+      // Restart the animation on a repeated nudge: taking the attribute off
+      // and putting it back in the same frame does not restart it, so the
+      // attribute goes back on in the next frame.
+      dom.refusal.removeAttribute("data-nudge");
+      var raf = typeof requestAnimationFrame === "function"
+        ? requestAnimationFrame
+        : function (fn) { fn(); };
+      raf(function () {
+        if (!dom) return;
+        dom.refusal.setAttribute("data-nudge", "true");
+      });
+      clearTimeout(nudgeTimer);
+      nudgeTimer = setTimeout(function () {
+        if (dom) dom.refusal.removeAttribute("data-nudge");
+      }, NUDGE_MS);
+      return true;
+    }
+    var nudgeTimer = null;
+    var NUDGE_MS = 950;
+
     function hideRefusal() {
       refusalInfo = null;
+      dismissedRefusal = null;
       if (!dom) return false;
       dom.refusal.removeAttribute("data-shown");
       // Reset the button out of its "Moving the review here…" pending state,
@@ -28932,6 +29132,12 @@
       markRefusalPending: markRefusalPending,
       refusalShown: refusalShown,
       refusalButtonInfo: refusalButtonInfo,
+      dismissRefusal: dismissRefusal,
+      nudgeRefusal: nudgeRefusal,
+      // Self-report for the closed root: is the panel mid-nudge right now?
+      refusalNudged: function () {
+        return !!(dom && dom.refusal.getAttribute("data-nudge") === "true");
+      },
       renderNoteInfo: renderNoteInfo,
       setStatusLine: setStatusLine,
       getStatusLine: getStatusLine,
@@ -28956,6 +29162,10 @@
     DOT_WORDS: DOT_WORDS,
     HELPER_RESTART_MESSAGE: HELPER_RESTART_MESSAGE,
     paintSendButton: highlightModule.paintSendButton,
+    paintSendForField: highlightModule.paintSendForField,
+    setLocked: highlightModule.setLocked,
+    isLocked: highlightModule.isLocked,
+    isTypingKey: highlightModule.isTypingKey,
     COLLAPSED_LINE_MAX: COLLAPSED_LINE_MAX,
     CHEVRON_ICON: CHEVRON_ICON,
     collapsedLineText: collapsedLineText,
@@ -29327,6 +29537,9 @@
     "border:1px solid var(--line);background:var(--paper);color:var(--ink-soft);cursor:pointer}",
     ".lahe-rail-send:hover{background:var(--surface);color:var(--ink)}",
     ".lahe-rail-send[disabled]{opacity:.55;cursor:default}",
+    // A read-only window's box and Send: locked, not disabled, so a click still
+    // gets its answer (highlight.js setLocked).
+    ".lahe-rail-add [data-lahe-locked='true']{opacity:.55;cursor:not-allowed}",
     // COMMENTS FILED IN ANOTHER REVIEW (each page carries its own comments,
     // Part 3). Read-only: no input, no buttons, nothing that writes.
     ".lahe-rail-others{display:flex;flex-direction:column;gap:10px;padding:4px 0 2px}",
@@ -29359,6 +29572,10 @@
     // feature: the box still sends, it just does not survive a reload.
     var store = opts.store || null;
     var reviewId = opts.reviewId || null;
+    // Whether this window is read-only (the review is open in another window).
+    // Boot passes the same answer the Done tab gets; a tab mounted on its own
+    // is never read-only.
+    var isReadOnly = typeof opts.isReadOnly === "function" ? opts.isReadOnly : function () { return false; };
     // The rail's Active pane, when 1B's rail is what this tab lives in. With a
     // host, this file draws the tab's CONTENTS and nothing else: no panel of
     // its own, no pill, no chrome. Without one it falls back to its own panel
@@ -29779,6 +29996,12 @@
       input.value = keepsDrafts() ? store.readFollowupDraft(reviewId, id) : "";
 
       function submit() {
+        // A READ-ONLY WINDOW ANSWERS THE CLICK with the way out, instead of
+        // doing nothing (board row LAHE-readonly-click-feedback).
+        if (isReadOnly()) {
+          nudgeRefusal();
+          return;
+        }
         var text = input.value;
         if (!text.trim()) return;
         // Storage first, then the box: appendToNote writes the record, and
@@ -29794,17 +30017,38 @@
           }
         }
         input.value = "";
+        // The refresh appendToNote set off painted the box while it still
+        // held the words; painted again now it is empty, so Send goes off
+        // (review finding 2).
+        paintAddBox(box);
       }
 
       input.addEventListener("input", function () {
+        if (isReadOnly()) return;
         if (keepsDrafts()) store.writeFollowupDraft(reviewId, id, input.value);
+        paintAddBox(box);
       });
       input.addEventListener("keydown", function (event) {
+        if (isReadOnly()) {
+          // The box is read-only, so nothing types; a key that would have
+          // typed or sent still gets its answer. Tab, the arrows, Escape and
+          // every chord are left alone, so a keyboard reviewer moving through
+          // the rail is not pulsed at every stop.
+          if (highlightModule.isTypingKey(event)) nudgeRefusal();
+          return;
+        }
         // The same send key as every other box in the rail.
         if (gestures.isSendEvent(event, sendKeySetting())) {
           event.preventDefault();
           submit();
         }
+      });
+      // A press on a locked box gets the same answer, on the press rather than
+      // the click. Focus alone does not: a keyboard reviewer tabbing through
+      // the rail would be pulsed at every stop, and the first key they type
+      // answers them instead.
+      box.addEventListener("pointerdown", function () {
+        if (isReadOnly()) nudgeRefusal();
       });
 
       var acts = el("div", "lahe-rail-addacts");
@@ -29817,7 +30061,44 @@
 
       box.appendChild(input);
       box.appendChild(acts);
+      paintAddBox(box);
       return box;
+    }
+
+    /**
+     * The box's Send and lock, from what the box can see: its own words, the
+     * answered mark its row keeps on it, and whether this window is read-only.
+     *
+     * Send is off on an empty or whitespace-only box (board row
+     * LAHE-send-disabled-when-empty): an enabled Send over nothing looks like
+     * it will do something, and before this a click did nothing. Answered keeps
+     * it off as before. Locked (read-only window) is never `disabled`, so the
+     * click can be answered with the way out.
+     */
+    function paintAddBox(box) {
+      if (!box) return;
+      var field = box.querySelector("textarea");
+      var send = box.querySelector(".lahe-rail-send");
+      if (!field || !send) return;
+      var answered = box.getAttribute("data-answered") === "true";
+      var locked = isReadOnly();
+      highlightModule.setLocked(field, locked);
+      highlightModule.setLocked(send, locked);
+      field.disabled = !locked && answered;
+      highlightModule.paintSendForField(send, field, answered);
+    }
+
+    function nudgeRefusal() {
+      if (rail && typeof rail.nudgeRefusal === "function") rail.nudgeRefusal();
+    }
+
+    /** Every add box, repainted: boot calls this on the way into and out of read-only. */
+    function setReadOnly() {
+      var root = listEl || panel || providedHost;
+      if (!root || typeof root.querySelectorAll !== "function") return 0;
+      var boxes = root.querySelectorAll(".lahe-rail-add");
+      for (var i = 0; i < boxes.length; i += 1) paintAddBox(boxes[i]);
+      return boxes.length;
     }
 
     /**
@@ -29897,10 +30178,8 @@
       var add = row.querySelector(".lahe-rail-add");
       if (add) {
         add.hidden = answered || item[record.FIELD.STATE] !== record.STATE.READY;
-        var field = add.querySelector("textarea");
-        if (field) field.disabled = answered;
-        var send = add.querySelector(".lahe-rail-send");
-        if (send) send.disabled = answered;
+        add.setAttribute("data-answered", answered ? "true" : "false");
+        paintAddBox(add);
       }
       var del = row.querySelector('[data-lahe-act="delete"]');
       if (del && hosted) del.hidden = answered;
@@ -29949,10 +30228,8 @@
       var add = row.querySelector(".lahe-rail-add");
       if (add) {
         add.hidden = !!item[record.FIELD.REPLY] || item[record.FIELD.STATE] !== record.STATE.READY;
-        var field = add.querySelector("textarea");
-        if (field) field.disabled = !!item[record.FIELD.REPLY];
-        var send = add.querySelector(".lahe-rail-send");
-        if (send) send.disabled = !!item[record.FIELD.REPLY];
+        add.setAttribute("data-answered", item[record.FIELD.REPLY] ? "true" : "false");
+        paintAddBox(add);
       }
 
       // Once an agent has answered, Delete would take the whole exchange with
@@ -30215,6 +30492,7 @@
       focusNote: focusNote,
       noteBox: noteBox,
       ensureNoteBox: ensureNoteBox,
+      setReadOnly: setReadOnly,
       collapse: collapse,
       isCollapsed: isCollapsed,
       bounds: bounds,
@@ -30736,6 +31014,9 @@
     ".lahe-followup{display:flex;flex-direction:column;gap:7px;padding-top:8px}",
     ".lahe-followup textarea{box-sizing:border-box;width:100%;min-height:72px;resize:vertical;border:1px solid var(--line);border-radius:7px;padding:8px 9px;background:var(--paper);color:var(--ink);font:inherit;line-height:1.4}",
     ".lahe-followup textarea:focus{outline:2px solid var(--accent);outline-offset:1px}",
+    // A read-only window's composer: locked, not disabled, so a click still
+    // gets its answer (highlight.js setLocked).
+    ".lahe-followup [data-lahe-locked='true']{opacity:.55;cursor:not-allowed}",
     ".lahe-followup .cardacts{justify-content:flex-end}",
 
     // The question. An agent turn like any other, on the agent's side, made
@@ -31767,37 +32048,72 @@
         input.setAttribute("rows", "3");
         input.setAttribute("placeholder", "Add a new message");
         input.value = store.readFollowupDraft(reviewId, id);
-        input.disabled = isReadOnly();
         input.addEventListener("input", function () {
           if (isReadOnly()) return;
           store.writeFollowupDraft(reviewId, id, input.value);
+          paintComposer(node);
         });
         input.addEventListener("keydown", function (event) {
+          if (isReadOnly()) {
+            // Nothing types in a locked box; a key that would have typed or
+            // sent still gets the way out. Tab, the arrows, Escape and every
+            // chord are left alone (highlight.js isTypingKey).
+            if (overlayModule.isTypingKey(event)) nudgeRefusal();
+            return;
+          }
           if (gestures.isSendEvent(event, store && store.readSendKey ? store.readSendKey() : undefined)) {
             event.preventDefault();
             submitFollowup(id, input.value);
           }
+        });
+        // A press on a locked composer answers at once (board row
+        // LAHE-readonly-click-feedback). Focus alone does not, so tabbing
+        // through the rail is quiet; the first key typed answers instead.
+        node.addEventListener("pointerdown", function () {
+          if (isReadOnly()) nudgeRefusal();
         });
         node.appendChild(input);
         var actions = el("div", "cardacts");
         var send = el("button", "cardact", "Send");
         send.setAttribute("type", "button");
         overlayModule.paintSendButton(send, !!(store && typeof store.isHeld === "function" && store.isHeld(reviewId)), "Send");
-        send.disabled = isReadOnly();
         send.addEventListener("click", function () {
           submitFollowup(id, input.value);
         });
         actions.appendChild(send);
         node.appendChild(actions);
         composers[id] = node;
+        paintComposer(node);
         ensureStyle(node);
         rail.attachCardContinuation(id, node);
       } else {
         var saved = store.readFollowupDraft(reviewId, id);
         var field = composers[id].querySelector("textarea");
         if (field && field !== field.getRootNode().activeElement && field.value !== saved) field.value = saved;
+        paintComposer(composers[id]);
       }
       return composers[id];
+    }
+
+    /**
+     * The composer's Send and lock. Send is off while the box is blank or
+     * whitespace only (board row LAHE-send-disabled-when-empty), and comes back
+     * on input, including a restored draft. In a read-only window both controls
+     * are locked rather than disabled, so a click still gets the way out.
+     */
+    function paintComposer(node) {
+      if (!node) return;
+      var field = node.querySelector("textarea");
+      var send = node.querySelector("button");
+      if (!field || !send) return;
+      var locked = isReadOnly();
+      overlayModule.setLocked(field, locked);
+      overlayModule.setLocked(send, locked);
+      overlayModule.paintSendForField(send, field, false);
+    }
+
+    function nudgeRefusal() {
+      if (rail && typeof rail.nudgeRefusal === "function") rail.nudgeRefusal();
     }
 
     function focusComposer(id) {
@@ -31876,8 +32192,13 @@
      */
     function submitFollowup(id, text) {
       var item = itemById(id);
+      // A read-only window answers the press with the way out, whatever is in
+      // the box (board row LAHE-readonly-click-feedback).
+      if (isReadOnly()) {
+        nudgeRefusal();
+        return item;
+      }
       if (!item || !item[record.FIELD.REPLY] || !String(text || "").trim()) return item;
-      if (isReadOnly()) return item;
       lifecycle.assertTransition(item[record.FIELD.STATE], record.STATE.READY, lifecycle.ACTOR.REVIEWER);
       return continueItem(item, record.followUp(item, String(text)), "Follow-up sent. It is back in front of the agent.");
     }
@@ -32819,10 +33140,7 @@
       focusFollowup: focusComposer,
       setReadOnly: function () {
         Object.keys(composers).forEach(function (id) {
-          var input = composers[id].querySelector("textarea");
-          var send = composers[id].querySelector("button");
-          if (input) input.disabled = isReadOnly();
-          if (send) send.disabled = isReadOnly();
+          paintComposer(composers[id]);
         });
       },
       followup: function (id) {
@@ -54338,7 +54656,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.4.0+d87cafc72d0b";
+  var VERSION = "0.4.0+06775b2a0e53";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -54863,7 +55181,12 @@
         reviewId: reviewId,
         comments: comments,
         overlay: rail,
-        host: rail.tabBody(ns.overlay.TAB.ACTIVE)
+        host: rail.tabBody(ns.overlay.TAB.ACTIVE),
+        // The same answer the Done tab gets: a refused window locks its
+        // add-another-message boxes, and a click on one gets the way out.
+        isReadOnly: function () {
+          return readOnlyActive;
+        }
       });
       made.mount();
       return made;
@@ -54958,6 +55281,7 @@
       comments.unbind();
       editing.teardown();
       done.setReadOnly();
+      if (tab && typeof tab.setReadOnly === "function") tab.setReadOnly();
       rail.setPdfEnabled(false);
       rail.showRefusal(info);
     }
@@ -54974,6 +55298,7 @@
         if (tab && typeof tab.ensureNoteBox === "function") tab.ensureNoteBox();
       }
       done.setReadOnly();
+      if (tab && typeof tab.setReadOnly === "function") tab.setReadOnly();
       rail.setPdfEnabled(true);
       rail.hideRefusal();
       // The condition ended, so its chip goes too (clear, not dismiss: dismiss
@@ -55404,6 +55729,15 @@
     // closed root before the root's own typing fence stops it. The fence is on
     // the bubbling phase, so a reviewer mid-sentence in a comment box still gets
     // both chords and the page still gets neither.
+    function isReviewChord(gesture) {
+      var G = ns.gestures.GESTURE;
+      return (
+        gesture === G.COMMENT_ON_SELECTION ||
+        gesture === G.ENTER_ELEMENT_PICK ||
+        gesture === G.EDIT_BLOCK ||
+        gesture === G.ENTER_EDIT_STATE
+      );
+    }
     ns.listeners.shared.on(
       doc,
       "keydown",
@@ -55424,6 +55758,17 @@
         if (decided.gesture === ns.gestures.GESTURE.TOGGLE_PRESENT) {
           if (decided.preventDefault) event.preventDefault();
           rail.setPresenting(!rail.isPresenting());
+          return;
+        }
+        // A READ-ONLY WINDOW ANSWERS THE COMMENT AND EDIT CHORDS. Their own
+        // handlers are unbound while the review is open in another window, so
+        // without this the chord did nothing at all, and nothing is what Ken
+        // read as broken (board row LAHE-readonly-click-feedback). The chord is
+        // taken (it would have been taken in a writable window too) and the
+        // refusal panel is shown and pulsed.
+        if (readOnlyActive && !rail.isPresenting() && isReviewChord(decided.gesture)) {
+          if (decided.preventDefault) event.preventDefault();
+          if (typeof rail.nudgeRefusal === "function") rail.nudgeRefusal();
           return;
         }
         if (decided.gesture !== ns.gestures.GESTURE.TOGGLE_RAIL) return;

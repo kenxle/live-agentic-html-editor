@@ -676,7 +676,7 @@ reason, which are the reviewer's reading and not a locating hint) and `TRUNCATIO
 constants, and the bound is **visible in the value**, so an agent cannot mistake a cut-off passage
 for the whole passage.
 
-**When the reviewer last changed an item.** Every projected item carries two timestamps, named for
+**When the reviewer last changed an item.** Every projected item carries three timestamps, named for
 what they mean:
 
 - **`reviewer_last_changed_at`**: when the reviewer last changed these words. This is the item's
@@ -684,6 +684,16 @@ what they mean:
 - **`card_first_created_at`**: when the card was first opened, and nothing more. A reworded item
   keeps its card, so this is not how old the request is. Only `review.json` carries it: the drain
   line leaves it out, and keeps `reviewer_last_changed_at`.
+- **`waiting_since`**: when an agent could first have seen this wording: the later of
+  `reviewer_last_changed_at` and the moment the helper took the event in. The helper stamps every
+  accepted event with its own clock (`received_at` on the stored line, overwriting anything a
+  client sent under that name) and the fold keeps the stamp on the item as `received_at`, a data
+  field the browser never sets. A comment held in the browser (Hold) or stuck behind an unreachable
+  helper was changed long before anyone could act on it, so the rail's "nothing has come back"
+  clock (`replies.poll`'s `oldest_unanswered_at`) counts from this field, and releasing Hold after
+  an hour's work no longer sets the alert off at once. Only `review.json` carries it; the drain line
+  leaves it out. A line written by an older helper has no stamp, and the field then equals
+  `reviewer_last_changed_at`.
 
 They replace the older `created_at` and `updated_at`, which sat side by side and read as equals. On
 2026-09-23 an agent read the `created_at` of two reworded cards, called them leftovers from
