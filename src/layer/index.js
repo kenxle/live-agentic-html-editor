@@ -2268,6 +2268,8 @@
         injector.teardown();
         if (pageObserver) pageObserver.disconnect();
         pageObserver = null;
+        // And the quiet pass it may have left held (replay.noteMutations).
+        ns.replay.cancelQuietPass();
         protect.uninstall();
         editing.teardown();
         zoom.teardown();

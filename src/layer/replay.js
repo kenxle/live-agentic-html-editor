@@ -503,15 +503,16 @@
   // the chart and two edits hung while the reviewer moved the mouse (board row
   // LAHE-mousemove-rereads-page-text, docs/features/20261107.02_observer_perf).
   //
-  // The anchor engine never reads inside a tag in anchor.SKIP_TAGS: an svg or
-  // a canvas is a leaf it compares by signature, and a script or a style holds
-  // no prose. So a change whose target is inside one of those cannot move
-  // where any record is found. It can change two things: the drawing an
-  // element comment on that svg was minted from (which is how such a comment
-  // is lost while a hover label is drawn and found again when the label goes),
-  // and the text domValueOf reads for an edited block holding an inline svg
-  // with words in it. Both need a pass after the svg settles, not one per
-  // frame.
+  // The text walk never reads inside a tag in anchor.SKIP_TAGS: an svg or a
+  // canvas is a leaf the engine compares by signature, and a script or a style
+  // holds no prose. So a change whose target is inside one of those cannot
+  // move a text anchor. It can change two things. One is an element comment on
+  // that svg: signatureOf reads inside it (title, desc, text including a
+  // foreignObject's, and the drawing), so a change there can move the comment
+  // between lost and found, which is how it goes lost while a hover label is
+  // drawn and comes back when the label goes. The other is an edited block's
+  // text compare, since domValueOf reads an inline svg's words in the block.
+  // Both wait for the quiet pass after the svg settles, not one per frame.
   //
   // So a batch made only of such changes arms ONE quiet pass instead of
   // scheduling one now. It runs QUIET_MS after the last held change, and never
@@ -568,8 +569,16 @@
   function createMutationGate(options) {
     var o = options || {};
     var run = o.schedule;
-    var setT = o.setTimeout || setTimeout;
-    var clearT = o.clearTimeout || clearTimeout;
+    // Looked up when the gate arms or cancels, never captured here, the way
+    // defer() does: a page, or a test's fake clock installed after boot, can
+    // replace setTimeout, and a held pass split across two clocks never fires
+    // or never clears.
+    function setT(fn, ms) {
+      return (o.setTimeout || setTimeout)(fn, ms);
+    }
+    function clearT(id) {
+      return (o.clearTimeout || clearTimeout)(id);
+    }
     var now = o.now || Date.now;
     var quietMs = typeof o.quietMs === "number" ? o.quietMs : QUIET_MS;
     var maxWaitMs = typeof o.maxWaitMs === "number" ? o.maxWaitMs : QUIET_MAX_WAIT_MS;
@@ -4292,6 +4301,11 @@
     // Read-only, for the unit tests: is a quiet pass held right now.
     quietPassPending: function () {
       return mutationGate.pending();
+    },
+    // Drop a held quiet pass. The boot handle's teardown calls it, so a
+    // torn-down library does not run one more pass.
+    cancelQuietPass: function () {
+      mutationGate.cancel();
     },
     runPass: runPass,
     compare: compare,
