@@ -87,9 +87,34 @@ var LAYER_FILES = [
     why: "the style id pattern, hex colour rule and name limits, spelled once for the service and the layer. Depends on nothing"
   },
   {
-    path: "src/shared/record.js",
-    owner: "0A-kernel",
-    why: "the record shape, page fields, applied-after history. Needs normalize"
+    path: "src/contract/record.ts",
+    owner: "TypeScript C3",
+    registers: ["record"],
+    modules: [
+      "src/contract/record.ts",
+      "src/contract/field-class.ts",
+      "src/contract/run-limits.ts",
+      "src/contract/choice.ts",
+      "src/contract/item-check.ts",
+      "src/domain/mint.ts",
+      "src/domain/page-identity.ts",
+      "src/domain/stamp-source.ts",
+      "src/domain/item-revisions.ts",
+      "src/domain/item-status.ts",
+      "src/domain/tool-round.ts",
+      "src/domain/thread.ts",
+      "src/domain/page-check.ts",
+      "src/domain/reply-unread.ts",
+      "src/domain/accepted-page-texts.ts",
+      "src/domain/subject.ts",
+      "src/domain/change-text.ts",
+      "src/domain/revert.ts",
+      "src/domain/run-record.ts",
+      "src/domain/run-check.ts",
+      "src/domain/proofread.ts",
+      "src/domain/choice-state.ts"
+    ],
+    why: "the record: its shape, the field classes, the run limits, the choice grammar and the rules every surface runs on a record, in twenty-two modules registered as one name. Needs normalize"
   },
   {
     path: "src/shared/lifecycle.js",
@@ -449,6 +474,11 @@ var FORWARDERS = [
     path: "src/shared/normalize.js",
     owner: "TypeScript C2",
     why: "forwards to the ten modules of src/domain/ that replace it, for the service, the CLI, record, regions, uniqueness and contracts"
+  },
+  {
+    path: "src/shared/record.js",
+    owner: "TypeScript C3",
+    why: "forwards to the twenty-two modules of src/contract/ and src/domain/ that replace it, for the service, the CLI, lifecycle, merge, review_format and tests"
   },
   {
     path: "src/shared/epoch.js",

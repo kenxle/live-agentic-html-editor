@@ -103,7 +103,7 @@ export function validateRun(value: unknown): RunRefusal | null {
   const parsed = parseBlocks(list);
   if ("refusal" in parsed) return refuse("RUN_BLOCK_REFUSED", parsed.refusal);
   const anchorSet = value[FIELD.ANCHOR_AFTER_HTML] !== undefined && value[FIELD.ANCHOR_AFTER_HTML] !== null;
-  let problem = run.length > 0 || anchorSet ? sittingRefusal(value, parsed.blocks) : null;
+  let problem = run.length > 0 || anchorSet ? sittingRefusal(value, run.length > 0 ? parsed.blocks : []) : null;
   if (problem === null && remove.length > 0) problem = takeBackRefusal(value, parsed.blocks);
   return problem === null ? null : refuse("RUN_BLOCK_REFUSED", problem);
 }
