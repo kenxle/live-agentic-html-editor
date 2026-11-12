@@ -1647,3 +1647,4 @@ Nothing new. `test/browser/support/export_stub.js` is already on C1's list.
 1. **C3 waits on C4 as well as C2.** It edits C4's `replies.ts` and `flush.ts` to import the run limits from `contract/run-limits.ts`. The plan's slice table now says so.
 2. **The nine Playwright specs that load the record from Node** follow the C1 decision for `rail_menu.spec.js`: the builder runs each by name, and points any that cannot load through the forwarder at S0c's bundle helper. C3 owns those changes.
 3. **The four one-line edits in other slices' files** (the `historyEntry`, `takenBackIds`, `latestChoiceByGroup` and `FIELD_CLASS` callers) are C3's, in the same pull request. The orchestrator resolves any line conflict when it merges.
+4. **A lost anchor's reason may be `null`.** The region rules write it (found by the C5 spec), so the type allows `null`.
