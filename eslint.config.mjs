@@ -112,6 +112,10 @@ export default defineConfig(
         { selector: "ExportDefaultDeclaration", message: "Use a named export; default exports are banned." },
         { selector: "ExportSpecifier[exported.name='default']", message: "Use a named export; default exports are banned." },
         {
+          selector: "ExportNamedDeclaration > VariableDeclaration[kind!='const']",
+          message: "Export a const or a function, never a let or var: forwarders and the browser bundle copy the exports once, so a reassignment would not reach them."
+        },
+        {
           selector: "AwaitExpression:not(:function AwaitExpression)",
           message: "No top-level await: CommonJS callers cannot require a module that has one."
         },
