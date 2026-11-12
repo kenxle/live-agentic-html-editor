@@ -23,7 +23,7 @@ The compiler enforces the "may import" column: each folder is its own TypeScript
 
 | Today | Target | Slice |
 | --- | --- | --- |
-| `shared/elapsed.js` | `domain/elapsed.ts` | S0b (the pilot) |
+| `shared/elapsed.js` | `domain/elapsed.ts` | S0c (the browser pilot) |
 | `shared/markers.js` | `contract/markers.ts` | C1 |
 | `shared/failures.js` | `contract/failures.ts` | C1 |
 | `shared/style_rules.js` | `contract/style-rules.ts` | C1 |
@@ -39,7 +39,7 @@ The compiler enforces the "may import" column: each folder is its own TypeScript
 | `shared/uniqueness.js` | `browser/review-layer/anchoring/uniqueness.ts` | C5 |
 | `shared/record_fixtures.js` | `test/support/record-fixtures.ts`, and out of the shipped bundle | C5 |
 | `shared/contracts.js` | removed; its two importers import the modules directly | C5 |
-| `shared/script_line.js` | `server/sites/script-line.ts` | SV1 |
+| `shared/script_line.js` | `server/sites/script-line.ts` | S0b (the Node pilot) |
 | `shared/manifest.js` | shrinks as files convert; removed in F1 | F1 |
 
 ## `src/service/` to `src/server/` (server chain)
