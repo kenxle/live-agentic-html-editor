@@ -53,7 +53,7 @@ Each gate is a chain of the layers below it.
 | Lint | `npm run lint` | Syntax of every tracked `.js` file, no jsdom anywhere, and every file under `src/` listed once in `src/shared/manifest.js`. |
 | Bundle | `npm run check:layer` | The committed `dist/lahe-layer.js` matches a fresh build. |
 | Menu bar app | `npm run check:menubar` | Builds the Mac menu bar app, runs its self-test and its tests against a fake helper. Skips with one line off macOS. |
-| Unit | `npm run test:unit` | `node --test test/unit/`, wrapped to fail if a helper is left running. |
+| Unit | `npm run test:unit` | `node --test "test/unit/*.test.js"`, wrapped to fail if a helper is left running. |
 | Browser, Chromium | `npm run test:browser` | The Playwright suite in `test/browser/`, Chromium only. |
 | Browser, three engines | `npm run test:browser:all` | The same suite on Chromium, Firefox and WebKit. |
 
