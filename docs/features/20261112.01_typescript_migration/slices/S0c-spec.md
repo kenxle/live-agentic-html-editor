@@ -6,7 +6,7 @@ read-when: Building, reviewing or testing slice S0c's pilot, the rebuild of src/
 
 The elapsed phrase is how Lahe tells a person how long something has been going on, in words: "for the last 4 minutes". The server says it in the refusal it sends a second window, and the rail says it again on the chip it draws for that refusal. This module is the one place that wording lives. It reads a time and returns a phrase; it touches nothing.
 
-Old file: `src/shared/elapsed.js` (64 lines: 32 comment lines, 4 blank, 28 code, counted with `count_lines.py` as in S0b). Both sides run it: Node through `require`, the browser through the layer bundle.
+Old file: `src/shared/elapsed.js` (64 lines: 32 comment lines, 5 blank, 27 code, counted with `count_lines.py` as in S0b). Both sides run it: Node through `require`, the browser through the layer bundle.
 
 This is the browser pilot. Its other job is to prove that a converted module reaches all three places it runs: Node, the review-layer bundle and a real browser.
 
