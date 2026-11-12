@@ -62,8 +62,9 @@ var LAYER_FILES = [
     why: "the one normalizer, both comparison modes. Needs markers for cleanMarkup"
   },
   {
-    path: "src/shared/failures.js",
-    owner: "0A-wire",
+    path: "src/contract/failures.ts",
+    owner: "TypeScript C1",
+    registers: ["failures"],
     why: "the failure code enum. Depends on nothing"
   },
   {
@@ -413,6 +414,11 @@ var FORWARDERS = [
     path: "src/shared/markers.js",
     owner: "TypeScript C1",
     why: "forwards to src/contract/markers.ts for normalize, regions, the service's Markdown render and contracts"
+  },
+  {
+    path: "src/shared/failures.js",
+    owner: "TypeScript C1",
+    why: "forwards to src/contract/failures.ts for protocol, the service's review writer and contracts"
   }
 ];
 

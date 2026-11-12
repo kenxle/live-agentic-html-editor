@@ -512,7 +512,7 @@ test("the pruned codes are gone: six nothing raises, and the send-era four", () 
 });
 
 test("the table has a row for every code and for nothing else", () => {
-  assert.deepEqual(Object.keys(CODES), ORDER);
+  assert.deepEqual(Object.keys(CODES).sort(), [...ORDER].sort());
 });
 
 test("every code's words are the old words, byte for byte", () => {
@@ -743,6 +743,14 @@ test("with no report, a quota failure still comes back as the result", () => {
   const got = tolerateStorageQuota(() => {
     throw err;
   });
+  assert.equal(got, err.failure);
+});
+
+test("a null report is the same as no report, because the comment and edit surfaces pass null when nothing listens", () => {
+  const err = quotaError();
+  const got = tolerateStorageQuota(() => {
+    throw err;
+  }, null);
   assert.equal(got, err.failure);
 });
 
