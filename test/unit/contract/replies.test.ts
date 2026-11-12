@@ -71,6 +71,17 @@ test("a handled reply needs an item, a revision and a status", () => {
   });
 });
 
+test("an accepted reply's keys come in this order, then proofread and suggestions on a proofread", () => {
+  const keys = ["item", "rev", "status", "agent", "reason", "text", "files", "user_needs_to_see_reply"];
+  assert.deepEqual(Object.keys(accepted(parseReplyLine(line({ status: "handled" })))), keys);
+  assert.deepEqual(Object.keys(accepted(parseReplyLine(line({ status: "not_handled", reason: "x" })))), keys);
+  assert.deepEqual(Object.keys(accepted(parseReplyLine(line({ status: "question", text: "q" })))), keys);
+  assert.deepEqual(
+    Object.keys(accepted(parseReplyLine(line({ status: "question", text: "q", proofread: true, suggestions: [] })))),
+    [...keys, "proofread", "suggestions"]
+  );
+});
+
 test("a not_handled reply also needs a reason and a question also needs text", () => {
   const noReason = parseReplyLine('{"item":"c_7fa2","rev":2,"status":"not_handled"}');
   assert.deepEqual(noReason, refusal("status not_handled needs item, rev, status, reason; missing or wrong type: reason"));

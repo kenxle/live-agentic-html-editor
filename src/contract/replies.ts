@@ -147,9 +147,10 @@ export function parseReplyLine(line: string, options?: ReplyParseOptions): Reply
   const filenameAgent = options?.filenameAgent;
   const agent = typeof lineAgent === "string" && lineAgent !== "" ? lineAgent : filenameAgent === undefined || filenameAgent === "" ? null : filenameAgent;
   const files: unknown = parsed[REPLY_FIELD.FILES];
-  const common: ReplyCommon = {
+  const common = {
     item,
     rev,
+    status,
     agent,
     reason: typeof givenReason === "string" ? givenReason : null,
     text: typeof givenText === "string" ? givenText : null,
