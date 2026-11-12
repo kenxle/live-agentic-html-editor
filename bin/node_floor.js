@@ -47,7 +47,7 @@ function problem(found, cloneDir) {
   if (meetsFloor(found)) return null;
   return (
     describe(found) +
-    " Install Node 24, then run `npm run install-cli` and `lahe install` in " +
+    " Install Node 24.12 or newer, then run `npm run install-cli` and `lahe install` in " +
     cloneDir +
     "."
   );
