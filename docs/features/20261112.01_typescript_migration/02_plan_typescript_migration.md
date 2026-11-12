@@ -229,6 +229,8 @@ The rest of the contract:
 
 **Models.** The spec is Opus for every slice, because it is where the design happens. The "Model" column in the slice tables names the builder.
 
+**Principles.** A rebuild done well comes out better and usually smaller than what it replaces, because the principles say how. Every spec and builder contract names, as leaves to read in full, Laziness Protocol, Subtract Before You Add, Minimize Reader Load and Migrate Callers Then Delete Legacy APIs (specs also Redesign From First Principles), alongside Type System Discipline and Test Behavior Not Implementation. The hand-back says where each one changed the code, and reports code lines old and new, comments excluded. The spec's behavior statements are fixed; its module design is the starting shape, and a builder takes a simpler one when a principle shows it.
+
 ### Each slice, from branch to main
 
 1. The builder returns green in its worktree.
