@@ -51,8 +51,9 @@
 var LAYER_FILES = [
   // --- the shared kernel ---------------------------------------------------
   {
-    path: "src/shared/markers.js",
-    owner: "0A-kernel",
+    path: "src/contract/markers.ts",
+    owner: "TypeScript C1",
+    registers: ["markers"],
     why: "the one spelling of 'this node is ours'. Nothing above it; it depends on nothing"
   },
   {
@@ -61,13 +62,15 @@ var LAYER_FILES = [
     why: "the one normalizer, both comparison modes. Needs markers for cleanMarkup"
   },
   {
-    path: "src/shared/failures.js",
-    owner: "0A-wire",
+    path: "src/contract/failures.ts",
+    owner: "TypeScript C1",
+    registers: ["failures"],
     why: "the failure code enum. Depends on nothing"
   },
   {
-    path: "src/shared/style_rules.js",
-    owner: "Style switcher 1.1",
+    path: "src/contract/style-rules.ts",
+    owner: "TypeScript C1",
+    registers: ["styleRules"],
     why: "the style id pattern, hex colour rule and name limits, spelled once for the service and the layer. Depends on nothing"
   },
   {
@@ -96,13 +99,15 @@ var LAYER_FILES = [
     why: "D9's predicate, no tunable number. Needs normalize"
   },
   {
-    path: "src/shared/gestures.js",
-    owner: "0A-kernel",
+    path: "src/domain/gestures.ts",
+    owner: "TypeScript C1",
+    registers: ["gestures"],
     why: "D3's gesture vocabulary. Depends on nothing"
   },
   {
-    path: "src/shared/epoch.js",
-    owner: "0A-kernel",
+    path: "src/browser/review-layer/editing/write-epoch.ts",
+    owner: "TypeScript C1",
+    registers: ["epoch"],
     why: "the write-epoch rule that stops replay retriggering replay. Depends on nothing"
   },
   {
@@ -407,6 +412,31 @@ var FORWARDERS = [
     path: "src/shared/elapsed.js",
     owner: "TypeScript S0c",
     why: "forwards to src/domain/elapsed.ts for reviews, store's Node branch and contracts"
+  },
+  {
+    path: "src/shared/markers.js",
+    owner: "TypeScript C1",
+    why: "forwards to src/contract/markers.ts for normalize, regions, the service's Markdown render and contracts"
+  },
+  {
+    path: "src/shared/failures.js",
+    owner: "TypeScript C1",
+    why: "forwards to src/contract/failures.ts for protocol, the service's review writer and contracts"
+  },
+  {
+    path: "src/shared/style_rules.js",
+    owner: "TypeScript C1",
+    why: "forwards to src/contract/style-rules.ts for the service's styles and contracts"
+  },
+  {
+    path: "src/shared/epoch.js",
+    owner: "TypeScript C1",
+    why: "forwards to src/browser/review-layer/editing/write-epoch.ts for replay's Node branch and contracts"
+  },
+  {
+    path: "src/shared/gestures.js",
+    owner: "TypeScript C1",
+    why: "forwards to src/domain/gestures.ts for review_format and contracts"
   }
 ];
 

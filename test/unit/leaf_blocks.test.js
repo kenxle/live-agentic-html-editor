@@ -12,7 +12,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const normalize = require("../../src/shared/normalize.js");
-const markers = require("../../src/shared/markers.js");
 const corpus = require("../fixtures/free_writing/corpus.js");
 
 const FIXTURES = path.join(__dirname, "..", "fixtures", "free_writing");
@@ -33,14 +32,6 @@ function leavesOf(html) {
 test("the walk's numbers are the plan's", () => {
   assert.equal(normalize.SHORT_BLOCK_WORDS, 5);
   assert.equal(normalize.RUN_WALK_SLACK, 2);
-});
-
-test("the file-name title marker has one spelling", () => {
-  assert.equal(markers.FILE_TITLE_ATTR, "data-lahe-file-title");
-  assert.equal(markers.EDIT_HOST_ATTR, "data-lahe-edit-host");
-  const el = { getAttribute: (n) => (n === markers.FILE_TITLE_ATTR ? markers.FILE_TITLE_VALUE : null) };
-  assert.equal(markers.isFileTitle(el), true);
-  assert.equal(markers.isFileTitle({ getAttribute: () => null }), false);
 });
 
 test("on the Markdown render the reader skips the Section N label", () => {

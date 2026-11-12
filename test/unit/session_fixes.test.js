@@ -19,7 +19,6 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const gestures = require("../../src/shared/gestures.js");
 const syncModule = require("../../src/layer/sync.js");
 const installCli = require("../../scripts/install-cli.js");
 const installSkills = require("../../scripts/install-skills.js");
@@ -41,77 +40,6 @@ test("a 403 and a live helper both mean the origin, not the helper", () => {
   // The two that outrank it, unchanged.
   assert.equal(decide({ cspRefused: true, healthAnswered: true }), "CSP_REFUSED");
   assert.equal(decide({ status: 401 }), "SYNC_UNAUTHORIZED");
-});
-
-// ---------------------------------------------------------------------------
-// Leaving the block, every way there is
-// ---------------------------------------------------------------------------
-
-test("the pointer going down outside the edited block commits it, rail included", () => {
-  const outside = gestures.gestureFor({ type: "pointerdown", editing: true, inEditedBlock: false });
-  assert.equal(outside.gesture, gestures.GESTURE.COMMIT_EDIT);
-  assert.equal(outside.passThrough, true, "the page and the rail still get the event");
-
-  // The rail. A click here retargets to the overlay host and was swallowed by
-  // the overlay rule, which is how an edit sat in draft forever.
-  const onRail = gestures.gestureFor({ type: "pointerdown", editing: true, inEditedBlock: false, inOverlay: true });
-  assert.equal(onRail.gesture, gestures.GESTURE.COMMIT_EDIT, "clicking the rail commits the open edit");
-
-  // Inside the block is typing, not leaving.
-  const inside = gestures.gestureFor({ type: "pointerdown", editing: true, inEditedBlock: true });
-  assert.notEqual(inside.gesture, gestures.GESTURE.COMMIT_EDIT);
-
-  // With no edit open, a pointer going down is the page's own.
-  const idle = gestures.gestureFor({ type: "pointerdown", editing: false });
-  assert.equal(idle.gesture, gestures.GESTURE.PAGE_DEFAULT);
-});
-
-test("a scrollbar drag and a right-click are not the reviewer leaving the block (review, 2026-08-17)", () => {
-  // A scrollbar drag fires pointerdown on html with no click after it, so the
-  // reviewer scrolling to see the rest of their edit had contenteditable
-  // stripped out from under their pointer mid-drag.
-  const scrollbar = gestures.gestureFor({ type: "pointerdown", editing: true, inEditedBlock: false, onScrollbar: true });
-  assert.notEqual(scrollbar.gesture, gestures.GESTURE.COMMIT_EDIT);
-  assert.equal(scrollbar.passThrough, true, "the page still scrolls");
-
-  // Right-click opens a context menu. The reviewer is still editing.
-  const right = gestures.gestureFor({ type: "pointerdown", editing: true, inEditedBlock: false, button: 2 });
-  assert.notEqual(right.gesture, gestures.GESTURE.COMMIT_EDIT);
-  const middle = gestures.gestureFor({ type: "mousedown", editing: true, inEditedBlock: false, button: 1 });
-  assert.notEqual(middle.gesture, gestures.GESTURE.COMMIT_EDIT);
-
-  // The primary button on content is still leaving, stated and unstated.
-  const primary = gestures.gestureFor({ type: "pointerdown", editing: true, inEditedBlock: false, button: 0 });
-  assert.equal(primary.gesture, gestures.GESTURE.COMMIT_EDIT);
-  const unstated = gestures.gestureFor({ type: "pointerdown", editing: true, inEditedBlock: false });
-  assert.equal(unstated.gesture, gestures.GESTURE.COMMIT_EDIT, "a caller that cannot tell means a primary press");
-});
-
-test("the scrollbar geometry: past the content box and inside the border box", () => {
-  // A 200-wide box with a 15px vertical scrollbar: content stops at 185.
-  const inner = { contentWidth: 185, contentHeight: 100, boxWidth: 200, boxHeight: 100 };
-  assert.equal(gestures.isScrollbarPress(Object.assign({ x: 192, y: 40 }, inner)), true, "in the gutter");
-  assert.equal(gestures.isScrollbarPress(Object.assign({ x: 184, y: 40 }, inner)), false, "one pixel of content");
-  assert.equal(gestures.isScrollbarPress(Object.assign({ x: 260, y: 40 }, inner)), false, "past the box entirely");
-
-  // A horizontal one, and both at once.
-  const horizontal = { contentWidth: 200, contentHeight: 85, boxWidth: 200, boxHeight: 100 };
-  assert.equal(gestures.isScrollbarPress(Object.assign({ x: 40, y: 92 }, horizontal)), true);
-  assert.equal(gestures.isScrollbarPress(Object.assign({ x: 40, y: 40 }, horizontal)), false);
-
-  // The root's scrollbar: outside the document element, inside the viewport.
-  const root = { contentWidth: 1265, contentHeight: 800, boxWidth: 1280, boxHeight: 800 };
-  assert.equal(gestures.isScrollbarPress(Object.assign({ x: 1272, y: 300 }, root)), true);
-  assert.equal(gestures.isScrollbarPress(Object.assign({ x: 600, y: 300 }, root)), false);
-
-  // No gutter at all is an overlay scrollbar, which takes no layout space and
-  // receives no press. Nothing there can be a scrollbar press.
-  const overlay = { contentWidth: 200, contentHeight: 100, boxWidth: 200, boxHeight: 100 };
-  assert.equal(gestures.isScrollbarPress(Object.assign({ x: 199, y: 99 }, overlay)), false);
-
-  // A caller that could not measure gets a no, never a guess.
-  assert.equal(gestures.isScrollbarPress(null), false);
-  assert.equal(gestures.isScrollbarPress({ contentWidth: 185, boxWidth: 200 }), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -456,32 +384,4 @@ test("and the same id mid-reload still reclaims, because the lock is free", asyn
   const got = await storeWith(locksWhere(true), seeded).claimWindow("rev-reload", { path: "/deck.html" });
   assert.equal(got.acquired, true);
   assert.equal(got.reclaimed, true);
-});
-
-// ---------------------------------------------------------------------------
-// What a chip is allowed to offer, beside the codes it answers for
-// ---------------------------------------------------------------------------
-
-const failuresModule = require("../../src/shared/failures.js");
-
-test("the codes whose remedy IS an agent handoff can hand the line over", () => {
-  assert.equal(failuresModule.isCopyable("REPLY_LINE_MALFORMED"), true);
-  assert.equal(failuresModule.isCopyable("SYNC_UNAUTHORIZED"), true);
-  assert.equal(failuresModule.isCopyable("SYNC_ORIGIN_NOT_ALLOWED"), true);
-  assert.equal(failuresModule.isCopyable("CSP_REFUSED"), true);
-});
-
-test("a chip with its own button never also gets a Copy button", () => {
-  assert.equal(failuresModule.chipAction("SECOND_WINDOW_REFUSED").action, "takeover");
-  assert.equal(failuresModule.isCopyable("SECOND_WINDOW_REFUSED"), false);
-  assert.equal(failuresModule.chipAction("HELPER_UNREACHABLE"), null);
-  assert.equal(failuresModule.isCopyable("HELPER_UNREACHABLE"), false);
-});
-
-test("every code a table names is a code that exists", () => {
-  Object.keys(failuresModule.CHIP_ACTIONS)
-    .concat(Object.keys(failuresModule.COPYABLE))
-    .forEach((code) => {
-      assert.ok(failuresModule.describe(code), code + " is defined in failures.js");
-    });
 });

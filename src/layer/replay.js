@@ -369,7 +369,7 @@
     }
     // The write-epoch rule. Replay's own mutations must not schedule replay.
     if (epoch.isWriting()) {
-      epoch.shared.noteExternalMutation();
+      epoch.noteExternalMutation();
       return false;
     }
     // A load and a remount are the two moments the page starts drawing itself
@@ -447,8 +447,7 @@
    */
   function scheduleOwedPass() {
     deferMicrotask(function () {
-      if (!epoch.shared || typeof epoch.shared.takePendingExternal !== "function") return;
-      if (epoch.shared.takePendingExternal()) schedule(REASON.MUTATION);
+      if (epoch.takePendingExternal()) schedule(REASON.MUTATION);
     });
   }
 
@@ -469,11 +468,9 @@
    * So replay also listens to the epoch itself. epoch.onIdle fires when the
    * depth unwinds to zero with a pass owed, whoever opened it.
    */
-  if (epoch.shared && typeof epoch.shared.onIdle === "function") {
-    epoch.shared.onIdle(function () {
-      if (epoch.shared.takePendingExternal()) schedule(REASON.MUTATION);
-    });
-  }
+  epoch.onIdle(function () {
+    if (epoch.takePendingExternal()) schedule(REASON.MUTATION);
+  });
 
   function defer(fn) {
     var done = false;

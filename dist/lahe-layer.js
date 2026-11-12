@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.4.0+1663d681fadf
+ * version 0.4.0+d38fe29a13e9
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -11,7 +11,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.4.0+1663d681fadf";
+  g.LAHE.version = "0.4.0+d38fe29a13e9";
 })();
 (() => {
   var __create = Object.create;
@@ -53,95 +53,6 @@
     isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
     mod
   ));
-
-  // src/shared/markers.js
-  var require_markers = __commonJS({
-    "src/shared/markers.js"(exports, module) {
-      (function(root) {
-        "use strict";
-        var browser = typeof window !== "undefined" && !!window.document;
-        var TOOL_ATTR = "data-lahe";
-        var ROLE_CHROME = "chrome";
-        var ROLE_WRAP = "wrap";
-        var TOOL_ATTR_PREFIX = "data-lahe";
-        var TOOL_CLASS_PREFIX = "lahe-";
-        var OVERLAY_ROOT_ID = "lahe-surface-root";
-        var PROTECTED_ATTR = "data-lahe-protected";
-        var TURBO_PERMANENT_ATTR = "data-turbo-permanent";
-        var AUTHOR_REGION_ATTR = "data-review-region";
-        var STAMP_ATTR = "data-lahe-id";
-        var FILE_TITLE_ATTR = "data-lahe-file-title";
-        var FILE_TITLE_VALUE = "file-name";
-        var RENDER_NOTE_NAME = "lahe-render-note";
-        var EDIT_HOST_ATTR = "data-lahe-edit-host";
-        function isFileTitle(el) {
-          return !!(el && typeof el.getAttribute === "function" && el.getAttribute(FILE_TITLE_ATTR) === FILE_TITLE_VALUE);
-        }
-        function isToolAttrName(name) {
-          if (typeof name !== "string") return false;
-          return name.toLowerCase().indexOf(TOOL_ATTR_PREFIX) === 0;
-        }
-        function isToolClassToken(token) {
-          if (typeof token !== "string") return false;
-          return token.indexOf(TOOL_CLASS_PREFIX) === 0;
-        }
-        function roleOf(el) {
-          if (!el || typeof el.getAttribute !== "function") return null;
-          var v = el.getAttribute(TOOL_ATTR);
-          return v === ROLE_CHROME || v === ROLE_WRAP ? v : null;
-        }
-        function isToolNode(el) {
-          return roleOf(el) !== null;
-        }
-        function isInsideOverlay(el) {
-          var node = el;
-          while (node && node.nodeType === 1) {
-            if (node.id === OVERLAY_ROOT_ID || isToolNode(node)) return true;
-            node = node.parentNode;
-          }
-          return false;
-        }
-        function markChrome(el) {
-          if (el && typeof el.setAttribute === "function") el.setAttribute(TOOL_ATTR, ROLE_CHROME);
-          return el;
-        }
-        function markWrap(el) {
-          if (el && typeof el.setAttribute === "function") el.setAttribute(TOOL_ATTR, ROLE_WRAP);
-          return el;
-        }
-        var api = {
-          TOOL_ATTR,
-          STAMP_ATTR,
-          TOOL_ATTR_PREFIX,
-          TOOL_CLASS_PREFIX,
-          ROLE_CHROME,
-          ROLE_WRAP,
-          OVERLAY_ROOT_ID,
-          PROTECTED_ATTR,
-          TURBO_PERMANENT_ATTR,
-          AUTHOR_REGION_ATTR,
-          FILE_TITLE_ATTR,
-          RENDER_NOTE_NAME,
-          FILE_TITLE_VALUE,
-          EDIT_HOST_ATTR,
-          isFileTitle,
-          isToolAttrName,
-          isToolClassToken,
-          roleOf,
-          isToolNode,
-          isInsideOverlay,
-          markChrome,
-          markWrap
-        };
-        if (browser) {
-          root.LAHE = root.LAHE || {};
-          root.LAHE.markers = api;
-        } else {
-          module.exports = api;
-        }
-      })(typeof globalThis !== "undefined" ? globalThis : exports);
-    }
-  });
 
   // src/shared/normalize.js
   var require_normalize = __commonJS({
@@ -1412,10 +1323,10 @@
               pathPart = pathPart.slice(0, -1);
             }
             var search = u.search === "?" ? "" : u.search;
-            var canonical = u.protocol.toLowerCase() + "//" + host + (port ? ":" + port : "") + pathPart + search;
+            var canonical2 = u.protocol.toLowerCase() + "//" + host + (port ? ":" + port : "") + pathPart + search;
             return {
               kind: "route",
-              canonical,
+              canonical: canonical2,
               host,
               port: port || null,
               isLocal: isLoopbackHost(u.hostname),
@@ -1455,8 +1366,8 @@
           };
         }
         var SLUG_MAX = 40;
-        function targetSlug(canonical) {
-          var s = typeof canonical === "string" ? canonical : String(canonical);
+        function targetSlug(canonical2) {
+          var s = typeof canonical2 === "string" ? canonical2 : String(canonical2);
           var tail = s.split("?")[0].split("/").filter(Boolean).pop() || "target";
           var slug = tail.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, SLUG_MAX).replace(/^-+|-+$/g, "");
           return slug || "target";
@@ -1522,609 +1433,6 @@
           runWords
         };
       });
-    }
-  });
-
-  // src/shared/failures.js
-  var require_failures = __commonJS({
-    "src/shared/failures.js"(exports, module) {
-      (function(root) {
-        "use strict";
-        var browser = typeof window !== "undefined" && !!window.document;
-        var SEVERITY = { BLOCKING: "blocking", WARNING: "warning", INFO: "info" };
-        var SURFACE = { FAILURES_LIST: "failures_list", CARD: "card", CLI: "cli" };
-        function def(severity, persistent, surface, message, remedy) {
-          return {
-            severity,
-            persistent,
-            surface,
-            message,
-            remedy: remedy || null
-          };
-        }
-        var CODES = {
-          // --- the helper, and getting to it -------------------------------------
-          HELPER_UNREACHABLE: def(
-            SEVERITY.WARNING,
-            true,
-            SURFACE.FAILURES_LIST,
-            "The local helper is not reachable. Your feedback is safe in this browser and goes to the helper when it comes back.",
-            "Start the helper, or use Copy or Export to get everything out now."
-          ),
-          // Told apart from the helper being down ON PURPOSE. They look identical to
-          // a fetch and they need opposite fixes: one is "start the helper", the
-          // other is "this page's own policy refuses the connection".
-          CSP_REFUSED: def(
-            SEVERITY.BLOCKING,
-            true,
-            SURFACE.FAILURES_LIST,
-            "This page's content security policy refused the connection to the local helper. This is not the helper being down.",
-            "Add the helper's origin to connect-src in this app's development CSP."
-          ),
-          SYNC_UNAUTHORIZED: def(
-            SEVERITY.BLOCKING,
-            true,
-            SURFACE.FAILURES_LIST,
-            "The local helper refused this page's token.",
-            "Run the add step again for this review, then reload the page."
-          ),
-          SYNC_ORIGIN_NOT_ALLOWED: def(
-            SEVERITY.BLOCKING,
-            true,
-            SURFACE.FAILURES_LIST,
-            "This page's address is not registered for this review. The helper is fine; it refuses addresses it does not know.",
-            "Have your agent re-run the add step with this page's address, then reload."
-          ),
-          // --- browser storage and windows ---------------------------------------
-          STORAGE_QUOTA: def(
-            SEVERITY.BLOCKING,
-            true,
-            SURFACE.FAILURES_LIST,
-            "Browser storage is full, so the last change could not be saved locally.",
-            "Export what you have, then clear storage for this origin."
-          ),
-          STORAGE_UNAVAILABLE: def(
-            SEVERITY.BLOCKING,
-            true,
-            SURFACE.FAILURES_LIST,
-            "Browser storage is unavailable on this page, so nothing can be saved locally.",
-            "Serve the page over http rather than opening it from Finder."
-          ),
-          // D5: two windows sharing one draft bucket means the last keystroke wins
-          // and the other window's work disappears without saying so. Refusal costs
-          // the reviewer nothing, and the takeover is one button.
-          SECOND_WINDOW_REFUSED: def(
-            SEVERITY.BLOCKING,
-            true,
-            SURFACE.FAILURES_LIST,
-            "Another window is already reviewing this page. This one is read-only so the two cannot overwrite each other.",
-            "Use Review here instead to move the review to this window."
-          ),
-          // --- anchoring and replay ----------------------------------------------
-          ANCHOR_NO_TEXT_MATCH: def(
-            SEVERITY.WARNING,
-            true,
-            SURFACE.CARD,
-            "This feedback could not be safely matched to this version of the page. Nothing was moved or changed, and your feedback is kept.",
-            null
-          ),
-          ANCHOR_AMBIGUOUS: def(
-            SEVERITY.WARNING,
-            true,
-            SURFACE.CARD,
-            "More than one place on this page matches this feedback, so nothing was moved or changed. Your feedback is kept.",
-            null
-          ),
-          ANCHOR_STRUCTURE_ONLY: def(
-            SEVERITY.WARNING,
-            true,
-            SURFACE.CARD,
-            "A structurally similar place is still present, but its text does not match this feedback. Nothing was moved or changed, and your feedback is kept.",
-            null
-          ),
-          // Backward-compatible code for records written before the uniqueness
-          // verdicts received distinct codes. A failed safe match is not proof that
-          // visible content was deleted, so even the legacy copy stays neutral.
-          ANCHOR_LOST: def(
-            SEVERITY.WARNING,
-            true,
-            SURFACE.CARD,
-            "This feedback could not be safely matched to this version of the page. Nothing was moved or changed, and your feedback is kept.",
-            null
-          ),
-          REPLAY_CONTENT_CHANGED: def(
-            SEVERITY.WARNING,
-            true,
-            SURFACE.CARD,
-            "The content under this edit changed, so nothing was written. Your text is kept.",
-            null
-          ),
-          // Neither the before nor the after matches what is on the page now: two
-          // people, or a rebuild, changed the same region. Writing either one would
-          // clobber a change nobody asked to lose.
-          REPLAY_NEITHER_MATCHES: def(
-            SEVERITY.WARNING,
-            true,
-            SURFACE.CARD,
-            "This region is neither what you edited nor what you changed it to, so nothing was written. Your text is kept.",
-            "Look at the region and reapply your change if it still makes sense."
-          ),
-          REPLAY_GROUP_INCOMPLETE: def(
-            SEVERITY.WARNING,
-            true,
-            SURFACE.CARD,
-            "This edit spans several regions and one of them could not be placed, so none of them were changed.",
-            null
-          ),
-          // --- free writing: run records -----------------------------------------
-          //
-          // docs/features/20260928.01_free_writing. The first four are the helper's
-          // refusals of a run event (record.validateRun). The helper refuses rather
-          // than cleans, so a forged or runaway record shows up instead of being
-          // quietly repaired. normalize.cleanBlock returns the first one itself.
-          RUN_BLOCK_REFUSED: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "A new block in this edit is not a paragraph, heading or list the tool can store, or holds markup outside bold and italic.",
-            null
-          ),
-          RUN_OVER_CEILING: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "This edit is larger than the helper stores in one record.",
-            null
-          ),
-          RUN_PLACEMENT_REFUSED: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "This edit's placement is not after_anchor or start_of_container.",
-            null
-          ),
-          RUN_TAKEBACK_CARRIES_RUN: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "A take-back names blocks to remove and never carries new blocks.",
-            null
-          ),
-          // The card notes. {first words} and {type} are filled in by the layer.
-          REPLAY_RUN_WRONG_TAG: def(
-            SEVERITY.WARNING,
-            true,
-            SURFACE.CARD,
-            "The agent placed '{first words}' as a {type}. You wrote a {type}, so Lahe sent it back.",
-            null
-          ),
-          // For the reviewer only. It never reaches review.json.
-          REPLAY_RUN_PLACED_ELSEWHERE: def(
-            SEVERITY.INFO,
-            true,
-            SURFACE.CARD,
-            "'{first words}' is already further down the page, so Lahe did not add it again.",
-            null
-          ),
-          // The layer read the helper's health and it reports an older service
-          // contract (free writing, design call 9). Nothing is posted to it.
-          HELPER_CONTRACT_OLDER: def(
-            SEVERITY.BLOCKING,
-            true,
-            SURFACE.FAILURES_LIST,
-            "The local helper is an older version than this page, so nothing you write here is sent to it. Your work is safe in this browser.",
-            "Ask your agent to restart the helper (lahe session list restarts an old one), then reload this page."
-          ),
-          RUN_EVENT_REFUSED: def(
-            SEVERITY.BLOCKING,
-            true,
-            SURFACE.CARD,
-            "The helper refused this edit, so the agent has not seen it. Your words are still on this page.",
-            null
-          ),
-          SUGGESTION_NOT_FOUND: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "A proofreading suggestion's from text is not in its block exactly once, so it cannot be applied.",
-            null
-          ),
-          // --- choice buttons -----------------------------------------------------
-          //
-          // docs/features/20261013.01_choice_buttons. The helper's refusal of a
-          // choice record (record.validateChoice): a group or answer off the grammar,
-          // a key other than the two, or a field a press never carries. The layer
-          // never sends one, so it shows up only as a forgery.
-          CHOICE_REFUSED: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "A choice record names its group and answer with short ids and carries nothing else, so this one was not stored.",
-            null
-          ),
-          // A group the agent wrote wrong: no name, a name or a value off the
-          // grammar, two groups with one name, fewer than two buttons. Drawn as plain
-          // content and named here before anything can be pressed (brief R4). The
-          // detail names each group and why, written to hand to the agent.
-          CHOICE_GROUP_INERT: def(
-            SEVERITY.WARNING,
-            true,
-            SURFACE.FAILURES_LIST,
-            "Some choices on this page cannot be pressed, so they show as plain text.",
-            "Ask your agent to fix them. Each one and the reason:"
-          ),
-          // The card notes for a press whose group the page no longer shows. The
-          // press stays with the agent either way.
-          CHOICE_GROUP_GONE: def(
-            SEVERITY.WARNING,
-            true,
-            SURFACE.CARD,
-            "This choice is no longer on the page. Your answer is kept and is still with the agent.",
-            null
-          ),
-          CHOICE_GROUP_TWICE: def(
-            SEVERITY.WARNING,
-            true,
-            SURFACE.CARD,
-            "Two choices on this page now share this one's name, so Lahe marked neither. Your answer is kept.",
-            null
-          ),
-          // --- replies from agents (D6) ------------------------------------------
-          //
-          // The helper SKIPS a bad line and never dies: exiting on one agent's typo
-          // takes the reviewer's session with it, which is a worse failure than the
-          // one it reports.
-          REPLY_LINE_MALFORMED: def(
-            SEVERITY.WARNING,
-            true,
-            SURFACE.FAILURES_LIST,
-            "An agent wrote a reply line this tool could not read, so that line was skipped. Everything else was folded in.",
-            "The chip names the file and the line number; the agent that wrote it can fix and append again."
-          ),
-          // --- the helper's refusals (D11) ---------------------------------------
-          //
-          // Every one of these is logged by the helper NAMING THE CHECK THAT FAILED,
-          // which is what makes "outside cannot get in" observable rather than a
-          // claim. src/shared/protocol.js CHECKS is the ordered list.
-          PROTO_BAD_REQUEST: def(SEVERITY.BLOCKING, false, SURFACE.CLI, "The request was malformed.", null),
-          PROTO_BAD_HOST: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "The Host header does not name the helper, so the request was refused.",
-            null
-          ),
-          PROTO_UNAUTHORIZED: def(SEVERITY.BLOCKING, false, SURFACE.CLI, "Missing or invalid per-review token.", null),
-          PROTO_FORBIDDEN_ORIGIN: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "This origin is not registered for this review.",
-            null
-          ),
-          PROTO_UNKNOWN_REVIEW: def(SEVERITY.BLOCKING, false, SURFACE.CLI, "No such review.", null),
-          PROTO_UNSUPPORTED_MEDIA_TYPE: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "Mutating routes require a JSON content type.",
-            null
-          ),
-          PROTO_MISSING_CUSTOM_HEADER: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "Every route but health requires the client header, so a simple cross-origin request cannot reach a handler.",
-            null
-          ),
-          PROTO_STALE_REV: def(
-            SEVERITY.WARNING,
-            false,
-            SURFACE.CLI,
-            "This reply names a revision that has since been superseded. The newer revision stays outstanding.",
-            null
-          ),
-          PROTO_UNKNOWN_ITEM: def(SEVERITY.BLOCKING, false, SURFACE.CLI, "No such item in this review.", null),
-          PROTO_REVIEW_RETIRED: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "This review was retired, so it takes no more comments.",
-            "Reload the page: it now answers with the file's current review, if it has one."
-          ),
-          PROTO_NOT_OWNER: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "This review belongs to another agent session, so this session cannot retire it.",
-            "Ask your human. A handoff is lahe session takeover, which they ask for."
-          ),
-          PROTO_SECOND_WINDOW: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "Another window already holds this review.",
-            "Take over from the window you are in."
-          ),
-          PROTO_SECOND_INSTANCE: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "Another helper is already running for this data directory.",
-            "Use the running one, or stop it first."
-          ),
-          // --- the Library's refusals (LAHE Library, D11 amendment) ---------------
-          //
-          // The Library page shows the remedy line, so each one says what the
-          // reviewer can do next. Statuses are in protocol.js STATUS_FOR_CODE.
-          PROTO_CROSS_SITE: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "This request did not come from the Library page itself, so it was refused.",
-            "Use the Library page at the helper's own address, /catalog."
-          ),
-          PROTO_NOT_OPENABLE: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "This document cannot be opened from the Library: its files are missing, or it has no recorded server.",
-            "Ask your agent to serve it again with lahe review."
-          ),
-          PROTO_REQUEST_PENDING: def(
-            SEVERITY.INFO,
-            false,
-            SURFACE.CLI,
-            "This document already has a request waiting for an agent.",
-            "Wait for the agent to answer. Its answer shows on the row."
-          ),
-          PROTO_QUEUE_FULL: def(
-            SEVERITY.WARNING,
-            false,
-            SURFACE.CLI,
-            "Too many requests are already waiting for an agent.",
-            "Wait for the agent to answer some of them, then try again."
-          ),
-          PROTO_NO_AGENT: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "No agent is attached to the Library, or the attached agent has stopped watching.",
-            "Ask an agent to run lahe library with its own session, or copy the hand-off message into a new agent."
-          ),
-          PROTO_CONFIRM_NEEDED: def(
-            SEVERITY.INFO,
-            false,
-            SURFACE.CLI,
-            "Another agent is watching this document's session, so moving it needs your say-so.",
-            "Choose Move the session to confirm, or open it just to read."
-          ),
-          PROTO_NO_LAUNCH: def(
-            SEVERITY.INFO,
-            false,
-            SURFACE.CLI,
-            "A new agent can only be launched on a document with a session to take over and a file to serve. This one is from before sessions, or its worktree is gone and no main-repo copy passes the checks.",
-            "Choose Pick this up instead. The attached agent serves it in its own session."
-          ),
-          PROTO_CATALOG_UNREADABLE: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "The Library's saved stars file cannot be read, so stars cannot change. Lahe leaves the file as it is.",
-            "Fix or move aside catalog.json in the Lahe state folder, then try again."
-          ),
-          // --- the CLI -----------------------------------------------------------
-          CLI_NO_REVIEW: def(SEVERITY.INFO, false, SURFACE.CLI, "No review has anything ready.", null),
-          CLI_REVIEW_ENDED: def(
-            SEVERITY.INFO,
-            false,
-            SURFACE.CLI,
-            "The reviewer ended this review. Stop waiting and stop asking.",
-            null
-          ),
-          CLI_RUNTIME_MISSING: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "Node 24.12 or newer is required and was not found.",
-            "Install Node 24.12 or newer, then run the add step again."
-          ),
-          CLI_PATH_REFUSED: def(
-            SEVERITY.BLOCKING,
-            false,
-            SURFACE.CLI,
-            "A write was refused because the destination resolved outside the review folder or is a symlink.",
-            null
-          ),
-          // --- copy and export (3C, R10 and R11) ---------------------------------
-          //
-          // Copy and Export are always visible and always meant to work, so the case
-          // that needs a code is the one where they did not: a clipboard the browser
-          // refused, or a file the page could not save. A control that looked like it
-          // worked and did not is the failure this tool exists to remove, and the
-          // reviewer only finds out at the moment they paste.
-          COPY_FAILED: def(
-            SEVERITY.BLOCKING,
-            true,
-            SURFACE.FAILURES_LIST,
-            "The review was not copied to the clipboard, so there is nothing to paste.",
-            "Use Export to save it as a file instead."
-          ),
-          EXPORT_FAILED: def(
-            SEVERITY.BLOCKING,
-            true,
-            SURFACE.FAILURES_LIST,
-            "The review could not be saved as a file.",
-            "Use Copy to put it on the clipboard instead."
-          )
-        };
-        var ALIASES = {
-          SYNC_SERVICE_DOWN: "HELPER_UNREACHABLE",
-          CLI_NO_SERVICE: "HELPER_UNREACHABLE",
-          SYNC_POLICY_REFUSED: "CSP_REFUSED",
-          SECOND_TAB_REFUSED: "SECOND_WINDOW_REFUSED",
-          ANCHOR_SUBJECT_GONE: "ANCHOR_LOST",
-          ANCHOR_NOT_FOUND: "ANCHOR_LOST"
-        };
-        var CODE_NAMES = Object.keys(CODES);
-        var ALIAS_NAMES = Object.keys(ALIASES);
-        var ANCHOR_FAILURE_CODES = [
-          "ANCHOR_NO_TEXT_MATCH",
-          "ANCHOR_AMBIGUOUS",
-          "ANCHOR_STRUCTURE_ONLY",
-          "ANCHOR_LOST",
-          // The choice rung's two refusals (choice buttons).
-          "CHOICE_GROUP_GONE",
-          "CHOICE_GROUP_TWICE"
-        ];
-        function canonical(code) {
-          return Object.prototype.hasOwnProperty.call(ALIASES, code) ? ALIASES[code] : code;
-        }
-        function describe(code) {
-          var name = canonical(code);
-          if (!Object.prototype.hasOwnProperty.call(CODES, name)) {
-            throw new Error("unknown failure code: " + String(code) + ". Add it to src/shared/failures.js");
-          }
-          return CODES[name];
-        }
-        var STANDING = {
-          SECOND_WINDOW_REFUSED: true,
-          HELPER_UNREACHABLE: true,
-          // Re-raised on every arming pass while a broken group is on the page.
-          CHOICE_GROUP_INERT: true
-        };
-        var CHIP_ACTIONS = {
-          SECOND_WINDOW_REFUSED: { label: "Review here", action: "takeover" }
-        };
-        var COPYABLE = {
-          SYNC_ORIGIN_NOT_ALLOWED: true,
-          CSP_REFUSED: true,
-          // Both of these ARE agent work: an agent wrote the reply line this tool
-          // could not read, and an agent re-runs the add step that mints the token.
-          // The allowlist dropped them, so the codes whose remedy is literally "hand
-          // this line to your agent" were the two with no way to hand it over.
-          REPLY_LINE_MALFORMED: true,
-          SYNC_UNAUTHORIZED: true,
-          // An agent wrote the broken choice group, and fixing it is agent work: the
-          // detail names each group and why, ready to hand over.
-          CHOICE_GROUP_INERT: true
-        };
-        function chipAction(code) {
-          var name = canonical(code);
-          return Object.prototype.hasOwnProperty.call(CHIP_ACTIONS, name) ? CHIP_ACTIONS[name] : null;
-        }
-        function isCopyable(code) {
-          return COPYABLE[canonical(code)] === true && !chipAction(code);
-        }
-        function failure(code, detail) {
-          var d = describe(code);
-          return {
-            code,
-            canonical_code: canonical(code),
-            severity: d.severity,
-            persistent: d.persistent,
-            standing: STANDING[canonical(code)] === true,
-            surface: d.surface,
-            message: d.message,
-            remedy: d.remedy,
-            detail: detail === void 0 ? null : detail,
-            at: (/* @__PURE__ */ new Date()).toISOString()
-          };
-        }
-        function isPersistent(code) {
-          return describe(code).persistent;
-        }
-        function isStorageQuota(err) {
-          return !!(err && err.failure && err.failure.code === "STORAGE_QUOTA");
-        }
-        function tolerateStorageQuota(run, report) {
-          try {
-            run();
-            return null;
-          } catch (err) {
-            if (!isStorageQuota(err)) throw err;
-            if (typeof report === "function") {
-              try {
-                report(err.failure);
-              } catch (reportErr) {
-                if (!isStorageQuota(reportErr)) throw reportErr;
-              }
-            }
-            return err.failure;
-          }
-        }
-        var api = {
-          SEVERITY,
-          SURFACE,
-          CODES,
-          CODE_NAMES,
-          ALIASES,
-          ALIAS_NAMES,
-          ANCHOR_FAILURE_CODES,
-          CHIP_ACTIONS,
-          COPYABLE,
-          canonical,
-          chipAction,
-          isCopyable,
-          describe,
-          failure,
-          isPersistent,
-          isStorageQuota,
-          tolerateStorageQuota
-        };
-        if (browser) {
-          root.LAHE = root.LAHE || {};
-          root.LAHE.failures = api;
-        } else {
-          module.exports = api;
-        }
-      })(typeof globalThis !== "undefined" ? globalThis : exports);
-    }
-  });
-
-  // src/shared/style_rules.js
-  var require_style_rules = __commonJS({
-    "src/shared/style_rules.js"(exports, module) {
-      (function(root) {
-        "use strict";
-        var browser = typeof window !== "undefined" && !!window.document;
-        var ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/;
-        var RESERVED_ID = "international";
-        var RESERVED_NAME = "International Style";
-        var HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
-        var NAME_CHARS = /^[\p{L}\p{N} '&-]+$/u;
-        var NAME_MAX = 40;
-        var DESCRIPTION_MAX = 300;
-        var PALETTE_MAX = 6;
-        function isStyleId(value) {
-          return typeof value === "string" && ID_PATTERN.test(value);
-        }
-        function isHexColour(value) {
-          return typeof value === "string" && HEX.test(value);
-        }
-        function isStyleName(value) {
-          return typeof value === "string" && value.length > 0 && value.length <= NAME_MAX && value === value.trim() && NAME_CHARS.test(value);
-        }
-        var api = {
-          ID_PATTERN,
-          RESERVED_ID,
-          RESERVED_NAME,
-          HEX,
-          NAME_CHARS,
-          NAME_MAX,
-          DESCRIPTION_MAX,
-          PALETTE_MAX,
-          isStyleId,
-          isHexColour,
-          isStyleName
-        };
-        if (browser) {
-          root.LAHE = root.LAHE || {};
-          root.LAHE.styleRules = api;
-        } else {
-          module.exports = api;
-        }
-      })(typeof globalThis !== "undefined" ? globalThis : exports);
     }
   });
 
@@ -3193,15 +2501,15 @@
             var key = typeof before === "string" ? normalize.blockWords(before) : "";
             if (!key) return;
             var html = typeof other[FIELD.ANCHOR_AFTER_HTML] === "string" ? other[FIELD.ANCHOR_AFTER_HTML] : other[FIELD.AFTER_HTML];
-            var taken = {
+            var taken2 = {
               id: other[FIELD.ID],
               tag: typeof other[FIELD.ANCHOR_TAG_AFTER] === "string" && other[FIELD.ANCHOR_TAG_AFTER] ? other[FIELD.ANCHOR_TAG_AFTER] : null,
               html: typeof html === "string" ? html : null
             };
             keys.forEach(function(k, index) {
-              if (k && k === key && !out[index]) out[index] = taken;
+              if (k && k === key && !out[index]) out[index] = taken2;
             });
-            if (anchorKey && anchorKey === key && !out.anchor) out.anchor = taken;
+            if (anchorKey && anchorKey === key && !out.anchor) out.anchor = taken2;
           });
           return out;
         }
@@ -3498,34 +2806,34 @@
         function choiceRef(group) {
           return { kind: KIND.CHOICE, group };
         }
-        function choiceRefusal(reason) {
+        function choiceRefusal2(reason) {
           return { code: CHOICE_CODE.REFUSED, reason };
         }
         function validateChoice(item) {
-          if (!item || typeof item !== "object") return choiceRefusal("not a record");
+          if (!item || typeof item !== "object") return choiceRefusal2("not a record");
           var value = item[FIELD.CHOICE];
           var present = value !== void 0 && value !== null;
           if (!isChoice(item)) {
-            return present ? choiceRefusal("choice is set only on a choice record, and this is a " + String(item[FIELD.KIND])) : null;
+            return present ? choiceRefusal2("choice is set only on a choice record, and this is a " + String(item[FIELD.KIND])) : null;
           }
           if (!present || typeof value !== "object" || Array.isArray(value)) {
-            return choiceRefusal("a choice record must carry choice as {group, answer}");
+            return choiceRefusal2("a choice record must carry choice as {group, answer}");
           }
           var extra = Object.keys(value).filter(function(key) {
             return CHOICE_KEYS.indexOf(key) === -1;
           });
-          if (extra.length) return choiceRefusal("choice carries a key other than group and answer: " + extra.join(", "));
-          if (!isChoiceToken(value.group)) return choiceRefusal("choice.group is missing or off the grammar");
-          if (!isChoiceToken(value.answer)) return choiceRefusal("choice.answer is missing or off the grammar");
+          if (extra.length) return choiceRefusal2("choice carries a key other than group and answer: " + extra.join(", "));
+          if (!isChoiceToken(value.group)) return choiceRefusal2("choice.group is missing or off the grammar");
+          if (!isChoiceToken(value.answer)) return choiceRefusal2("choice.answer is missing or off the grammar");
           var carried = [FIELD.BEFORE, FIELD.AFTER, FIELD.BEFORE_HTML, FIELD.AFTER_HTML].filter(function(key) {
             return item[key] !== void 0 && item[key] !== null;
           });
           if (Array.isArray(item[FIELD.AFTER_HISTORY]) && item[FIELD.AFTER_HISTORY].length) carried.push(FIELD.AFTER_HISTORY);
           if (hasRunFields(item)) carried.push("the free-writing fields");
-          if (carried.length) return choiceRefusal("a choice record carries " + carried.join(", "));
+          if (carried.length) return choiceRefusal2("a choice record carries " + carried.join(", "));
           var region = item[FIELD.REGION];
           var ref = region && region.ref;
-          if (ref && typeof ref.stamp === "string" && ref.stamp) return choiceRefusal("a choice record carries a stamp");
+          if (ref && typeof ref.stamp === "string" && ref.stamp) return choiceRefusal2("a choice record carries a stamp");
           return null;
         }
         function validateItem(item) {
@@ -4226,8 +3534,8 @@
         function lostFromMint(ref) {
           if (!ref) return lostState("ANCHOR_NO_TEXT_MATCH", null);
           if (ref.ok !== true) {
-            var failure = ref.failure || {};
-            return lostState(failure.failureCode || "ANCHOR_NO_TEXT_MATCH", failure.reason || null);
+            var failure2 = ref.failure || {};
+            return lostState(failure2.failureCode || "ANCHOR_NO_TEXT_MATCH", failure2.reason || null);
           }
           if (ref.text_unique === false && !ref.stamp) {
             return lostState(
@@ -4383,594 +3691,6 @@
           resolveInBlocks
         };
       });
-    }
-  });
-
-  // src/shared/gestures.js
-  var require_gestures = __commonJS({
-    "src/shared/gestures.js"(exports, module) {
-      (function(root) {
-        "use strict";
-        var browser = typeof window !== "undefined" && !!window.document;
-        var GESTURE = {
-          COMMENT_ON_SELECTION: "comment_on_selection",
-          ENTER_ELEMENT_PICK: "enter_element_pick",
-          PICK_ELEMENT: "pick_element",
-          EDIT_BLOCK: "edit_block",
-          // Free writing: Cmd-Shift-E with the caret in no block. Edit state opens
-          // with no block open, the "+ Write here" lines show, and Esc leaves.
-          ENTER_EDIT_STATE: "enter_edit_state",
-          // Esc while the bar's block-type menu is open closes the menu and nothing else.
-          CLOSE_MENU: "close_menu",
-          MARK_READY: "mark_ready",
-          COMMIT_EDIT: "commit_edit",
-          CANCEL: "cancel",
-          TOGGLE_PRESENT: "toggle_present",
-          TOGGLE_RAIL: "toggle_rail",
-          PAGE_DEFAULT: "page_default",
-          // A click on a button inside an armed choice group, on a document page
-          // (docs/features/20261013.01_choice_buttons). The one click in browse that
-          // is the library's, by the agent's own marking.
-          PRESS_CHOICE: "press_choice",
-          NONE: "none"
-        };
-        var TABLE = [
-          {
-            gesture: GESTURE.COMMENT_ON_SELECTION,
-            keys: "Cmd-Shift-C",
-            when: "text selected",
-            hint: "Select text and press Cmd-Shift-C to comment on it.",
-            passThrough: false,
-            preventDefault: true,
-            requirement: "R16"
-          },
-          {
-            gesture: GESTURE.ENTER_ELEMENT_PICK,
-            keys: "Cmd-Shift-C",
-            when: "nothing selected",
-            hint: "Press Cmd-Shift-C with nothing selected, then click any element to comment on the whole thing.",
-            panelKeys: "Cmd-Shift-C (no selection)",
-            panelHint: "As you hover over elements, they will be outlined. Click an element to comment on the element. Useful for images and other hard to highlight elements.",
-            passThrough: false,
-            preventDefault: true,
-            requirement: "R17"
-          },
-          {
-            gesture: GESTURE.PICK_ELEMENT,
-            keys: "click",
-            when: "element-pick mode is open",
-            hint: "Click the outlined element to comment on it. Esc cancels.",
-            inPanel: false,
-            passThrough: false,
-            preventDefault: true,
-            requirement: "R17"
-          },
-          {
-            gesture: GESTURE.EDIT_BLOCK,
-            keys: "Cmd-Shift-E",
-            when: "the cursor or a selection is in a block",
-            hint: "Press Cmd-Shift-E to edit the block you are in. Just that block.",
-            panelHint: "Select text and press Cmd-Shift-E to edit it by hand.",
-            passThrough: false,
-            preventDefault: true,
-            requirement: "R24"
-          },
-          {
-            gesture: GESTURE.ENTER_EDIT_STATE,
-            keys: "Cmd-Shift-E",
-            when: "the cursor is in no block",
-            hint: "Click + Write here to add text. Esc to finish.",
-            panelKeys: "Cmd-Shift-E (no selection)",
-            panelHint: "As you hover, editable areas will be outlined. Click an area to hand edit it. Esc to finish.",
-            passThrough: false,
-            preventDefault: true,
-            requirement: "R1"
-          },
-          {
-            // The words for the default send key, Enter. The reviewer can switch to
-            // Cmd-Enter in the Keyboard shortcuts panel; SEND_KEY_WORDS holds both
-            // spellings and rowFor picks one, so this row is never read raw for
-            // its keys or hints.
-            gesture: GESTURE.MARK_READY,
-            keys: "Enter",
-            when: "a comment box is focused",
-            hint: "Enter when done with this comment. Shift-Enter for a new line.",
-            panelHint: "Send your comment. Shift-Enter for a new line.",
-            passThrough: false,
-            preventDefault: true,
-            requirement: "R7"
-          },
-          {
-            gesture: GESTURE.COMMIT_EDIT,
-            keys: "Cmd-Enter, Esc, or a click outside",
-            when: "a block is in edit state",
-            hint: "Cmd-Enter, Esc, or click outside to finish the edit and give the page back.",
-            // Its own row in the panel now that sending a comment is Enter: the two
-            // used to share one Cmd-Enter line.
-            panelKeys: "Cmd-Enter or Esc",
-            panelHint: "Finish your edit.",
-            passThrough: false,
-            preventDefault: true,
-            requirement: "R24"
-          },
-          {
-            gesture: GESTURE.CANCEL,
-            keys: "Esc",
-            when: "element-pick mode is open, or a comment box is focused",
-            hint: "Esc closes the comment box or cancels picking. Your draft is kept.",
-            panelHint: "Esc closes the comment box or cancels picking. Half-written drafts are kept in the chat bar.",
-            passThrough: false,
-            preventDefault: true,
-            requirement: "R1"
-          },
-          {
-            gesture: GESTURE.TOGGLE_PRESENT,
-            keys: "Cmd-Shift-X",
-            when: "always, including while the tool is hidden",
-            hint: "Press Cmd-Shift-X to hide the review while you present, and again to bring it back.",
-            panelHint: "Presentation mode. Toggle hiding the chat bar and the pill.",
-            passThrough: false,
-            preventDefault: true,
-            requirement: "R13"
-          },
-          {
-            gesture: GESTURE.TOGGLE_RAIL,
-            keys: "Cmd-Shift-1",
-            when: "always, except while the review is hidden for presenting",
-            hint: "Press Cmd-Shift-1 to open or close the review panel.",
-            panelHint: "Toggle the chat bar.",
-            passThrough: false,
-            preventDefault: true,
-            requirement: "R43"
-          },
-          {
-            gesture: GESTURE.PAGE_DEFAULT,
-            keys: "everything else",
-            when: "always",
-            hint: "Everything else is the page. Links, buttons, and forms work exactly as they do without this.",
-            panelKeys: "page hotkeys",
-            panelHint: "Other page hotkeys should work as normal.",
-            passThrough: true,
-            preventDefault: false,
-            requirement: "R13"
-          }
-        ];
-        function isDigitOne(e) {
-          if (e.code === "Digit1") return true;
-          return e.key === "1" || e.key === "!";
-        }
-        function isPrimaryModifier(e) {
-          return e.metaKey === true || e.ctrlKey === true;
-        }
-        var SEND_KEY = { ENTER: "enter", MOD_ENTER: "mod_enter" };
-        var SEND_KEY_WORDS = {
-          enter: {
-            keys: "Enter",
-            hint: "Enter when done with this comment. Shift-Enter for a new line.",
-            panelHint: "Send your comment. Shift-Enter for a new line."
-          },
-          mod_enter: {
-            keys: "Cmd-Enter",
-            hint: "Cmd-Enter when done with this comment.",
-            panelHint: "Send your comment. Enter for a new line."
-          }
-        };
-        function normalizeSendKey(value) {
-          return value === SEND_KEY.MOD_ENTER ? SEND_KEY.MOD_ENTER : SEND_KEY.ENTER;
-        }
-        function sendKeyLabel(sendKey) {
-          return SEND_KEY_WORDS[normalizeSendKey(sendKey)].keys;
-        }
-        function isSendPress(e) {
-          var ev = e || {};
-          if (ev.key !== "Enter" || ev.isComposing === true) return false;
-          if (isPrimaryModifier(ev)) return true;
-          if (normalizeSendKey(ev.sendKey) !== SEND_KEY.ENTER) return false;
-          return ev.shiftKey !== true && ev.altKey !== true;
-        }
-        function isSendEvent(event, sendKey) {
-          var ev = event || {};
-          return isSendPress({
-            key: ev.key,
-            metaKey: ev.metaKey === true,
-            ctrlKey: ev.ctrlKey === true,
-            shiftKey: ev.shiftKey === true,
-            altKey: ev.altKey === true,
-            // keyCode 229 is how Safari reports a key an input method took.
-            isComposing: ev.isComposing === true || ev.keyCode === 229,
-            sendKey
-          });
-        }
-        function rowFor(row, sendKey) {
-          if (row.gesture !== GESTURE.MARK_READY) return row;
-          var words = SEND_KEY_WORDS[normalizeSendKey(sendKey)];
-          return Object.assign({}, row, words);
-        }
-        function gestureFor(input) {
-          var e = input || {};
-          var mod = isPrimaryModifier(e);
-          if (e.inOverlay === true && e.type === "click") {
-            return decide(GESTURE.NONE, false, false, "inside the library's own overlay; the rail handles its own events");
-          }
-          if (e.type === "keydown") {
-            if (mod && e.shiftKey === true && isKey(e.key, "x")) {
-              return decide(GESTURE.TOGGLE_PRESENT, false, true, "Cmd-Shift-X hides the review for presenting, and shows it again");
-            }
-            if (mod && e.shiftKey === true && isDigitOne(e)) {
-              return decide(GESTURE.TOGGLE_RAIL, false, true, "Cmd-Shift-1 opens the review panel, or closes it");
-            }
-            if (e.key === "Escape") {
-              if (e.blockMenuOpen === true) {
-                return decide(GESTURE.CLOSE_MENU, false, true, "Esc closes the block-type menu and leaves the edit open");
-              }
-              if (e.editing === true || e.editState === true) {
-                return decide(GESTURE.COMMIT_EDIT, false, true, "Esc commits the open edit and gives the block back to the page");
-              }
-              if (e.pickMode === true || e.inCommentBox === true) {
-                return decide(GESTURE.CANCEL, false, true, "Esc closes the box or cancels picking; the draft is kept either way");
-              }
-              return decide(GESTURE.NONE, true, false, "nothing of the library's is open, so Esc is the page's");
-            }
-            if (e.key === "Enter" && e.inCommentBox === true) {
-              if (isSendPress(e)) {
-                return decide(GESTURE.MARK_READY, false, true, sendKeyLabel(e.sendKey) + " marks this comment ready for the agent (R7)");
-              }
-              return decide(GESTURE.NONE, true, false, "a new line in the comment box, or an input method finishing a character");
-            }
-            if (e.key === "Enter" && mod) {
-              if (e.editing === true) {
-                return decide(GESTURE.COMMIT_EDIT, false, true, "Cmd-Enter commits the open edit and gives the block back to the page");
-              }
-              return decide(GESTURE.NONE, true, false, "Cmd-Enter outside a comment box is the page's");
-            }
-            if (mod && e.shiftKey === true && isKey(e.key, "c")) {
-              if (e.hasSelection === true) {
-                return decide(GESTURE.COMMENT_ON_SELECTION, false, true, "Cmd-Shift-C with a selection comments on that passage");
-              }
-              return decide(GESTURE.ENTER_ELEMENT_PICK, false, true, "Cmd-Shift-C with nothing selected picks an element (R17)");
-            }
-            if (mod && e.shiftKey === true && isKey(e.key, "e")) {
-              if (e.inBlock === false) {
-                return decide(GESTURE.ENTER_EDIT_STATE, false, true, "Cmd-Shift-E with the cursor in no block opens edit state with no block open");
-              }
-              return decide(GESTURE.EDIT_BLOCK, false, true, "Cmd-Shift-E edits the block under the cursor, and nothing else");
-            }
-            return decide(GESTURE.NONE, true, false, "not a library gesture; the page and the edited block keep it");
-          }
-          if (e.type === "pointerdown" || e.type === "mousedown") {
-            if (e.editing === true && e.inEditedBlock !== true) {
-              if (e.onScrollbar === true) {
-                return decide(GESTURE.PAGE_DEFAULT, true, false, "the press was on a scrollbar, which is scrolling rather than leaving the block");
-              }
-              if (e.button !== void 0 && e.button !== null && e.button !== 0) {
-                return decide(GESTURE.PAGE_DEFAULT, true, false, "only a primary-button press is the reviewer leaving the block");
-              }
-              return decide(GESTURE.COMMIT_EDIT, true, false, "the pointer went down outside the edited block, so the edit commits");
-            }
-            return decide(GESTURE.PAGE_DEFAULT, true, false, "a pointer going down with no edit open is the page's");
-          }
-          if (e.type !== "click") {
-            return decide(GESTURE.NONE, true, false, "not a click or a keydown");
-          }
-          if (e.pickMode === true) {
-            return decide(GESTURE.PICK_ELEMENT, false, true, "element-pick mode is open, so this click comments on the element");
-          }
-          if (e.editing === true && e.inEditedBlock !== true) {
-            return decide(GESTURE.COMMIT_EDIT, true, false, "a click outside the edited block commits it, and the page still gets the click");
-          }
-          var choice = choiceRefusal(e);
-          if (choice === null) {
-            return decide(GESTURE.PRESS_CHOICE, false, true, "a click on an armed choice group's button is the reviewer's answer");
-          }
-          if (e.inArmedChoice === true) return decide(GESTURE.PAGE_DEFAULT, true, false, choice);
-          return decide(GESTURE.PAGE_DEFAULT, true, false, "browse is the page untouched (D3, R13)");
-        }
-        function choiceRefusal(e) {
-          if (e.inArmedChoice !== true) return "not a button in an armed choice group";
-          if (e.documentPage !== true) return "a choice group arms only on a page the helper serves as a document";
-          if (e.pickMode === true) return "element-pick mode is open, so the click picks";
-          if (e.editing === true || e.editState === true) return "an edit is open, so the page is not in browse";
-          if (e.presenting === true) return "the review is hidden for presenting";
-          if (e.mayWrite !== true) return "this window is read-only for the review";
-          return null;
-        }
-        function isScrollbarPress(geometry) {
-          var g = geometry || {};
-          if (typeof g.x !== "number" || typeof g.y !== "number") return false;
-          if (g.contentWidth > 0 && g.x >= g.contentWidth && g.x <= g.boxWidth) return true;
-          if (g.contentHeight > 0 && g.y >= g.contentHeight && g.y <= g.boxHeight) return true;
-          return false;
-        }
-        var BREAK = {
-          PARAGRAPH: "paragraph",
-          LINE: "line"
-        };
-        function breakIntentFor(input) {
-          var e = input || {};
-          if (e.inputType === "insertLineBreak") return BREAK.LINE;
-          if (e.inputType === "insertParagraph") {
-            return e.shiftKey === true ? BREAK.LINE : BREAK.PARAGRAPH;
-          }
-          return null;
-        }
-        var FORMAT = {
-          APPLY: "apply",
-          REMOVE: "remove"
-        };
-        var FORMAT_COMMANDS = ["bold", "italic"];
-        function formatIntentFor(input) {
-          var e = input || {};
-          if (FORMAT_COMMANDS.indexOf(e.command) === -1) return null;
-          return e.active === true ? FORMAT.REMOVE : FORMAT.APPLY;
-        }
-        var BLOCK_TYPES = [
-          { tag: "p", label: "Paragraph", code: "Digit0", chords: { mac: "Cmd-Option-0", other: "Ctrl-Shift-0" }, markdown: null },
-          { tag: "h2", label: "Heading", code: "Digit2", chords: { mac: "Cmd-Option-2", other: "Ctrl-Shift-2" }, markdown: "## " },
-          { tag: "h3", label: "Subheading", code: "Digit3", chords: { mac: "Cmd-Option-3", other: "Ctrl-Shift-3" }, markdown: "### " },
-          { tag: "h4", label: "Small heading", code: "Digit4", chords: { mac: "Cmd-Option-4", other: "Ctrl-Shift-4" }, markdown: "#### " },
-          { tag: "ul", label: "Bulleted list", code: "Digit8", chords: { mac: "Cmd-Shift-8", other: "Ctrl-Shift-8" }, markdown: "- " },
-          { tag: "ol", label: "Numbered list", code: "Digit7", chords: { mac: "Cmd-Shift-7", other: "Ctrl-Shift-7" }, markdown: "1. " }
-        ];
-        var OTHER_BLOCK_LABEL = "Other block";
-        function blockTypeLabel(tag) {
-          for (var i = 0; i < BLOCK_TYPES.length; i += 1) {
-            if (BLOCK_TYPES[i].tag === tag) return BLOCK_TYPES[i].label;
-          }
-          return null;
-        }
-        var LIST_CHORD_TAGS = { ul: 1, ol: 1 };
-        function blockTypeChord(input) {
-          var e = input || {};
-          if (e.altGraph === true) return null;
-          var mac = e.platform === "mac";
-          for (var i = 0; i < BLOCK_TYPES.length; i += 1) {
-            var t = BLOCK_TYPES[i];
-            if (e.code !== t.code) continue;
-            if (mac) {
-              if (e.metaKey !== true || e.ctrlKey === true) return null;
-              if (LIST_CHORD_TAGS[t.tag]) return e.shiftKey === true && e.altKey !== true ? t.tag : null;
-              return e.altKey === true && e.shiftKey !== true ? t.tag : null;
-            }
-            if (e.ctrlKey !== true || e.metaKey === true || e.altKey === true) return null;
-            return e.shiftKey === true ? t.tag : null;
-          }
-          return null;
-        }
-        function chordLabelFor(tag, platform) {
-          for (var i = 0; i < BLOCK_TYPES.length; i += 1) {
-            if (BLOCK_TYPES[i].tag === tag) return BLOCK_TYPES[i].chords[platform === "mac" ? "mac" : "other"];
-          }
-          return null;
-        }
-        var MARKDOWN_SHORTCUTS = { "# ": "h2", "## ": "h2", "### ": "h3", "#### ": "h4", "- ": "ul", "* ": "ul", "1. ": "ol" };
-        function markdownShortcutFor(textBeforeCaret) {
-          var t = typeof textBeforeCaret === "string" ? textBeforeCaret.replace(/ /g, " ") : "";
-          return Object.prototype.hasOwnProperty.call(MARKDOWN_SHORTCUTS, t) ? MARKDOWN_SHORTCUTS[t] : null;
-        }
-        var ENTER = {
-          SIBLING: "sibling",
-          // a new p after this block
-          SPLIT: "split",
-          // the block splits in two; the tail is marked from_anchor
-          NEW_ITEM: "new_item",
-          // an li in this list
-          END_LIST: "end_list",
-          // the empty last item goes, and a new p follows the list
-          LINE: "line",
-          // Shift-Enter: a line break
-          BREAK_RULE: "break_rule"
-          // no run here (a table cell, a caption): today's rule
-        };
-        function enterIntentFor(input) {
-          var e = input || {};
-          if (e.shiftKey === true) return ENTER.LINE;
-          if (e.runAllowed === false) return ENTER.BREAK_RULE;
-          if (e.inListItem === true) {
-            return e.itemEmpty === true && e.lastItem === true ? ENTER.END_LIST : ENTER.NEW_ITEM;
-          }
-          return e.atEnd === true ? ENTER.SIBLING : ENTER.SPLIT;
-        }
-        var EDGE = {
-          MERGE_PREVIOUS: "merge_previous",
-          MERGE_NEXT: "merge_next",
-          DELETE_SELECTION: "delete_selection",
-          REFUSE: "refuse"
-        };
-        function edgeDeleteFor(input) {
-          var e = input || {};
-          if (e.key !== "Backspace" && e.key !== "Delete") return null;
-          if (e.collapsed === false) return e.spansBlocks === true ? EDGE.DELETE_SELECTION : null;
-          if (e.key === "Backspace") {
-            if (e.atBlockStart !== true) return null;
-            return e.firstBlock === true ? EDGE.REFUSE : EDGE.MERGE_PREVIOUS;
-          }
-          if (e.atBlockEnd !== true) return null;
-          return e.lastBlock === true ? EDGE.REFUSE : EDGE.MERGE_NEXT;
-        }
-        var HISTORY = { UNDO: "undo", REDO: "redo" };
-        function historyIntentFor(input) {
-          var e = input || {};
-          if (e.editing !== true) return null;
-          if (e.inputType === "historyUndo") return HISTORY.UNDO;
-          if (e.inputType === "historyRedo") return HISTORY.REDO;
-          if (!isPrimaryModifier(e) || e.altKey === true) return null;
-          if (e.code === "KeyZ" || isKey(e.key, "z")) return e.shiftKey === true ? HISTORY.REDO : HISTORY.UNDO;
-          if (e.platform !== "mac" && e.ctrlKey === true && (e.code === "KeyY" || isKey(e.key, "y"))) return HISTORY.REDO;
-          return null;
-        }
-        function isKey(key, letter) {
-          return typeof key === "string" && key.toLowerCase() === letter;
-        }
-        function decide(gesture, passThrough, preventDefault, reason) {
-          return {
-            gesture,
-            passThrough,
-            preventDefault,
-            reason
-          };
-        }
-        function hintFor(gesture, sendKey) {
-          for (var i = 0; i < TABLE.length; i += 1) {
-            if (TABLE[i].gesture === gesture) return rowFor(TABLE[i], sendKey).hint;
-          }
-          return null;
-        }
-        function hintLines(sendKey) {
-          return TABLE.map(function(row) {
-            var got = rowFor(row, sendKey);
-            return { keys: got.keys, hint: got.hint };
-          });
-        }
-        function panelLines(sendKey) {
-          return TABLE.filter(function(row) {
-            return row.inPanel !== false;
-          }).map(function(row) {
-            var got = rowFor(row, sendKey);
-            return { keys: got.panelKeys || got.keys, hint: got.panelHint || got.hint };
-          });
-        }
-        var api = {
-          panelLines,
-          GESTURE,
-          BREAK,
-          FORMAT,
-          FORMAT_COMMANDS,
-          TABLE,
-          gestureFor,
-          breakIntentFor,
-          formatIntentFor,
-          isScrollbarPress,
-          hintFor,
-          hintLines,
-          isPrimaryModifier,
-          SEND_KEY,
-          normalizeSendKey,
-          sendKeyLabel,
-          isSendPress,
-          isSendEvent,
-          BLOCK_TYPES,
-          OTHER_BLOCK_LABEL,
-          blockTypeLabel,
-          blockTypeChord,
-          chordLabelFor,
-          markdownShortcutFor,
-          ENTER,
-          enterIntentFor,
-          EDGE,
-          edgeDeleteFor,
-          HISTORY,
-          historyIntentFor
-        };
-        if (browser) {
-          root.LAHE = root.LAHE || {};
-          root.LAHE.gestures = api;
-        } else {
-          module.exports = api;
-        }
-      })(typeof globalThis !== "undefined" ? globalThis : exports);
-    }
-  });
-
-  // src/shared/epoch.js
-  var require_epoch = __commonJS({
-    "src/shared/epoch.js"(exports, module) {
-      (function(root) {
-        "use strict";
-        var browser = typeof window !== "undefined" && !!window.document;
-        function createEpoch(options) {
-          var opts = options || {};
-          var defer = opts.defer || (typeof queueMicrotask === "function" ? queueMicrotask : function(fn) {
-            Promise.resolve().then(fn);
-          });
-          var depth = 0;
-          var current = 0;
-          var pendingExternal = false;
-          var reasons = [];
-          var idleListeners = [];
-          function isWriting() {
-            return depth > 0;
-          }
-          function epoch() {
-            return current;
-          }
-          function write(reason, fn) {
-            if (typeof reason !== "string" || !reason) {
-              throw new TypeError("epoch.write: reason must be a non-empty string naming the caller");
-            }
-            if (typeof fn !== "function") {
-              throw new TypeError("epoch.write: fn must be a function");
-            }
-            depth += 1;
-            reasons.push(reason);
-            var out;
-            try {
-              out = fn();
-            } finally {
-              current += 1;
-              defer(close);
-            }
-            return out;
-          }
-          function close() {
-            if (depth > 0) depth -= 1;
-            if (depth !== 0) return;
-            reasons.length = 0;
-            if (!pendingExternal) return;
-            for (var i = 0; i < idleListeners.length; i += 1) idleListeners[i]();
-          }
-          function onIdle(fn) {
-            if (typeof fn !== "function") throw new TypeError("epoch.onIdle: fn must be a function");
-            idleListeners.push(fn);
-            return function() {
-              var at = idleListeners.indexOf(fn);
-              if (at !== -1) idleListeners.splice(at, 1);
-            };
-          }
-          function noteExternalMutation() {
-            pendingExternal = true;
-          }
-          function takePendingExternal() {
-            var was = pendingExternal;
-            pendingExternal = false;
-            return was;
-          }
-          function currentReasons() {
-            return reasons.slice();
-          }
-          return {
-            write,
-            isWriting,
-            epoch,
-            noteExternalMutation,
-            takePendingExternal,
-            onIdle,
-            currentReasons
-          };
-        }
-        var shared = createEpoch();
-        var api = {
-          createEpoch,
-          shared,
-          write: function(reason, fn) {
-            return shared.write(reason, fn);
-          },
-          isWriting: function() {
-            return shared.isWriting();
-          },
-          epoch: function() {
-            return shared.epoch();
-          },
-          onIdle: function(fn) {
-            return shared.onIdle(fn);
-          }
-        };
-        if (browser) {
-          root.LAHE = root.LAHE || {};
-          root.LAHE.epoch = api;
-        } else {
-          module.exports = api;
-        }
-      })(typeof globalThis !== "undefined" ? globalThis : exports);
     }
   });
 
@@ -8522,7 +7242,7 @@
           function read(reviewId) {
             return readAll(reviewId);
           }
-          function write(reviewId, item) {
+          function write2(reviewId, item) {
             record.validateItem(item);
             var id = item[record.FIELD.ID];
             clearAcknowledged(reviewId, id);
@@ -8548,11 +7268,11 @@
             if (!record.isDraft(item)) {
               throw new Error("store.writeDraft: item " + item[record.FIELD.ID] + " is not a draft");
             }
-            return write(reviewId, item);
+            return write2(reviewId, item);
           }
           function writeRevision(reviewId, item, changes) {
             var next = record.bumpRev(item, changes || {});
-            write(reviewId, next);
+            write2(reviewId, next);
             return next;
           }
           function ackedKey(reviewId) {
@@ -8579,9 +7299,9 @@
             writeJson(ackedKey(reviewId), acked);
             return true;
           }
-          function markRefused(reviewId, id, failure) {
+          function markRefused(reviewId, id, failure2) {
             var all = readJson(REFUSED_PREFIX + reviewId, null) || {};
-            all[id] = failure;
+            all[id] = failure2;
             writeJson(REFUSED_PREFIX + reviewId, all);
             return true;
           }
@@ -8674,7 +7394,7 @@
             if (!incoming.length) return [];
             var got = merge.mergeLists([], incoming);
             got.items.forEach(function(item) {
-              write(reviewId, item);
+              write2(reviewId, item);
               markAcknowledged(reviewId, item[record.FIELD.ID], item[record.FIELD.REV]);
             });
             return got.items;
@@ -8800,19 +7520,19 @@
             return { collapsed: false, pill: null, width: null, present: false, cards: {}, filter: "all" };
           }
           var sendKeyInMemory = null;
-          function normalizeSendKey(value) {
+          function normalizeSendKey2(value) {
             return value === SEND_KEY_MOD ? SEND_KEY_MOD : SEND_KEY_DEFAULT;
           }
           function readSendKey() {
             try {
               var raw = backing.getItem(SEND_KEY_KEY);
-              if (raw !== null && raw !== void 0) return normalizeSendKey(raw);
+              if (raw !== null && raw !== void 0) return normalizeSendKey2(raw);
             } catch (err) {
             }
-            return normalizeSendKey(sendKeyInMemory);
+            return normalizeSendKey2(sendKeyInMemory);
           }
           function writeSendKey(value) {
-            var next = normalizeSendKey(value);
+            var next = normalizeSendKey2(value);
             sendKeyInMemory = next;
             try {
               backing.setItem(SEND_KEY_KEY, next);
@@ -9041,7 +7761,7 @@
             windowId,
             keyFor,
             read,
-            write,
+            write: write2,
             writeDraft,
             writeRevision,
             readItem,
@@ -10254,24 +8974,24 @@
           var tag = tagOf(node);
           return tag === "script" || tag === "foreignobject" || !!(markers && markers.isToolNode(node));
         }
-        function svgMarkupOf(node, canonical, requireContent) {
+        function svgMarkupOf(node, canonical2, requireContent) {
           if (!isElement(node) || isExcludedSvgContent(node)) return "";
           var tag = tagOf(node);
           var name = node.localName || tag;
-          var out = openingTagOf(node, { sortAttrs: canonical, tagName: name });
+          var out = openingTagOf(node, { sortAttrs: canonical2, tagName: name });
           var opening = out;
           if (node.childNodes) {
             for (var i = 0; i < node.childNodes.length; i += 1) {
               var child = node.childNodes[i];
-              if (child.nodeType === 1) out += svgMarkupOf(child, canonical);
+              if (child.nodeType === 1) out += svgMarkupOf(child, canonical2);
               else if (child.nodeType === 3 || child.nodeType === 4) {
                 var value = child.nodeValue || "";
-                if (!canonical || value.trim()) out += normalize.escapeAttrValue(value);
+                if (!canonical2 || value.trim()) out += normalize.escapeAttrValue(value);
               }
             }
           } else {
             var kids = elementChildren(node);
-            for (var k = 0; k < kids.length; k += 1) out += svgMarkupOf(kids[k], canonical);
+            for (var k = 0; k < kids.length; k += 1) out += svgMarkupOf(kids[k], canonical2);
             if (!kids.length) out += normalize.escapeAttrValue(rawTextOf(node));
           }
           if (requireContent && out === opening) return "";
@@ -10713,7 +9433,7 @@
             __require("../shared/normalize.js")
           );
         }
-      })(typeof globalThis !== "undefined" ? globalThis : exports, function(markers, selection, epoch, replayModule, blocks, normalize) {
+      })(typeof globalThis !== "undefined" ? globalThis : exports, function(markers, selection, epoch2, replayModule, blocks, normalize) {
         "use strict";
         var LAYER = {
           COOPERATIVE_SKIP: "cooperative_skip",
@@ -11142,7 +9862,7 @@
           var built = [];
           restoring = true;
           try {
-            epoch.write("protect_restore_run", function() {
+            epoch2.write("protect_restore_run", function() {
               list.forEach(function(b) {
                 if (b !== anchorEl && b !== active.element && b.parentNode) b.parentNode.removeChild(b);
               });
@@ -11238,7 +9958,7 @@
           }
           restoring = true;
           try {
-            epoch.write("protect_restore", function() {
+            epoch2.write("protect_restore", function() {
               el.innerHTML = snap.html;
               Object.keys(snap.attributes).forEach(function(name) {
                 if (el.getAttribute(name) !== snap.attributes[name]) el.setAttribute(name, snap.attributes[name]);
@@ -11385,7 +10105,7 @@
           function run() {
             replay.schedule(replay.REASON.COMMIT, { immediate: true, commit });
           }
-          if (!epoch.isWriting()) {
+          if (!epoch2.isWriting()) {
             run();
             return;
           }
@@ -12156,7 +10876,7 @@
         "use strict";
         var HOUSE_ID = rules.RESERVED_ID;
         var HOUSE_NAME = rules.RESERVED_NAME;
-        var PALETTE_MAX = rules.PALETTE_MAX;
+        var PALETTE_MAX2 = rules.PALETTE_MAX;
         var HOUSE_PALETTE = [
           "#f7f7f5",
           // --paper
@@ -12212,19 +10932,19 @@
             return name + " is no longer installed, so the page is back to its own style.";
           }
         };
-        var isStyleId = rules.isStyleId;
-        var isHexColour = rules.isHexColour;
-        var isStyleName = rules.isStyleName;
+        var isStyleId2 = rules.isStyleId;
+        var isHexColour2 = rules.isHexColour;
+        var isStyleName2 = rules.isStyleName;
         function sanitizeList(json) {
           var list = json && Array.isArray(json.styles) ? json.styles : [];
           var seen = /* @__PURE__ */ Object.create(null);
           var out = [];
           list.forEach(function(entry) {
             if (!entry || typeof entry !== "object") return;
-            if (!isStyleId(entry.id) || entry.id === HOUSE_ID || seen[entry.id]) return;
-            if (!isStyleName(entry.name)) return;
+            if (!isStyleId2(entry.id) || entry.id === HOUSE_ID || seen[entry.id]) return;
+            if (!isStyleName2(entry.name)) return;
             seen[entry.id] = true;
-            var palette = Array.isArray(entry.palette) ? entry.palette.filter(isHexColour).slice(0, PALETTE_MAX) : [];
+            var palette = Array.isArray(entry.palette) ? entry.palette.filter(isHexColour2).slice(0, PALETTE_MAX2) : [];
             out.push({
               id: entry.id,
               name: entry.name,
@@ -12240,16 +10960,16 @@
         }
         function noteWords(id, name) {
           if (id === HOUSE_ID) return "Use the International Style for this page (lahe-style: international).";
-          if (!isStyleId(id) || !isStyleName(name)) return null;
+          if (!isStyleId2(id) || !isStyleName2(name)) return null;
           return "Use the " + name + " style for this page (lahe-style: " + id + ").";
         }
         function markerIdOf(text) {
           if (typeof text !== "string") return null;
           var match = MARKER_PATTERN.exec(text);
-          return match && isStyleId(match[1]) ? match[1] : null;
+          return match && isStyleId2(match[1]) ? match[1] : null;
         }
         function isWaiting(items, id) {
-          if (!Array.isArray(items) || !isStyleId(id)) return false;
+          if (!Array.isArray(items) || !isStyleId2(id)) return false;
           return items.some(function(item) {
             if (!item || item[record.FIELD.KIND] !== record.KIND.NOTE) return false;
             if (!record.isUnansweredReady(item)) return false;
@@ -12257,19 +10977,19 @@
           });
         }
         function encodeStored(id, name) {
-          return JSON.stringify({ id, name: isStyleName(name) ? name : null });
+          return JSON.stringify({ id, name: isStyleName2(name) ? name : null });
         }
         function decodeStored(value) {
           if (typeof value !== "string") return null;
-          if (isStyleId(value)) return { id: value, name: null };
+          if (isStyleId2(value)) return { id: value, name: null };
           var parsed = null;
           try {
             parsed = JSON.parse(value);
           } catch (err) {
             return null;
           }
-          if (!parsed || !isStyleId(parsed.id)) return null;
-          return { id: parsed.id, name: isStyleName(parsed.name) ? parsed.name : null };
+          if (!parsed || !isStyleId2(parsed.id)) return null;
+          return { id: parsed.id, name: isStyleName2(parsed.name) ? parsed.name : null };
         }
         function storageKey(reviewId, pagePath) {
           return STORAGE_PREFIX + String(reviewId) + ":" + String(pagePath);
@@ -12277,7 +10997,7 @@
         function styleIdFromHref(href) {
           if (typeof href !== "string") return null;
           var match = STYLE_HREF_TAIL.exec(href);
-          return match && isStyleId(match[1]) ? match[1] : null;
+          return match && isStyleId2(match[1]) ? match[1] : null;
         }
         function isHouseSheetHref(href) {
           return typeof href === "string" && HOUSE_SHEET_TAIL.test(href);
@@ -12294,8 +11014,8 @@
           list.forEach(function(entry) {
             byId[entry.id] = entry;
           });
-          var documentId = isStyleId(s.documentId) ? s.documentId : HOUSE_ID;
-          var shown = isStyleId(s.shown) ? s.shown : documentId;
+          var documentId = isStyleId2(s.documentId) ? s.documentId : HOUSE_ID;
+          var shown = isStyleId2(s.shown) ? s.shown : documentId;
           var knownNames = s.knownNames || {};
           var removedState = s.removed || null;
           if (shown !== documentId && shown !== HOUSE_ID && s.listLoaded && !byId[shown]) {
@@ -12304,12 +11024,12 @@
           }
           var previewing = shown !== documentId;
           function nameKnown(id) {
-            return id === HOUSE_ID || !!byId[id] || isStyleName(knownNames[id]);
+            return id === HOUSE_ID || !!byId[id] || isStyleName2(knownNames[id]);
           }
           function nameOf(id) {
             if (id === HOUSE_ID) return HOUSE_NAME;
             if (byId[id]) return byId[id].name;
-            return isStyleName(knownNames[id]) ? knownNames[id] : id;
+            return isStyleName2(knownNames[id]) ? knownNames[id] : id;
           }
           var documentMissing = documentId !== HOUSE_ID && !!s.listLoaded && !byId[documentId];
           var checked = previewing ? shown : documentMissing ? HOUSE_ID : documentId;
@@ -12334,8 +11054,8 @@
           else if (documentMissing) status = "";
           else status = WORDS.uses(nameOf(documentId));
           var notes = [];
-          var removed = removedState && isStyleId(removedState.id) ? removedState : null;
-          var removedName = !removed ? null : [removed.name, byId[removed.id] && byId[removed.id].name, knownNames[removed.id]].filter(isStyleName)[0] || null;
+          var removed = removedState && isStyleId2(removedState.id) ? removedState : null;
+          var removedName = !removed ? null : [removed.name, byId[removed.id] && byId[removed.id].name, knownNames[removed.id]].filter(isStyleName2)[0] || null;
           var removedText = removed ? WORDS.removed(removedName || removed.id) : null;
           if (removed) {
             notes.push(
@@ -12604,7 +11324,7 @@
           }
           function preview(id, how) {
             var h = how || {};
-            if (!usesHouseStyle() || !isStyleId(id)) return Promise.resolve({ ok: false, reason: "not-available" });
+            if (!usesHouseStyle() || !isStyleId2(id)) return Promise.resolve({ ok: false, reason: "not-available" });
             if (id === documentStyle()) return back();
             var position = h.keepPosition === false ? null : capturePosition();
             cancelPending();
@@ -12612,7 +11332,7 @@
             var mine = seq;
             removed = null;
             previewId = id;
-            previewName = isStyleName(h.name) ? h.name : null;
+            previewName = isStyleName2(h.name) ? h.name : null;
             writeKey(id, previewName);
             if (id === HOUSE_ID) {
               swapIn(null, HOUSE_ID, HOUSE_NAME);
@@ -12683,7 +11403,7 @@
           }
           function dropMissing(name) {
             if (!previewId || previewId === HOUSE_ID) return Promise.resolve({ ok: false, reason: "nothing-to-drop" });
-            removed = { id: previewId, name: isStyleName(name) ? name : null };
+            removed = { id: previewId, name: isStyleName2(name) ? name : null };
             return clear(capturePosition()).then(function(result) {
               return Object.assign({}, result, { ok: false, removed: removed.id });
             });
@@ -12776,14 +11496,14 @@
           HOUSE_ID,
           HOUSE_NAME,
           HOUSE_PALETTE,
-          PALETTE_MAX,
+          PALETTE_MAX: PALETTE_MAX2,
           PREVIEW_ATTR,
           STORAGE_PREFIX,
           LIST_URL,
           WORDS,
-          isStyleId,
-          isHexColour,
-          isStyleName,
+          isStyleId: isStyleId2,
+          isHexColour: isHexColour2,
+          isStyleName: isStyleName2,
           sanitizeList,
           noteWords,
           markerIdOf,
@@ -14009,7 +12729,7 @@
         var MENU_LEAVE_GRACE_MS = 300;
         var VIEW_GROUP = "view";
         var SHORTCUTS = { ACTION: "shortcuts", LABEL: "Keyboard shortcuts", CLOSE: "Close" };
-        var SEND_KEY_WORDS = { LABEL: "Send a comment with" };
+        var SEND_KEY_WORDS2 = { LABEL: "Send a comment with" };
         var STYLE_WORDS = styleSwitchModule.WORDS;
         var DOCUMENT_STYLE = { LABEL: STYLE_WORDS.TITLE };
         var MENU_ITEMS = [
@@ -14558,10 +13278,10 @@
             keysHead.appendChild(keysClose);
             keysPanel.appendChild(keysHead);
             var sendRow = el("div", "keyspanel__send");
-            sendRow.appendChild(el("span", "keyspanel__sendlabel", SEND_KEY_WORDS.LABEL));
+            sendRow.appendChild(el("span", "keyspanel__sendlabel", SEND_KEY_WORDS2.LABEL));
             var sendSwitch = el("div", "sendkey");
             sendSwitch.setAttribute("role", "group");
-            sendSwitch.setAttribute("aria-label", SEND_KEY_WORDS.LABEL);
+            sendSwitch.setAttribute("aria-label", SEND_KEY_WORDS2.LABEL);
             var sendKeyButtons = {};
             [gestures.SEND_KEY.ENTER, gestures.SEND_KEY.MOD_ENTER].forEach(function(key) {
               var opt = el("button", "sendkey__opt", gestures.sendKeyLabel(key));
@@ -16008,8 +14728,8 @@
             });
             p.badges.textContent = "";
             cardBadges(card.id).forEach(function(badge) {
-              var row = el("div", "badge", badge.message || badge.code);
-              p.badges.appendChild(row);
+              var row2 = el("div", "badge", badge.message || badge.code);
+              p.badges.appendChild(row2);
             });
             if (!p.previousReplies) {
               p.previousReplies = el("div", "agent-history");
@@ -16155,11 +14875,11 @@
             paintCard(cards[id]);
             return handleFor(id);
           }
-          function setCardBadge(id, failure) {
+          function setCardBadge(id, failure2) {
             if (!cards[id]) return null;
-            if (!failure || !failure.code) throw new TypeError("setCardBadge expects a failure object");
-            clearCardBadge(id, failure.code);
-            cards[id].badges.push(failure);
+            if (!failure2 || !failure2.code) throw new TypeError("setCardBadge expects a failure object");
+            clearCardBadge(id, failure2.code);
+            cards[id].badges.push(failure2);
             paintCard(cards[id]);
             return handleFor(id);
           }
@@ -16269,7 +14989,7 @@
             if (!dom) return;
             dom.chipList.textContent = "";
             chips.forEach(function(chip) {
-              var row = el("div", "chip");
+              var row2 = el("div", "chip");
               var text = el("div", "chip__text");
               text.appendChild(el("span", null, chip.message || chip.code));
               if (chip.remedy) text.appendChild(el("span", "chip__remedy", chip.remedy));
@@ -16309,15 +15029,15 @@
                 });
                 text.appendChild(copy);
               }
-              row.appendChild(text);
-              if (chip.count > 1) row.appendChild(el("span", "chip__count", "\xD7" + chip.count));
+              row2.appendChild(text);
+              if (chip.count > 1) row2.appendChild(el("span", "chip__count", "\xD7" + chip.count));
               var x = el("button", "chip__x", "\xD7");
               x.setAttribute("aria-label", "Dismiss");
               x.addEventListener("click", function() {
                 failuresApi.dismiss(chip.code);
               });
-              row.appendChild(x);
-              dom.chipList.appendChild(row);
+              row2.appendChild(x);
+              dom.chipList.appendChild(row2);
             });
           }
           function chipControls() {
@@ -16335,23 +15055,23 @@
             return out;
           }
           var failuresApi = {
-            add: function(failure) {
-              if (!failure || !failure.code) throw new TypeError("failures.add expects a failure object");
-              if (dismissed[failure.code]) return null;
+            add: function(failure2) {
+              if (!failure2 || !failure2.code) throw new TypeError("failures.add expects a failure object");
+              if (dismissed[failure2.code]) return null;
               var existing = chips.filter(function(f) {
-                return f.code === failure.code;
+                return f.code === failure2.code;
               })[0];
               if (existing) {
-                if (!failure.standing && !existing.standing) {
+                if (!failure2.standing && !existing.standing) {
                   existing.count = (existing.count || 1) + 1;
                 }
-                existing.at = failure.at;
-                existing.detail = failure.detail;
+                existing.at = failure2.at;
+                existing.detail = failure2.detail;
                 saveChips();
                 renderChips();
                 return existing;
               }
-              var entry = Object.assign({}, failure, { count: 1, dismissed: false });
+              var entry = Object.assign({}, failure2, { count: 1, dismissed: false });
               chips.push(entry);
               saveChips();
               renderChips();
@@ -16702,10 +15422,10 @@
           }
           function copyText(text) {
             var target = clipboardTarget();
-            var write = target && typeof target.writeText === "function" ? Promise.resolve().then(function() {
+            var write2 = target && typeof target.writeText === "function" ? Promise.resolve().then(function() {
               return target.writeText(text);
             }) : Promise.reject(new Error("this browser gave the page no clipboard to write to"));
-            return write.then(
+            return write2.then(
               function() {
                 return { ok: true, text };
               },
@@ -16723,10 +15443,10 @@
           function copyHandoff() {
             var text = waitBanner().message;
             var target = clipboardTarget();
-            var write = target && typeof target.writeText === "function" ? Promise.resolve().then(function() {
+            var write2 = target && typeof target.writeText === "function" ? Promise.resolve().then(function() {
               return target.writeText(text);
             }) : Promise.reject(new Error("this browser gave the page no clipboard to write to"));
-            return write.then(
+            return write2.then(
               function() {
                 handoffNote = AGENT_PROMINENT.COPIED;
                 handoffFailed = false;
@@ -17172,10 +15892,10 @@
             });
             while (dom.keysList.firstChild) dom.keysList.removeChild(dom.keysList.firstChild);
             gestures.panelLines(current).forEach(function(line) {
-              var row = el("li", "keyspanel__row");
-              row.appendChild(el("kbd", null, line.keys));
-              row.appendChild(el("span", null, line.hint));
-              dom.keysList.appendChild(row);
+              var row2 = el("li", "keyspanel__row");
+              row2.appendChild(el("kbd", null, line.keys));
+              row2.appendChild(el("span", null, line.hint));
+              dom.keysList.appendChild(row2);
             });
             highlightModule.setSendTip(gestures.sendKeyLabel(current));
           }
@@ -17586,8 +16306,8 @@
             return (palette || []).join(",");
           }
           function buildStyleRow(id) {
-            var row = el("label", "stylepanel__row");
-            row.setAttribute("data-style-id", id);
+            var row2 = el("label", "stylepanel__row");
+            row2.setAttribute("data-style-id", id);
             var input = el("input", "stylepanel__radio");
             input.type = "radio";
             input.name = "lahe-document-style";
@@ -17602,34 +16322,34 @@
             label.appendChild(inDoc);
             var strip = el("span", "stylepanel__strip");
             strip.setAttribute("aria-hidden", "true");
-            row.appendChild(input);
-            row.appendChild(label);
-            row.appendChild(strip);
-            return { node: row, input, name, inDoc, strip, swatches: null };
+            row2.appendChild(input);
+            row2.appendChild(label);
+            row2.appendChild(strip);
+            return { node: row2, input, name, inDoc, strip, swatches: null };
           }
           function renderStyleRows(rows) {
             var known = dom.styleRows;
             var wanted = /* @__PURE__ */ Object.create(null);
             rows.forEach(function(entry, index) {
               wanted[entry.id] = true;
-              var row = known[entry.id] || (known[entry.id] = buildStyleRow(entry.id));
-              if (row.name.textContent !== entry.name) row.name.textContent = entry.name;
-              row.node.title = entry.description || "";
-              row.inDoc.hidden = entry.inDocument !== true;
-              if (row.input.checked !== (entry.checked === true)) row.input.checked = entry.checked === true;
+              var row2 = known[entry.id] || (known[entry.id] = buildStyleRow(entry.id));
+              if (row2.name.textContent !== entry.name) row2.name.textContent = entry.name;
+              row2.node.title = entry.description || "";
+              row2.inDoc.hidden = entry.inDocument !== true;
+              if (row2.input.checked !== (entry.checked === true)) row2.input.checked = entry.checked === true;
               var key = swatchesKey(entry.palette);
-              if (row.swatches !== key) {
-                while (row.strip.firstChild) row.strip.removeChild(row.strip.firstChild);
+              if (row2.swatches !== key) {
+                while (row2.strip.firstChild) row2.strip.removeChild(row2.strip.firstChild);
                 (entry.palette || []).forEach(function(colour) {
                   if (!styleSwitchModule.isHexColour(colour)) return;
                   var swatch = el("span", "stylepanel__swatch");
                   swatch.style.backgroundColor = colour;
-                  row.strip.appendChild(swatch);
+                  row2.strip.appendChild(swatch);
                 });
-                row.swatches = key;
+                row2.swatches = key;
               }
               var at = dom.styleList.children[index] || null;
-              if (at !== row.node) dom.styleList.insertBefore(row.node, at);
+              if (at !== row2.node) dom.styleList.insertBefore(row2.node, at);
             });
             Object.keys(known).forEach(function(id) {
               if (wanted[id]) return;
@@ -17669,18 +16389,18 @@
             var active = dom.shadow.activeElement;
             var rows = Array.prototype.slice.call(dom.styleList.children).map(function(node) {
               var id = node.getAttribute("data-style-id");
-              var row = dom.styleRows[id];
+              var row2 = dom.styleRows[id];
               return {
                 id,
-                name: row.name.textContent,
-                inDocument: !row.inDoc.hidden,
-                checked: row.input.checked,
-                focused: active === row.input,
-                palette: Array.prototype.slice.call(row.strip.children).map(function(swatch) {
+                name: row2.name.textContent,
+                inDocument: !row2.inDoc.hidden,
+                checked: row2.input.checked,
+                focused: active === row2.input,
+                palette: Array.prototype.slice.call(row2.strip.children).map(function(swatch) {
                   return swatch.style.backgroundColor;
                 }),
                 rect: rectOf(node),
-                nameRect: rectOf(row.name)
+                nameRect: rectOf(row2.name)
               };
             });
             var lateRect = rectOf(dom.late);
@@ -19417,13 +18137,13 @@
           function buildRow(item) {
             if (record.isChoice(item)) return buildChoiceRow(item);
             var id = item[record.FIELD.ID];
-            var row = el("article", ROW_CLASS);
-            row.setAttribute("data-lahe-item", id);
-            row.setAttribute("data-kind", item[record.FIELD.KIND]);
-            if (hosted) row.setAttribute("data-lahe-active-row", "");
+            var row2 = el("article", ROW_CLASS);
+            row2.setAttribute("data-lahe-item", id);
+            row2.setAttribute("data-kind", item[record.FIELD.KIND]);
+            if (hosted) row2.setAttribute("data-lahe-active-row", "");
             if (!hosted) {
               var quote = el("p", "lahe-rail-quote", "");
-              row.appendChild(quote);
+              row2.appendChild(quote);
             }
             var note = el("p", "lahe-rail-note", "");
             if (hosted) {
@@ -19434,9 +18154,9 @@
                 at: item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null,
                 bubble: note
               });
-              row.appendChild(turn);
+              row2.appendChild(turn);
             } else {
-              row.appendChild(note);
+              row2.appendChild(note);
             }
             comments.attachNoteEditor(id, note);
             var actionClass = hosted ? "cardact cardact--quiet" : "lahe-rail-btn";
@@ -19452,11 +18172,11 @@
             del.addEventListener("click", function() {
               comments.remove(id);
             });
-            if (hosted) row.appendChild(del);
+            if (hosted) row2.appendChild(del);
             else foot.appendChild(del);
-            row.appendChild(foot);
-            row.appendChild(buildAddBox(id));
-            return row;
+            row2.appendChild(foot);
+            row2.appendChild(buildAddBox(id));
+            return row2;
           }
           function sendKeys() {
             return gestures.sendKeyLabel(sendKeySetting());
@@ -19553,11 +18273,11 @@
           }
           function buildChoiceRow(item) {
             var id = item[record.FIELD.ID];
-            var row = el("article", ROW_CLASS);
-            row.setAttribute("data-lahe-item", id);
-            row.setAttribute("data-kind", record.KIND.CHOICE);
-            if (hosted) row.setAttribute("data-lahe-active-row", "");
-            if (!hosted) row.appendChild(el("p", "lahe-rail-quote", ""));
+            var row2 = el("article", ROW_CLASS);
+            row2.setAttribute("data-lahe-item", id);
+            row2.setAttribute("data-kind", record.KIND.CHOICE);
+            if (hosted) row2.setAttribute("data-lahe-active-row", "");
+            if (!hosted) row2.appendChild(el("p", "lahe-rail-quote", ""));
             var answer = el("p", "lahe-rail-answer", "");
             answer.setAttribute("data-lahe-choice-answer", "");
             answer.appendChild(el("span", "lahe-rail-answer__value", ""));
@@ -19572,9 +18292,9 @@
                 at: item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null,
                 bubble: answer
               });
-              row.appendChild(turn);
+              row2.appendChild(turn);
             } else {
-              row.appendChild(answer);
+              row2.appendChild(answer);
             }
             var foot = el("div", hosted ? "cardacts" : "lahe-rail-rowfoot");
             if (!hosted) foot.appendChild(el("span", "lahe-rail-state", ""));
@@ -19588,43 +18308,43 @@
             del.addEventListener("click", function() {
               comments.remove(id);
             });
-            if (hosted) row.appendChild(del);
+            if (hosted) row2.appendChild(del);
             else foot.appendChild(del);
-            row.appendChild(foot);
+            row2.appendChild(foot);
             var box = buildAddBox(id);
             var field = box.querySelector("textarea");
             if (field) {
               field.setAttribute("placeholder", "Add a message");
               field.setAttribute("aria-label", "Add a message to this answer");
             }
-            row.appendChild(box);
-            return row;
+            row2.appendChild(box);
+            return row2;
           }
-          function updateChoiceRow(row, item) {
-            var quote = row.querySelector(".lahe-rail-quote");
+          function updateChoiceRow(row2, item) {
+            var quote = row2.querySelector(".lahe-rail-quote");
             if (quote) {
               var quoteText = item[record.FIELD.CONTEXT] ? item[record.FIELD.CONTEXT].quote : null;
               quote.textContent = quoteText || "";
               quote.hidden = !quoteText;
             }
-            var value = row.querySelector(".lahe-rail-answer__value");
+            var value = row2.querySelector(".lahe-rail-answer__value");
             if (value) value.textContent = overlayModule.choiceAnswerText(item, doc);
-            var said = row.querySelector(".lahe-rail-answer__note");
+            var said = row2.querySelector(".lahe-rail-answer__note");
             if (said) {
               var words = record.reviewerNote(item) || "";
               said.textContent = words;
               said.hidden = !words;
             }
             var answered = !!item[record.FIELD.REPLY];
-            var add = row.querySelector(".lahe-rail-add");
+            var add = row2.querySelector(".lahe-rail-add");
             if (add) {
               add.hidden = answered || item[record.FIELD.STATE] !== record.STATE.READY;
               add.setAttribute("data-answered", answered ? "true" : "false");
               paintAddBox(add);
             }
-            var del = row.querySelector('[data-lahe-act="delete"]');
+            var del = row2.querySelector('[data-lahe-act="delete"]');
             if (del && hosted) del.hidden = answered;
-            var cap = row.querySelector(".lahe-rail-turn .turn__cap");
+            var cap = row2.querySelector(".lahe-rail-turn .turn__cap");
             if (cap) {
               var at = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
               var time = cap.querySelector(".turn__time");
@@ -19634,34 +18354,34 @@
               }
               overlayModule.setTurnTime(time, at);
             }
-            var state = row.querySelector(".lahe-rail-state");
+            var state = row2.querySelector(".lahe-rail-state");
             if (state) state.textContent = stateLabel(item);
-            row.setAttribute("data-state", item[record.FIELD.STATE]);
+            row2.setAttribute("data-state", item[record.FIELD.STATE]);
           }
-          function updateRow(row, item) {
-            if (record.isChoice(item)) return updateChoiceRow(row, item);
-            var quote = row.querySelector(".lahe-rail-quote");
+          function updateRow(row2, item) {
+            if (record.isChoice(item)) return updateChoiceRow(row2, item);
+            var quote = row2.querySelector(".lahe-rail-quote");
             if (quote) {
               var quoteText = item[record.FIELD.CONTEXT] ? item[record.FIELD.CONTEXT].quote : null;
               quote.textContent = quoteText || "";
               quote.hidden = !quoteText;
             }
-            var note = row.querySelector(".lahe-rail-note");
+            var note = row2.querySelector(".lahe-rail-note");
             var text = item[record.FIELD.NOTE];
             if (!isBeingEdited(note)) note.textContent = text ? text : "";
             note.setAttribute("data-empty", text ? "false" : "true");
             comments.setNoteEditorEnabled(item[record.FIELD.ID], !item[record.FIELD.REPLY]);
-            var add = row.querySelector(".lahe-rail-add");
+            var add = row2.querySelector(".lahe-rail-add");
             if (add) {
               add.hidden = !!item[record.FIELD.REPLY] || item[record.FIELD.STATE] !== record.STATE.READY;
               add.setAttribute("data-answered", item[record.FIELD.REPLY] ? "true" : "false");
               paintAddBox(add);
             }
-            var del = row.querySelector('[data-lahe-act="delete"]');
+            var del = row2.querySelector('[data-lahe-act="delete"]');
             if (del && hosted) del.hidden = !!item[record.FIELD.REPLY];
             if (hosted) {
               var wantSend = item[record.FIELD.STATE] === record.STATE.DRAFT && !!String(text || "").trim();
-              var sendBtn = row.querySelector('[data-lahe-act="send"]');
+              var sendBtn = row2.querySelector('[data-lahe-act="send"]');
               if (wantSend && !sendBtn) {
                 var id = item[record.FIELD.ID];
                 sendBtn = el("button", "cardact", "Send");
@@ -19672,12 +18392,12 @@
                   var handle2 = comments.boxFor(id) || comments.editInPlace(id, note);
                   if (handle2 && typeof handle2.commit === "function") handle2.commit();
                 });
-                row.querySelector(".cardacts").appendChild(sendBtn);
+                row2.querySelector(".cardacts").appendChild(sendBtn);
               } else if (!wantSend && sendBtn) {
                 sendBtn.parentNode.removeChild(sendBtn);
               }
             }
-            var cap = row.querySelector(".lahe-rail-turn .turn__cap");
+            var cap = row2.querySelector(".lahe-rail-turn .turn__cap");
             if (cap) {
               var at = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
               var time = cap.querySelector(".turn__time");
@@ -19687,9 +18407,9 @@
               }
               overlayModule.setTurnTime(time, at);
             }
-            var state = row.querySelector(".lahe-rail-state");
+            var state = row2.querySelector(".lahe-rail-state");
             if (state) state.textContent = stateLabel(item);
-            row.setAttribute("data-state", item[record.FIELD.STATE]);
+            row2.setAttribute("data-state", item[record.FIELD.STATE]);
           }
           function isBeingEdited(note) {
             if (!note || typeof note.getRootNode !== "function") return false;
@@ -19704,9 +18424,9 @@
           }
           function dropRow(id) {
             comments.detachNoteEditor(id);
-            var row = rows[id];
-            if (row && !rail.detachCardNode(id, row) && row.parentNode) {
-              row.parentNode.removeChild(row);
+            var row2 = rows[id];
+            if (row2 && !rail.detachCardNode(id, row2) && row2.parentNode) {
+              row2.parentNode.removeChild(row2);
             }
             delete rows[id];
             rail.releaseCard(id, overlayModule.TAB.ACTIVE);
@@ -20484,13 +19204,13 @@
             return api;
           }
           function dropRow(id) {
-            var row = rows[id];
-            if (row && row.parentNode) row.parentNode.removeChild(row);
+            var row2 = rows[id];
+            if (row2 && row2.parentNode) row2.parentNode.removeChild(row2);
             delete rows[id];
           }
           function buildRow(item) {
-            var row = el("div", ROW_CLASS);
-            row.setAttribute("data-lahe-item", item[record.FIELD.ID]);
+            var row2 = el("div", ROW_CLASS);
+            row2.setAttribute("data-lahe-item", item[record.FIELD.ID]);
             var turn = el("div", "lahe-done-turn");
             overlayModule.fillTurn(turn, el, {
               side: "you",
@@ -20498,8 +19218,8 @@
               at: reviewerAt(item),
               bubble: el("div", "lahe-done-said", "")
             });
-            row.appendChild(turn);
-            return row;
+            row2.appendChild(turn);
+            return row2;
           }
           function saidBy(item) {
             var note = record.reviewerNote(item);
@@ -20512,9 +19232,9 @@
             if (note && change && note !== change) return note + "\n" + change;
             return note || change || item[record.FIELD.AFTER] || "";
           }
-          function updateRow(row, item) {
-            row.querySelector(".lahe-done-said").textContent = saidBy(item);
-            var cap = row.querySelector(".turn__cap");
+          function updateRow(row2, item) {
+            row2.querySelector(".lahe-done-said").textContent = saidBy(item);
+            var cap = row2.querySelector(".turn__cap");
             var time = cap && cap.querySelector(".turn__time");
             var at = reviewerAt(item);
             if (at && !time && cap) {
@@ -21263,19 +19983,19 @@
             while (list.firstChild) list.removeChild(list.firstChild);
             var blocks = item[record.FIELD.NEW_BLOCKS] || [];
             suggestions.forEach(function(sg) {
-              var row = el("li", "lahe-fix");
-              row.setAttribute("data-lahe-fix", "");
+              var row2 = el("li", "lahe-fix");
+              row2.setAttribute("data-lahe-fix", "");
               var block = blocks[sg.block];
               var start = block && typeof block.html === "string" ? plainStart(block.html) : "";
-              row.appendChild(el("span", "lahe-fix-where", "Block " + (Number(sg.block) + 1) + (start ? ": " + start : "")));
+              row2.appendChild(el("span", "lahe-fix-where", "Block " + (Number(sg.block) + 1) + (start ? ": " + start : "")));
               var from = el("span", "lahe-fix-from", boundedText(String(sg.from)));
               from.setAttribute("data-lahe-fix-from", "");
               var to = el("span", "lahe-fix-to", boundedText(String(sg.to)));
               to.setAttribute("data-lahe-fix-to", "");
-              row.appendChild(from);
-              row.appendChild(doc.createTextNode(" \u2192 "));
-              row.appendChild(to);
-              list.appendChild(row);
+              row2.appendChild(from);
+              row2.appendChild(doc.createTextNode(" \u2192 "));
+              row2.appendChild(to);
+              list.appendChild(row2);
             });
             return list;
           }
@@ -21714,8 +20434,8 @@
               var bt = String(b.item[record.FIELD.CREATED_AT] || "");
               if (at !== bt) return at < bt ? -1 : 1;
               return a.index - b.index;
-            }).map(function(row) {
-              return row.item;
+            }).map(function(row2) {
+              return row2.item;
             });
           }
           function exportModule() {
@@ -21768,10 +20488,10 @@
             return api;
           }
           function buildRow(item) {
-            var row = el("div", ROW_CLASS);
-            row.setAttribute(ROW_ATTR, item[record.FIELD.ID]);
-            row.setAttribute("data-kind", item[record.FIELD.KIND]);
-            row.appendChild(el("p", ROW_CLASS + "__said", ""));
+            var row2 = el("div", ROW_CLASS);
+            row2.setAttribute(ROW_ATTR, item[record.FIELD.ID]);
+            row2.setAttribute("data-kind", item[record.FIELD.KIND]);
+            row2.appendChild(el("p", ROW_CLASS + "__said", ""));
             var run = el("div", ROW_CLASS + "__run");
             var runFirst = el("p", ROW_CLASS + "__run-first", "");
             runFirst.setAttribute("data-lahe-run-first", "");
@@ -21780,19 +20500,19 @@
             run.appendChild(runFirst);
             run.appendChild(runSecond);
             run.hidden = true;
-            row.appendChild(run);
+            row2.appendChild(run);
             var pair = el("div", ROW_CLASS + "__pair");
             pair.appendChild(el("p", ROW_CLASS + "__before", ""));
             pair.appendChild(el("p", ROW_CLASS + "__after", ""));
-            row.appendChild(pair);
+            row2.appendChild(pair);
             var blockList = el("ol", ROW_CLASS + "__blocks");
             blockList.setAttribute("aria-label", "New blocks");
             blockList.hidden = true;
-            row.appendChild(blockList);
-            row.appendChild(el("p", ROW_CLASS + "__structure", ""));
+            row2.appendChild(blockList);
+            row2.appendChild(el("p", ROW_CLASS + "__structure", ""));
             var failed = el("p", ROW_CLASS + "__failed", "");
             failed.setAttribute("data-lahe-undo-failed", "");
-            row.appendChild(failed);
+            row2.appendChild(failed);
             var foot = el("div", "cardacts");
             var undoBtn = el("button", "cardact cardact--quiet", UNDO_LABEL);
             undoBtn.setAttribute("type", "button");
@@ -21801,9 +20521,9 @@
               undoRow(item[record.FIELD.ID]);
             });
             foot.appendChild(undoBtn);
-            row.appendChild(foot);
+            row2.appendChild(foot);
             paintUndoButton(undoBtn);
-            return row;
+            return row2;
           }
           function editingSurface() {
             if (editing && typeof editing.undo === "function") return editing;
@@ -21820,34 +20540,34 @@
           }
           function undoRow(id) {
             var surface = editingSurface();
-            var row = rows[id];
-            var pressed = row ? row.querySelector("[data-lahe-act='undo']") : null;
+            var row2 = rows[id];
+            var pressed = row2 ? row2.querySelector("[data-lahe-act='undo']") : null;
             if (pressed && typeof pressed.blur === "function") pressed.blur();
             if (!surface) {
-              sayFailed(row, UNDO_MISSING_TITLE);
+              sayFailed(row2, UNDO_MISSING_TITLE);
               lastUndo = { id, reverted: false, kind: null, reason: UNDO_MISSING_TITLE };
               return lastUndo;
             }
-            sayFailed(row, "");
+            sayFailed(row2, "");
             var result = surface.undo(id) || { reverted: false, kind: null, reason: "undo answered nothing" };
             lastUndo = { id, reverted: !!result.reverted, kind: result.kind || null, reason: result.reason || null };
-            if (!result.reverted) sayFailed(row, "Could not undo this: " + String(result.reason || "no reason given"));
+            if (!result.reverted) sayFailed(row2, "Could not undo this: " + String(result.reason || "no reason given"));
             refresh();
             return lastUndo;
           }
-          function sayFailed(row, text) {
-            if (!row) return null;
-            var said = row.querySelector("[data-lahe-undo-failed]");
+          function sayFailed(row2, text) {
+            if (!row2) return null;
+            var said = row2.querySelector("[data-lahe-undo-failed]");
             if (said) said.textContent = text || "";
             return said;
           }
-          function updateRow(row, item) {
+          function updateRow(row2, item) {
             var text = rowText(item);
             var summary = overlayModule.runSummary(item);
-            row.setAttribute("data-kind", item[record.FIELD.KIND]);
-            var before = row.querySelector("." + ROW_CLASS + "__before");
-            var after = row.querySelector("." + ROW_CLASS + "__after");
-            var pair = row.querySelector("." + ROW_CLASS + "__pair");
+            row2.setAttribute("data-kind", item[record.FIELD.KIND]);
+            var before = row2.querySelector("." + ROW_CLASS + "__before");
+            var after = row2.querySelector("." + ROW_CLASS + "__after");
+            var pair = row2.querySelector("." + ROW_CLASS + "__pair");
             if (summary) {
               var anchorPair = runAnchorPair(item);
               before.textContent = anchorPair ? anchorPair.before : "";
@@ -21861,19 +20581,19 @@
               after.setAttribute("data-empty", text.emptyAfter ? "true" : "false");
               pair.hidden = false;
             }
-            row.querySelector("." + ROW_CLASS + "__structure").textContent = summary ? "" : text.structure;
-            row.querySelector("." + ROW_CLASS + "__said").textContent = summary ? "" : item[record.FIELD.CHANGE] || "";
-            paintRun(row, summary);
-            paintUndoButton(row.querySelector("[data-lahe-act='undo']"));
-            return row;
+            row2.querySelector("." + ROW_CLASS + "__structure").textContent = summary ? "" : text.structure;
+            row2.querySelector("." + ROW_CLASS + "__said").textContent = summary ? "" : item[record.FIELD.CHANGE] || "";
+            paintRun(row2, summary);
+            paintUndoButton(row2.querySelector("[data-lahe-act='undo']"));
+            return row2;
           }
-          function paintRun(row, summary) {
-            var run = row.querySelector("." + ROW_CLASS + "__run");
-            var list = row.querySelector("." + ROW_CLASS + "__blocks");
+          function paintRun(row2, summary) {
+            var run = row2.querySelector("." + ROW_CLASS + "__run");
+            var list = row2.querySelector("." + ROW_CLASS + "__blocks");
             run.hidden = !summary;
             list.hidden = !summary;
-            row.querySelector("[data-lahe-run-first]").textContent = summary ? summary.first : "";
-            row.querySelector("[data-lahe-run-second]").textContent = summary ? summary.second : "";
+            row2.querySelector("[data-lahe-run-first]").textContent = summary ? summary.first : "";
+            row2.querySelector("[data-lahe-run-second]").textContent = summary ? summary.second : "";
             var key = summary ? JSON.stringify(summary.blocks) : "";
             if (list.getAttribute("data-lahe-run-key") === key) return;
             list.setAttribute("data-lahe-run-key", key);
@@ -21916,8 +20636,8 @@
             return marked;
           }
           function dropRow(id) {
-            var row = rows[id];
-            if (row && row.parentNode) row.parentNode.removeChild(row);
+            var row2 = rows[id];
+            if (row2 && row2.parentNode) row2.parentNode.removeChild(row2);
             delete rows[id];
           }
           function exportList() {
@@ -21983,8 +20703,8 @@
             // a caller that cannot reach into the rail's closed root.
             undoRow,
             undoButton: function(id) {
-              var row = rows[id];
-              return row ? row.querySelector("[data-lahe-act='undo']") : null;
+              var row2 = rows[id];
+              return row2 ? row2.querySelector("[data-lahe-act='undo']") : null;
             },
             lastUndo: function() {
               return lastUndo;
@@ -22497,13 +21217,13 @@
             }).then(function() {
               return remember({ ok: true, action: "copy", scope, text, characters: text.length });
             }).catch(function(error) {
-              var failure = raise("COPY_FAILED", String(error && error.message || error));
+              var failure2 = raise("COPY_FAILED", String(error && error.message || error));
               return remember({
                 ok: false,
                 action: "copy",
                 scope,
                 text,
-                code: failure.code,
+                code: failure2.code,
                 error: String(error && error.message || error)
               });
             });
@@ -22519,14 +21239,14 @@
               download(text, filename);
               return remember({ ok: true, action: "export", scope, text, filename });
             }).catch(function(error) {
-              var failure = raise("EXPORT_FAILED", String(error && error.message || error));
+              var failure2 = raise("EXPORT_FAILED", String(error && error.message || error));
               return remember({
                 ok: false,
                 action: "export",
                 scope,
                 text,
                 filename,
-                code: failure.code,
+                code: failure2.code,
                 error: String(error && error.message || error)
               });
             });
@@ -22549,14 +21269,14 @@
                 filename: wantsFile ? filename : null
               });
             }).catch(function(error) {
-              var failure = raise("EXPORT_FAILED", String(error && error.message || error));
+              var failure2 = raise("EXPORT_FAILED", String(error && error.message || error));
               return remember({
                 ok: false,
                 action: "export_records",
                 scope: o.scope || null,
                 text: null,
                 filename: null,
-                code: failure.code,
+                code: failure2.code,
                 error: String(error && error.message || error)
               });
             });
@@ -23442,17 +22162,17 @@
             if (status === null) return setStatus(overlay.STATUS.KEPT_UNCONFIRMED);
             return status;
           }
-          function raise(failure) {
-            lastFailure = failure;
-            var code = failures.canonical(failure.code);
+          function raise(failure2) {
+            lastFailure = failure2;
+            var code = failures.canonical(failure2.code);
             if (code === "HELPER_UNREACHABLE") helperReachable = false;
             if (code === "SYNC_ORIGIN_NOT_ALLOWED" || code === "SYNC_UNAUTHORIZED") {
               onRecovered("HELPER_UNREACHABLE");
-              if (accessRefused === code) return failure;
+              if (accessRefused === code) return failure2;
               accessRefused = code;
             }
-            onFailure(failure);
-            return failure;
+            onFailure(failure2);
+            return failure2;
           }
           function markReachable() {
             var was = helperReachable;
@@ -23837,7 +22557,7 @@
               }
               counters.postsFailed += 1;
               state = STATE.RETRYING;
-              raise(classify(result.error, { status: result.status, detail: describe(result) }));
+              raise(classify(result.error, { status: result.status, detail: describe2(result) }));
               if (result.status === void 0) diagnoseUnreachable();
               recomputeStatus();
               if (!leaving) scheduleRetry();
@@ -23883,7 +22603,7 @@
             var error = result.error;
             return !!error && error.name === "AbortError";
           }
-          function describe(result) {
+          function describe2(result) {
             if (result.timedOut) return "the helper accepted the connection and did not answer within " + REQUEST_TIMEOUT_MS + "ms";
             if (result.error) return result.error.message || String(result.error);
             if (result.body && result.body.error) return result.body.error.message || result.body.error.code;
@@ -23948,7 +22668,7 @@
               function(result) {
                 if (!result.ok) {
                   if (abortedByTeardown(result)) return { events: [] };
-                  raise(classify(result.error, { status: result.status, detail: describe(result) }));
+                  raise(classify(result.error, { status: result.status, detail: describe2(result) }));
                   if (result.status === void 0) {
                     return diagnoseUnreachable().then(function() {
                       recomputeStatus();
@@ -24355,15 +23075,15 @@
             });
           }
           function refuseOlderHelper(live) {
-            var failure = failures.failure(
+            var failure2 = failures.failure(
               "HELPER_CONTRACT_OLDER",
               "the helper reports service contract " + live + "; this page needs " + protocol.SERVICE_CONTRACT
             );
-            contractRefused = { message: failures.describe("HELPER_CONTRACT_OLDER").message, failure };
+            contractRefused = { message: failures.describe("HELPER_CONTRACT_OLDER").message, failure: failure2 };
             readOnly = true;
             stopHeartbeat();
             lock = { checked: true, acquired: false, holder: null, reason: contractRefused.message, refusedBy: "contract", unchecked: false };
-            raise(failure);
+            raise(failure2);
             onRefused({ reason: contractRefused.message, refusedBy: "contract" });
           }
           function finalizeClaim() {
@@ -24431,7 +23151,7 @@
                     endedAt: null,
                     outstandingKept: null,
                     unsent,
-                    reason: describe(result) || "the helper could not be reached"
+                    reason: describe2(result) || "the helper could not be reached"
                   };
                 }
               );
@@ -24749,7 +23469,7 @@
             __require("../shared/failures.js")
           );
         }
-      })(typeof globalThis !== "undefined" ? globalThis : exports, function(record, gestures, epoch, failures) {
+      })(typeof globalThis !== "undefined" ? globalThis : exports, function(record, gestures, epoch2, failures) {
         "use strict";
         var M = record.CHOICE_MARKUP;
         var F = record.FIELD;
@@ -24901,7 +23621,7 @@
               if (v.group.getAttribute(M.INERT_ATTR) !== want) writes.push({ node: v.group, value: want });
             });
             if (writes.length) {
-              epoch.write("choices", function() {
+              epoch2.write("choices", function() {
                 writes.forEach(function(w) {
                   if (w.value === null) w.node.removeAttribute(M.INERT_ATTR);
                   else w.node.setAttribute(M.INERT_ATTR, w.value);
@@ -27023,7 +25743,7 @@
               setNoteEditable(entry, false);
             });
           }
-          function describe(event) {
+          function describe2(event) {
             var selection = win && win.getSelection ? win.getSelection() : null;
             return {
               type: event.type,
@@ -27064,7 +25784,7 @@
           function onKeydown(event) {
             if (markers.isInsideOverlay(event.target)) return;
             if (event.key === "Escape") hidePopover();
-            var got = gestures.gestureFor(describe(event));
+            var got = gestures.gestureFor(describe2(event));
             if (got.gesture === gestures.GESTURE.COMMENT_ON_SELECTION) {
               if (got.preventDefault) event.preventDefault();
               commentOnSelection({});
@@ -27090,7 +25810,7 @@
           }
           function onClick(event) {
             if (markers.isInsideOverlay(event.target)) return;
-            var got = gestures.gestureFor(describe(event));
+            var got = gestures.gestureFor(describe2(event));
             if (got.gesture !== gestures.GESTURE.PICK_ELEMENT) return;
             if (got.preventDefault) event.preventDefault();
             event.stopPropagation();
@@ -27254,7 +25974,7 @@
             }
           );
         }
-      })(typeof globalThis !== "undefined" ? globalThis : exports, function(markers, normalize, record, lifecycle, regions, epoch, gestures, selection, storeModule, anchor, highlightModule, listeners, protect, commentsModule, failuresModule, blocks, replayRef) {
+      })(typeof globalThis !== "undefined" ? globalThis : exports, function(markers, normalize, record, lifecycle, regions, epoch2, gestures, selection, storeModule, anchor, highlightModule, listeners, protect, commentsModule, failuresModule, blocks, replayRef) {
         "use strict";
         var FORMATTING_MECHANISM = "execCommand";
         var FRAME_CLASS = "lahe-edit-frame";
@@ -27872,7 +26592,7 @@
             if (entry) entry.dirty = true;
           }
           function structural(label, fn) {
-            var result = epoch.write("editing.run:" + label, fn);
+            var result = epoch2.write("editing.run:" + label, fn);
             afterStructural();
             return result;
           }
@@ -28227,7 +26947,7 @@
             });
           }
           function applyHostAttrs(host) {
-            epoch.write("editing.enter", function() {
+            epoch2.write("editing.enter", function() {
               var all = Object.assign({}, EDITABLE_ATTRS);
               all[markers.EDIT_HOST_ATTR] = "true";
               Object.keys(all).forEach(function(name) {
@@ -28241,7 +26961,7 @@
           function clearHostAttrs(open) {
             var host = open.host;
             if (!host) return;
-            epoch.write("editing.leave", function() {
+            epoch2.write("editing.leave", function() {
               Object.keys(open.hostAttrs).forEach(function(name) {
                 var was = open.hostAttrs[name];
                 if (was === null) host.removeAttribute(name);
@@ -28297,7 +27017,7 @@
             }
             pushHistory();
             if (intent === gestures.ENTER.LINE) {
-              epoch.write("editing.run:line", function() {
+              epoch2.write("editing.run:line", function() {
                 range.deleteContents();
                 var caret = writeLineBreak(range, unit);
                 win.getSelection().removeAllRanges();
@@ -28373,7 +27093,7 @@
             var last = unitOf(range.endContainer);
             if (!first || !last) return false;
             if (first === last) {
-              epoch.write("editing.run:delete", function() {
+              epoch2.write("editing.run:delete", function() {
                 range.deleteContents();
                 ensureLine(first);
               });
@@ -28383,7 +27103,7 @@
             var units = sessionUnits();
             var from = units.indexOf(first);
             var to = units.indexOf(last);
-            epoch.write("editing.run:delete_span", function() {
+            epoch2.write("editing.run:delete_span", function() {
               var head = doc.createRange();
               head.setStart(range.startContainer, range.startOffset);
               head.setEnd(first, first.childNodes.length);
@@ -28464,7 +27184,7 @@
               for (var l = 0; l < lines.length; l += 1) {
                 if (l > 0) {
                   var r = liveRange();
-                  epoch.write("editing.run:paste_line", function() {
+                  epoch2.write("editing.run:paste_line", function() {
                     var caret = writeLineBreak(r, unitOf(r.startContainer));
                     win.getSelection().removeAllRanges();
                     win.getSelection().addRange(caret);
@@ -28476,7 +27196,7 @@
                   i = paragraphs.length;
                   break;
                 }
-                epoch.write("editing.run:paste", insertTextAtCaret.bind(null, lines[l]));
+                epoch2.write("editing.run:paste", insertTextAtCaret.bind(null, lines[l]));
                 session.ceiling = ceilingState(captureRunFields());
               }
             }
@@ -28487,7 +27207,7 @@
             var range = liveRange();
             var unit = unitOf(range.startContainer);
             var block = blockOf(unit);
-            epoch.write("editing.run:paste_break", function() {
+            epoch2.write("editing.run:paste_break", function() {
               if (tagOf(unit) === "li") {
                 var li = extractTail(range, unit, "li");
                 unit.parentNode.insertBefore(li, unit.nextSibling);
@@ -28618,7 +27338,7 @@
             if (!tag || !typeState().enabled[tag]) return false;
             closeBurst();
             pushHistory(true);
-            epoch.write("editing.run:shortcut", function() {
+            epoch2.write("editing.run:shortcut", function() {
               head.deleteContents();
               ensureLine(unit);
             });
@@ -28718,7 +27438,7 @@
             h.burst = null;
           }
           function applyState(state) {
-            epoch.write("editing.run:history", function() {
+            epoch2.write("editing.run:history", function() {
               if (!session.container) {
                 if (tagOf(session.anchor) !== state.anchorTag) replaceBlock(session.anchor, blocks.swapTag(session.anchor, state.anchorTag));
                 session.anchor.innerHTML = state.anchorHtml;
@@ -28826,7 +27546,7 @@
                 pushHistory();
                 deleteSpan();
                 if (text) {
-                  epoch.write("editing.run:type_over", insertTextAtCaret.bind(null, text));
+                  epoch2.write("editing.run:type_over", insertTextAtCaret.bind(null, text));
                   afterStructural();
                 }
                 return;
@@ -28894,7 +27614,7 @@
             if (session.stray) {
               var stray = session.stray;
               session.stray = null;
-              epoch.write("editing.run:stray_composition", function() {
+              epoch2.write("editing.run:stray_composition", function() {
                 stray.el.innerHTML = stray.html;
               });
               commit({ reason: "composition outside" });
@@ -29011,9 +27731,9 @@
                 void err;
               }
             }
-            BOOT_COMMANDS.forEach(function(row) {
+            BOOT_COMMANDS.forEach(function(row2) {
               try {
-                doc.execCommand(row.command, false, row.value);
+                doc.execCommand(row2.command, false, row2.value);
               } catch (err) {
                 void err;
               }
@@ -29126,14 +27846,14 @@
             return page[name] === void 0 ? null : page[name];
           }
           function applyEditableAttrs(block) {
-            epoch.write("editing.enter", function() {
+            epoch2.write("editing.enter", function() {
               Object.keys(EDITABLE_ATTRS).forEach(function(name) {
                 block.setAttribute(name, EDITABLE_ATTRS[name]);
               });
             });
           }
           function clearEditableAttrs(block) {
-            epoch.write("editing.leave", function() {
+            epoch2.write("editing.leave", function() {
               Object.keys(EDITABLE_ATTRS).forEach(function(name) {
                 block.removeAttribute(name);
               });
@@ -29560,7 +28280,7 @@
             session = null;
             if (open.barRaf && win && win.cancelAnimationFrame) win.cancelAnimationFrame(open.barRaf);
             unbindBlock();
-            epoch.write("editing.run:tidy", function() {
+            epoch2.write("editing.run:tidy", function() {
               open.run.forEach(function(r) {
                 if (!r.el.parentNode) return;
                 if (LIST_TAGS[tagOf(r.el)]) {
@@ -29736,7 +28456,7 @@
               html: before.html,
               tag: el.tagName
             };
-            epoch.write("editing.delete", function() {
+            epoch2.write("editing.delete", function() {
               el.parentNode.removeChild(el);
             });
             record.validateItem(item);
@@ -29753,7 +28473,7 @@
             }
             bootCommands();
             var intent = gestures.formatIntentFor({ command, active: commandActive(command) });
-            var applied = epoch.write("editing.format:" + command, function() {
+            var applied = epoch2.write("editing.format:" + command, function() {
               if (intent === gestures.FORMAT.REMOVE) return removeFormat(command, value);
               return applyFormat(command, value);
             });
@@ -29831,8 +28551,8 @@
           function removeFormat(command, value) {
             var authors = resetStyled(command);
             var ran = doc.execCommand(command, false, value === void 0 ? null : value) === true;
-            var converted2 = convertResets(command, authors);
-            if (converted2) return true;
+            var converted7 = convertResets(command, authors);
+            if (converted7) return true;
             if (!commandActive(command)) return ran;
             return wrapSelection(command) || ran;
           }
@@ -29842,7 +28562,7 @@
             if (!tag) return 0;
             var styled = resetStyled(command);
             var property = command === COMMANDS.bold ? "font-weight" : "font-style";
-            var converted2 = 0;
+            var converted7 = 0;
             var last = null;
             for (var i = 0; i < styled.length; i += 1) {
               var el = styled[i];
@@ -29857,11 +28577,11 @@
               } else {
                 marker.appendChild(el);
               }
-              converted2 += 1;
+              converted7 += 1;
               last = marker;
             }
             if (last) selectContents(last);
-            return converted2;
+            return converted7;
           }
           function resetStyled(command) {
             var block = formatScope();
@@ -29998,8 +28718,8 @@
             function add(node) {
               if (node && node !== anchorEl && node.isConnected !== false && out.indexOf(node) === -1) out.push(node);
             }
-            itemForElement.forEach(function(row) {
-              if (row.id === id && row.el !== anchorEl) add(row.el);
+            itemForElement.forEach(function(row2) {
+              if (row2.id === id && row2.el !== anchorEl) add(row2.el);
             });
             var found = blocks.runElementsFor(item, doc, anchorEl);
             var leaves = blocks.leafWalk(doc.body, found.start);
@@ -30028,7 +28748,7 @@
             var ref = item[record.FIELD.REGION] && item[record.FIELD.REGION].ref;
             var oldTag = ref && ref.fingerprint && ref.fingerprint.tag ? String(ref.fingerprint.tag).toLowerCase() : tagOf(el);
             var beforeHtml = item[record.FIELD.BEFORE_HTML];
-            epoch.write("editing.undo_run", function() {
+            epoch2.write("editing.undo_run", function() {
               own.forEach(function(node) {
                 if (node !== el && node.parentNode) node.parentNode.removeChild(node);
               });
@@ -30053,7 +28773,7 @@
             if (!el) return { element: null, reason: "the region this record points at is not on the page" };
             var beforeHtml = item[record.FIELD.BEFORE_HTML];
             var beforeText = item[record.FIELD.BEFORE];
-            epoch.write("editing.undo", function() {
+            epoch2.write("editing.undo", function() {
               if (typeof beforeHtml === "string") el.innerHTML = beforeHtml;
               else el.textContent = String(beforeText || "");
             });
@@ -30070,7 +28790,7 @@
               node = doc.createElement(where.tag || "p");
               node.innerHTML = String(where.html || "");
             }
-            epoch.write("editing.undo_delete", function() {
+            epoch2.write("editing.undo_delete", function() {
               if (where.next && where.next.parentNode === where.parent) where.parent.insertBefore(node, where.next);
               else where.parent.appendChild(node);
             });
@@ -30081,15 +28801,15 @@
             itemForElement.push({ el, id });
           }
           function rememberAlso(el, id) {
-            itemForElement = itemForElement.filter(function(row) {
-              return row.el !== el;
+            itemForElement = itemForElement.filter(function(row2) {
+              return row2.el !== el;
             });
             itemForElement.push({ el, id });
           }
           function forget(id) {
-            itemForElement = itemForElement.filter(function(row) {
-              if (row.id === id) return false;
-              return !!row.el && row.el.isConnected !== false;
+            itemForElement = itemForElement.filter(function(row2) {
+              if (row2.id === id) return false;
+              return !!row2.el && row2.el.isConnected !== false;
             });
           }
           function itemFor(el) {
@@ -30536,12 +29256,12 @@
             menu.setAttribute("aria-label", "Block type");
             menu.hidden = true;
             var rows = gestures.BLOCK_TYPES.map(function(t) {
-              var row = doc.createElement("button");
-              row.type = "button";
-              row.className = "lahe-edit-bar__row";
-              row.setAttribute("role", "menuitem");
-              row.setAttribute("data-lahe-type", t.tag);
-              row.tabIndex = -1;
+              var row2 = doc.createElement("button");
+              row2.type = "button";
+              row2.className = "lahe-edit-bar__row";
+              row2.setAttribute("role", "menuitem");
+              row2.setAttribute("data-lahe-type", t.tag);
+              row2.tabIndex = -1;
               var name = doc.createElement("span");
               name.className = "lahe-edit-bar__rowname";
               name.textContent = t.label;
@@ -30550,17 +29270,17 @@
               chord.textContent = gestures.chordLabelFor(t.tag, platform());
               var md = doc.createElement("span");
               md.className = "lahe-edit-bar__rowmd";
-              md.textContent = t.markdown ? t.markdown.trim() : "";
-              row.appendChild(name);
-              row.appendChild(chord);
-              row.appendChild(md);
-              row.addEventListener("click", function() {
-                if (row.getAttribute("aria-disabled") === "true") return;
+              md.textContent = t.shortcuts.length > 0 ? t.shortcuts[0].trim() : "";
+              row2.appendChild(name);
+              row2.appendChild(chord);
+              row2.appendChild(md);
+              row2.addEventListener("click", function() {
+                if (row2.getAttribute("aria-disabled") === "true") return;
                 closeMenu(true);
                 typeActions[t.tag]();
               });
-              menu.appendChild(row);
-              return row;
+              menu.appendChild(row2);
+              return row2;
             });
             typeBtn.addEventListener("click", function() {
               if (menuOpen) closeMenu(true);
@@ -30655,11 +29375,11 @@
               barParts.typeBtn.textContent = t.label;
               barParts.typeBtn.disabled = t.other;
               barParts.typeBtn.setAttribute("aria-disabled", t.other ? "true" : "false");
-              barParts.rows.forEach(function(row) {
-                var tag = row.getAttribute("data-lahe-type");
+              barParts.rows.forEach(function(row2) {
+                var tag = row2.getAttribute("data-lahe-type");
                 var on = !!t.enabled[tag];
-                row.setAttribute("aria-disabled", on ? "false" : "true");
-                row.setAttribute("aria-checked", tag === t.tag ? "true" : "false");
+                row2.setAttribute("aria-disabled", on ? "false" : "true");
+                row2.setAttribute("aria-checked", tag === t.tag ? "true" : "false");
               });
               var ratio = session.ceiling ? session.ceiling.ratio : 0;
               if (session.ceilingRefused || ratio >= 1) {
@@ -31049,14 +29769,14 @@
               menuRect: menuOpen ? rectOf(barParts.menu) : null,
               typeRect: rectOf(barParts.typeBtn),
               focused: active === barParts.typeBtn ? "type" : barParts.rows.indexOf(active) !== -1 ? "row:" + barParts.rows[barParts.rows.indexOf(active)].getAttribute("data-lahe-type") : null,
-              rows: barParts.rows.map(function(row) {
+              rows: barParts.rows.map(function(row2) {
                 return {
-                  tag: row.getAttribute("data-lahe-type"),
-                  label: row.querySelector(".lahe-edit-bar__rowname").textContent,
-                  chord: row.querySelector(".lahe-edit-bar__rowkey").textContent,
-                  markdown: row.querySelector(".lahe-edit-bar__rowmd").textContent,
-                  disabled: row.getAttribute("aria-disabled") === "true",
-                  rect: menuOpen ? rectOf(row) : null
+                  tag: row2.getAttribute("data-lahe-type"),
+                  label: row2.querySelector(".lahe-edit-bar__rowname").textContent,
+                  chord: row2.querySelector(".lahe-edit-bar__rowkey").textContent,
+                  markdown: row2.querySelector(".lahe-edit-bar__rowmd").textContent,
+                  disabled: row2.getAttribute("aria-disabled") === "true",
+                  rect: menuOpen ? rectOf(row2) : null
                 };
               })
             };
@@ -31138,7 +29858,7 @@
               boxHeight: rect.height
             });
           }
-          function describe(event) {
+          function describe2(event) {
             return {
               type: event.type,
               // Which mouse button, and whether the press was on a scrollbar. Both
@@ -31171,7 +29891,7 @@
             lastPageCaret = range.cloneRange();
           }
           function chordFromRail(event) {
-            var got = gestures.gestureFor(describe(event));
+            var got = gestures.gestureFor(describe2(event));
             if (got.gesture !== gestures.GESTURE.EDIT_BLOCK && got.gesture !== gestures.GESTURE.ENTER_EDIT_STATE) return false;
             if (railTextFocus && railTextFocus()) return false;
             if (typeof event.preventDefault === "function") event.preventDefault();
@@ -31208,7 +29928,7 @@
             if (session) session.lastKey = { key: event.key, shiftKey: event.shiftKey === true };
             if (session && !event.metaKey && !event.ctrlKey && !event.altKey) askReveal();
             if (isRun() && onRunKeydown(event)) return;
-            var got = gestures.gestureFor(describe(event));
+            var got = gestures.gestureFor(describe2(event));
             if (got.gesture === gestures.GESTURE.EDIT_BLOCK) {
               if (got.preventDefault) event.preventDefault();
               leaveEditState();
@@ -31232,7 +29952,7 @@
               return;
             }
             if (onOwnFrame(event)) return;
-            var got = gestures.gestureFor(describe(event));
+            var got = gestures.gestureFor(describe2(event));
             if (got.gesture !== gestures.GESTURE.COMMIT_EDIT) return;
             commit({ reason: "pointer outside" });
           }
@@ -31294,7 +30014,7 @@
               }
               return;
             }
-            var got = gestures.gestureFor(describe(event));
+            var got = gestures.gestureFor(describe2(event));
             if (got.gesture !== gestures.GESTURE.COMMIT_EDIT) return;
             commit({ reason: "click outside" });
           }
@@ -32278,7 +30998,7 @@
             __require("./blocks.js")
           );
         }
-      })(typeof globalThis !== "undefined" ? globalThis : exports, function(epoch, uniqueness, normalize, record, failures, anchorEngine, protectModule, markers, pointingModule, highlightModule, blocks) {
+      })(typeof globalThis !== "undefined" ? globalThis : exports, function(epoch2, uniqueness, normalize, record, failures, anchorEngine, protectModule, markers, pointingModule, highlightModule, blocks) {
         "use strict";
         var REASON = {
           REMOUNT: "remount",
@@ -32437,8 +31157,8 @@
               "replay.schedule: reason must be one of " + REASONS.join(", ") + ", got " + String(reason)
             );
           }
-          if (epoch.isWriting()) {
-            epoch.shared.noteExternalMutation();
+          if (epoch2.isWriting()) {
+            epoch2.noteExternalMutation();
             return false;
           }
           if (reason === REASON.BOOT || reason === REASON.REMOUNT) noteSettling();
@@ -32462,15 +31182,12 @@
         };
         function scheduleOwedPass() {
           deferMicrotask(function() {
-            if (!epoch.shared || typeof epoch.shared.takePendingExternal !== "function") return;
-            if (epoch.shared.takePendingExternal()) schedule(REASON.MUTATION);
+            if (epoch2.takePendingExternal()) schedule(REASON.MUTATION);
           });
         }
-        if (epoch.shared && typeof epoch.shared.onIdle === "function") {
-          epoch.shared.onIdle(function() {
-            if (epoch.shared.takePendingExternal()) schedule(REASON.MUTATION);
-          });
-        }
+        epoch2.onIdle(function() {
+          if (epoch2.takePendingExternal()) schedule(REASON.MUTATION);
+        });
         function defer(fn) {
           var done = false;
           var frame = null;
@@ -32567,7 +31284,7 @@
           var hooks = ctx.hooks || {};
           var summary = {
             reason: reason || lastReason,
-            epoch: epoch.epoch(),
+            epoch: epoch2.epoch(),
             steps: [],
             wrote: 0,
             skipped: 0,
@@ -33229,7 +31946,7 @@
           var keepPlan = splitWritePlan(item, element);
           var wrote = !keepPlan || keepPlan.write !== null;
           if (keepPlan && wrote) counters.regionsWroteMissingPiece += 1;
-          epoch.write("replay.keep_mine", function() {
+          epoch2.write("replay.keep_mine", function() {
             if (wrote) writeRegion(element, item, keepPlan ? keepPlan.write : null, keepPlan ? keepPlan.markup : null);
           });
           if (wrote) counters.regionsWritten += 1;
@@ -33472,13 +32189,13 @@
           }
           return false;
         }
-        var ANCHOR_FAILURE_CODES = failures && failures.ANCHOR_FAILURE_CODES || [];
+        var ANCHOR_FAILURE_CODES2 = failures && failures.ANCHOR_FAILURE_CODES || [];
         function anchorFailureCode(verdict) {
           if (verdict && typeof verdict.failureCode === "string" && verdict.failureCode) return verdict.failureCode;
           return uniqueness.REASON_FAILURE_CODE[verdict && verdict.reason] || "ANCHOR_NO_TEXT_MATCH";
         }
         function clearAnchorBadges(ctx, itemId) {
-          ANCHOR_FAILURE_CODES.forEach(function(code) {
+          ANCHOR_FAILURE_CODES2.forEach(function(code) {
             callCard(ctx, "clearCardBadge", itemId, code);
           });
         }
@@ -33710,7 +32427,7 @@
             return flagConflict(ctx, item, id, element, domValue);
           }
           if (plan) counters.regionsWroteMissingPiece += 1;
-          epoch.write("replay", function() {
+          epoch2.write("replay", function() {
             writeRegion(element, item, plan ? plan.write : null, plan ? plan.markup : null);
           });
           counters.regionsWritten += 1;
@@ -33800,7 +32517,7 @@
             }
           }
           if (!writes2.length) return 0;
-          epoch.write("replay", function() {
+          epoch2.write("replay", function() {
             writes2.forEach(function(w) {
               if (w.value === null) w.node.removeAttribute(w.attr);
               else w.node.setAttribute(w.attr, w.value);
@@ -34012,8 +32729,8 @@
           var container = isContainerPlacement(item);
           var commit = commitFor(ctx, id);
           var element = ctx.element || commit && commit.element || null;
-          var taken = record.takenBackIds(itemsIn(ctx));
-          if (taken[id]) return { wrote: false, branch: null, lost: false, reason: "taken back", item, element: null };
+          var taken2 = record.takenBackIds(itemsIn(ctx));
+          if (taken2[id]) return { wrote: false, branch: null, lost: false, reason: "taken back", item, element: null };
           if (!element && protectedForItem(ctx, id)) return protectedResult(item, lastElement[id]);
           var verdict = null;
           if (!element) {
@@ -34081,7 +32798,7 @@
           }
           if (!container && !untouched) {
             if (branch !== BRANCH.ALREADY_APPLIED) {
-              epoch.write("replay", function() {
+              epoch2.write("replay", function() {
                 element = writeAnchor(element, view, tagAfter);
               });
               wrote = true;
@@ -34090,7 +32807,7 @@
                 callCard(ctx, "setCardNotice", id, EARLIER_REVISION_MESSAGE);
               }
             } else if (tagAfter && tagOfEl(element) !== tagAfter) {
-              epoch.write("replay", function() {
+              epoch2.write("replay", function() {
                 element = writeAnchor(element, view, tagAfter);
               });
               wrote = true;
@@ -34187,7 +32904,7 @@
           };
         }
         var LIST_TAGS = { ul: 1, ol: 1 };
-        function isListTag(tag) {
+        function isListTag2(tag) {
           return Object.prototype.hasOwnProperty.call(LIST_TAGS, tag);
         }
         var RUN_NOTE_WRONG_TAG = "REPLAY_RUN_WRONG_TAG";
@@ -34209,10 +32926,10 @@
           var pageTag = tagOfEl(el);
           var wrote = false;
           var from = el;
-          if (isListTag(pageTag) !== isListTag(block.tag)) force = true;
+          if (isListTag2(pageTag) !== isListTag2(block.tag)) force = true;
           if (pageTag !== block.tag) {
             var swapped = null;
-            epoch.write("replay", function() {
+            epoch2.write("replay", function() {
               swapped = blocks.swapTag(el, block.tag);
             });
             if (swapped) {
@@ -34230,7 +32947,7 @@
           if (force || missingEmphasis(block.html, el.innerHTML)) {
             var built = blocks.writeBlock(block.tag, block.html, doc);
             if (built) {
-              epoch.write("replay", function() {
+              epoch2.write("replay", function() {
                 moveChildren(built, el);
               });
               wrote = true;
@@ -34251,7 +32968,7 @@
             var gone = blocks.runElementsFor(item, doc, anchor);
             gone.blocks.forEach(function(b) {
               if (b.status !== "whole") return;
-              epoch.write("replay", function() {
+              epoch2.write("replay", function() {
                 b.elements[0].parentNode.removeChild(b.elements[0]);
               });
               out.removed += 1;
@@ -34323,7 +33040,7 @@
             var el = blocks.writeBlock(block.tag, block.html, doc);
             if (!el) return;
             var point = last ? blocks.insertPointAfter(last) : found.start;
-            epoch.write("replay", function() {
+            epoch2.write("replay", function() {
               insertAfterPoint(point, el);
             });
             index.inserted(el);
@@ -34396,7 +33113,7 @@
           if (!built.length || built.some(function(el) {
             return !el;
           })) return false;
-          epoch.write("replay", function() {
+          epoch2.write("replay", function() {
             var parent = leaf.parentNode;
             var next = leaf.nextSibling;
             parent.replaceChild(built[0], leaf);
@@ -34436,8 +33153,8 @@
           var tag = normalize.WRITABLE_BLOCK_TAGS.indexOf(pageTag) !== -1 ? pageTag : first.tag;
           var cleaned = normalize.cleanBlock(tag, normalize.cleanMarkup(leaf.innerHTML));
           var html = typeof cleaned.html === "string" ? cleaned.html : leafText(leaf).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-          var taken = Object.assign({}, first, { tag, html });
-          var next = list.slice(0, clash.index).concat([taken], list.slice(clash.index + clash.blocks));
+          var taken2 = Object.assign({}, first, { tag, html });
+          var next = list.slice(0, clash.index).concat([taken2], list.slice(clash.index + clash.blocks));
           var anchorHtml = typeof item[RUN_FIELD.ANCHOR_AFTER_HTML] === "string" ? item[RUN_FIELD.ANCHOR_AFTER_HTML] : "";
           var built = record.buildRunAfter(anchorHtml, next);
           var changes = {};
@@ -34497,10 +33214,10 @@
           line.textContent = runConflictLine(item, !!(conflicts[id] && conflicts[id].shown));
           section.appendChild(line);
           runList(item, RUN_FIELD.NEW_BLOCKS).forEach(function(b) {
-            var row = doc.createElement("div");
-            row.setAttribute("data-lahe-conflict-run-block", b.tag);
-            row.textContent = normalize.normalizeText(normalize.textOf(b.html));
-            section.appendChild(row);
+            var row2 = doc.createElement("div");
+            row2.setAttribute("data-lahe-conflict-run-block", b.tag);
+            row2.textContent = normalize.normalizeText(normalize.textOf(b.html));
+            section.appendChild(row2);
           });
           var take = node.querySelector('[data-lahe-conflict-choice="take_theirs"]');
           if (take) take.textContent = TAKE_THEIRS_RUN_LABEL;
@@ -34525,7 +33242,7 @@
             persistItem(ctx, item);
             var view = runAnchorView(item);
             var tagAfter = item[RUN_FIELD.ANCHOR_TAG_AFTER] || null;
-            epoch.write("replay.keep_mine", function() {
+            epoch2.write("replay.keep_mine", function() {
               element = writeAnchor(element, view, tagAfter);
             });
           } else {
@@ -35011,7 +33728,7 @@
         }
       })(typeof globalThis !== "undefined" ? globalThis : exports, function(ns, ownScript) {
         "use strict";
-        var VERSION = "0.4.0+1663d681fadf";
+        var VERSION = "0.4.0+d38fe29a13e9";
         var protocol = ns.protocol;
         var record = ns.record;
         var markers = ns.markers;
@@ -35239,8 +33956,8 @@
             store: scopedStore,
             reviewId,
             page,
-            onFailure: function(failure) {
-              rail.failures.add(failure);
+            onFailure: function(failure2) {
+              rail.failures.add(failure2);
             },
             // Leaving a comment box sends its draft past the 10 second floor.
             // `sync` is built further down; by the time a reviewer can leave a box
@@ -35380,8 +34097,8 @@
                 runRevertCheck();
               }, 0);
             },
-            onFailure: function(failure) {
-              rail.failures.add(failure);
+            onFailure: function(failure2) {
+              rail.failures.add(failure2);
             },
             // A standing failure whose condition ended: the chip goes (clear, not
             // dismiss, so the next real failure of that code still gets one).
@@ -35498,8 +34215,8 @@
             },
             // Same reason as the comment surface above: a full browser storage during
             // typing is said on the rail rather than thrown at the input handler.
-            onFailure: function(failure) {
-              rail.failures.add(failure);
+            onFailure: function(failure2) {
+              rail.failures.add(failure2);
             }
           });
           editing.bind({ page });
@@ -36069,8 +34786,8 @@
             onRemount: opts.onRemount || null
           });
           injector.start();
-          injector.watchForCspRefusal(function(failure) {
-            rail.failures.add(failure);
+          injector.watchForCspRefusal(function(failure2) {
+            rail.failures.add(failure2);
           }, { helperOrigin: config.helper });
           if (opts.startSync !== false) {
             var started = sync.start();
@@ -36096,8 +34813,8 @@
               var adopted = [];
               failures.tolerateStorageQuota(function() {
                 adopted = store.adopt(reviewId, mine);
-              }, function(failure) {
-                rail.failures.add(failure);
+              }, function(failure2) {
+                rail.failures.add(failure2);
               });
               counters.adopted += adopted.length;
               if (adopted.length) {
@@ -36497,18 +35214,1186 @@
     }
   });
 
+  // src/contract/markers.ts
+  var markers_exports = {};
+  __export(markers_exports, {
+    AUTHOR_REGION_ATTR: () => AUTHOR_REGION_ATTR,
+    EDIT_HOST_ATTR: () => EDIT_HOST_ATTR,
+    FILE_TITLE_ATTR: () => FILE_TITLE_ATTR,
+    FILE_TITLE_VALUE: () => FILE_TITLE_VALUE,
+    OVERLAY_ROOT_ID: () => OVERLAY_ROOT_ID,
+    PROTECTED_ATTR: () => PROTECTED_ATTR,
+    RENDER_NOTE_NAME: () => RENDER_NOTE_NAME,
+    ROLE_CHROME: () => ROLE_CHROME,
+    ROLE_WRAP: () => ROLE_WRAP,
+    STAMP_ATTR: () => STAMP_ATTR,
+    TOOL_ATTR: () => TOOL_ATTR,
+    TURBO_PERMANENT_ATTR: () => TURBO_PERMANENT_ATTR,
+    isFileTitle: () => isFileTitle,
+    isInsideOverlay: () => isInsideOverlay,
+    isToolAttrName: () => isToolAttrName,
+    isToolClassToken: () => isToolClassToken,
+    isToolNode: () => isToolNode,
+    markChrome: () => markChrome,
+    roleOf: () => roleOf
+  });
+  var TOOL_ATTR = "data-lahe";
+  var STAMP_ATTR = "data-lahe-id";
+  var PROTECTED_ATTR = "data-lahe-protected";
+  var FILE_TITLE_ATTR = "data-lahe-file-title";
+  var EDIT_HOST_ATTR = "data-lahe-edit-host";
+  var FILE_TITLE_VALUE = "file-name";
+  var ROLE_CHROME = "chrome";
+  var ROLE_WRAP = "wrap";
+  var OVERLAY_ROOT_ID = "lahe-surface-root";
+  var TURBO_PERMANENT_ATTR = "data-turbo-permanent";
+  var AUTHOR_REGION_ATTR = "data-review-region";
+  var RENDER_NOTE_NAME = "lahe-render-note";
+  var TOOL_ATTR_PREFIX = "data-lahe";
+  var TOOL_CLASS_PREFIX = "lahe-";
+  var ELEMENT_NODE = 1;
+  function isToolAttrName(name) {
+    return name.toLowerCase().startsWith(TOOL_ATTR_PREFIX);
+  }
+  function isToolClassToken(token) {
+    return token.startsWith(TOOL_CLASS_PREFIX);
+  }
+  function roleOf(node) {
+    const value = node?.getAttribute?.(TOOL_ATTR);
+    return value === ROLE_CHROME || value === ROLE_WRAP ? value : null;
+  }
+  function isToolNode(node) {
+    return roleOf(node) !== null;
+  }
+  function isInsideOverlay(node) {
+    let current = node;
+    while (current?.nodeType === ELEMENT_NODE) {
+      if (current.id === OVERLAY_ROOT_ID || isToolNode(current)) return true;
+      current = current.parentNode;
+    }
+    return false;
+  }
+  function isFileTitle(node) {
+    return node?.getAttribute?.(FILE_TITLE_ATTR) === FILE_TITLE_VALUE;
+  }
+  function markChrome(el) {
+    el.setAttribute(TOOL_ATTR, ROLE_CHROME);
+    return el;
+  }
+
+  // lahe-register:src/contract/markers.ts
+  var converted = Object.assign({}, markers_exports);
+  globalThis.LAHE = globalThis.LAHE || {};
+  globalThis.LAHE.markers = converted;
+
   // lahe-entry.js
-  var import_markers = __toESM(require_markers());
   var import_normalize = __toESM(require_normalize());
-  var import_failures = __toESM(require_failures());
-  var import_style_rules = __toESM(require_style_rules());
+
+  // src/contract/failures.ts
+  var failures_exports = {};
+  __export(failures_exports, {
+    ALIASES: () => ALIASES,
+    ANCHOR_FAILURE_CODES: () => ANCHOR_FAILURE_CODES,
+    CODES: () => CODES,
+    CODE_NAMES: () => CODE_NAMES,
+    SEVERITY: () => SEVERITY,
+    SURFACE: () => SURFACE,
+    canonical: () => canonical,
+    chipAction: () => chipAction,
+    describe: () => describe,
+    failure: () => failure,
+    isCopyable: () => isCopyable,
+    isFailureName: () => isFailureName,
+    isStorageQuota: () => isStorageQuota,
+    tolerateStorageQuota: () => tolerateStorageQuota
+  });
+  var SEVERITY = { BLOCKING: "blocking", WARNING: "warning", INFO: "info" };
+  var SURFACE = { FAILURES_LIST: "failures_list", CARD: "card", CLI: "cli" };
+  var CODE_NAMES = [
+    "HELPER_UNREACHABLE",
+    "CSP_REFUSED",
+    "SYNC_UNAUTHORIZED",
+    "SYNC_ORIGIN_NOT_ALLOWED",
+    "STORAGE_QUOTA",
+    "SECOND_WINDOW_REFUSED",
+    "ANCHOR_NO_TEXT_MATCH",
+    "ANCHOR_AMBIGUOUS",
+    "ANCHOR_STRUCTURE_ONLY",
+    "ANCHOR_LOST",
+    "REPLAY_NEITHER_MATCHES",
+    "RUN_BLOCK_REFUSED",
+    "RUN_OVER_CEILING",
+    "RUN_PLACEMENT_REFUSED",
+    "RUN_TAKEBACK_CARRIES_RUN",
+    "REPLAY_RUN_WRONG_TAG",
+    "REPLAY_RUN_PLACED_ELSEWHERE",
+    "HELPER_CONTRACT_OLDER",
+    "RUN_EVENT_REFUSED",
+    "SUGGESTION_NOT_FOUND",
+    "CHOICE_REFUSED",
+    "CHOICE_GROUP_INERT",
+    "CHOICE_GROUP_GONE",
+    "CHOICE_GROUP_TWICE",
+    "REPLY_LINE_MALFORMED",
+    "PROTO_BAD_REQUEST",
+    "PROTO_BAD_HOST",
+    "PROTO_UNAUTHORIZED",
+    "PROTO_FORBIDDEN_ORIGIN",
+    "PROTO_UNKNOWN_REVIEW",
+    "PROTO_UNSUPPORTED_MEDIA_TYPE",
+    "PROTO_MISSING_CUSTOM_HEADER",
+    "PROTO_STALE_REV",
+    "PROTO_UNKNOWN_ITEM",
+    "PROTO_REVIEW_RETIRED",
+    "PROTO_NOT_OWNER",
+    "PROTO_SECOND_WINDOW",
+    "PROTO_SECOND_INSTANCE",
+    "PROTO_CROSS_SITE",
+    "PROTO_NOT_OPENABLE",
+    "PROTO_REQUEST_PENDING",
+    "PROTO_QUEUE_FULL",
+    "PROTO_NO_AGENT",
+    "PROTO_CONFIRM_NEEDED",
+    "PROTO_NO_LAUNCH",
+    "PROTO_CATALOG_UNREADABLE",
+    "CLI_PATH_REFUSED",
+    "COPY_FAILED",
+    "EXPORT_FAILED"
+  ];
+  var ALIASES = {
+    SYNC_SERVICE_DOWN: "HELPER_UNREACHABLE",
+    CLI_NO_SERVICE: "HELPER_UNREACHABLE",
+    SYNC_POLICY_REFUSED: "CSP_REFUSED",
+    SECOND_TAB_REFUSED: "SECOND_WINDOW_REFUSED",
+    ANCHOR_SUBJECT_GONE: "ANCHOR_LOST",
+    ANCHOR_NOT_FOUND: "ANCHOR_LOST"
+  };
+  var NO_OFFER = { kind: "none" };
+  var COPY_OFFER = { kind: "copy" };
+  var TAKEOVER_OFFER = { kind: "action", label: "Review here", action: "takeover" };
+  function row(severity, persistent, surface, message, remedy, options = {}) {
+    return {
+      severity,
+      persistent,
+      surface,
+      message,
+      remedy,
+      standing: options.standing === true,
+      offer: options.offer ?? NO_OFFER
+    };
+  }
+  var CODES = {
+    HELPER_UNREACHABLE: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "The local helper is not reachable. Your feedback is safe in this browser and goes to the helper when it comes back.",
+      "Start the helper, or use Copy or Export to get everything out now.",
+      { standing: true }
+    ),
+    CSP_REFUSED: row(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "This page's content security policy refused the connection to the local helper. This is not the helper being down.",
+      "Add the helper's origin to connect-src in this app's development CSP.",
+      { offer: COPY_OFFER }
+    ),
+    SYNC_UNAUTHORIZED: row(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "The local helper refused this page's token.",
+      "Run the add step again for this review, then reload the page.",
+      { offer: COPY_OFFER }
+    ),
+    SYNC_ORIGIN_NOT_ALLOWED: row(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "This page's address is not registered for this review. The helper is fine; it refuses addresses it does not know.",
+      "Have your agent re-run the add step with this page's address, then reload.",
+      { offer: COPY_OFFER }
+    ),
+    STORAGE_QUOTA: row(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "Browser storage is full, so the last change could not be saved locally.",
+      "Export what you have, then clear storage for this origin."
+    ),
+    SECOND_WINDOW_REFUSED: row(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "Another window is already reviewing this page. This one is read-only so the two cannot overwrite each other.",
+      "Use Review here instead to move the review to this window.",
+      { standing: true, offer: TAKEOVER_OFFER }
+    ),
+    ANCHOR_NO_TEXT_MATCH: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "This feedback could not be safely matched to this version of the page. Nothing was moved or changed, and your feedback is kept.",
+      null
+    ),
+    ANCHOR_AMBIGUOUS: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "More than one place on this page matches this feedback, so nothing was moved or changed. Your feedback is kept.",
+      null
+    ),
+    ANCHOR_STRUCTURE_ONLY: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "A structurally similar place is still present, but its text does not match this feedback. Nothing was moved or changed, and your feedback is kept.",
+      null
+    ),
+    ANCHOR_LOST: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "This feedback could not be safely matched to this version of the page. Nothing was moved or changed, and your feedback is kept.",
+      null
+    ),
+    REPLAY_NEITHER_MATCHES: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "This region is neither what you edited nor what you changed it to, so nothing was written. Your text is kept.",
+      "Look at the region and reapply your change if it still makes sense."
+    ),
+    RUN_BLOCK_REFUSED: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "A new block in this edit is not a paragraph, heading or list the tool can store, or holds markup outside bold and italic.",
+      null
+    ),
+    RUN_OVER_CEILING: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This edit is larger than the helper stores in one record.",
+      null
+    ),
+    RUN_PLACEMENT_REFUSED: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This edit's placement is not after_anchor or start_of_container.",
+      null
+    ),
+    RUN_TAKEBACK_CARRIES_RUN: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "A take-back names blocks to remove and never carries new blocks.",
+      null
+    ),
+    REPLAY_RUN_WRONG_TAG: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "The agent placed '{first words}' as a {type}. You wrote a {type}, so Lahe sent it back.",
+      null
+    ),
+    REPLAY_RUN_PLACED_ELSEWHERE: row(
+      SEVERITY.INFO,
+      true,
+      SURFACE.CARD,
+      "'{first words}' is already further down the page, so Lahe did not add it again.",
+      null
+    ),
+    HELPER_CONTRACT_OLDER: row(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "The local helper is an older version than this page, so nothing you write here is sent to it. Your work is safe in this browser.",
+      "Ask your agent to restart the helper (lahe session list restarts an old one), then reload this page."
+    ),
+    RUN_EVENT_REFUSED: row(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.CARD,
+      "The helper refused this edit, so the agent has not seen it. Your words are still on this page.",
+      null
+    ),
+    SUGGESTION_NOT_FOUND: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "A proofreading suggestion's from text is not in its block exactly once, so it cannot be applied.",
+      null
+    ),
+    CHOICE_REFUSED: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "A choice record names its group and answer with short ids and carries nothing else, so this one was not stored.",
+      null
+    ),
+    CHOICE_GROUP_INERT: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "Some choices on this page cannot be pressed, so they show as plain text.",
+      "Ask your agent to fix them. Each one and the reason:",
+      { standing: true, offer: COPY_OFFER }
+    ),
+    CHOICE_GROUP_GONE: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "This choice is no longer on the page. Your answer is kept and is still with the agent.",
+      null
+    ),
+    CHOICE_GROUP_TWICE: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "Two choices on this page now share this one's name, so Lahe marked neither. Your answer is kept.",
+      null
+    ),
+    REPLY_LINE_MALFORMED: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "An agent wrote a reply line this tool could not read, so that line was skipped. Everything else was folded in.",
+      "The chip names the file and the line number; the agent that wrote it can fix and append again.",
+      { offer: COPY_OFFER }
+    ),
+    PROTO_BAD_REQUEST: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "The request was malformed.",
+      null
+    ),
+    PROTO_BAD_HOST: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "The Host header does not name the helper, so the request was refused.",
+      null
+    ),
+    PROTO_UNAUTHORIZED: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "Missing or invalid per-review token.",
+      null
+    ),
+    PROTO_FORBIDDEN_ORIGIN: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This origin is not registered for this review.",
+      null
+    ),
+    PROTO_UNKNOWN_REVIEW: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "No such review.",
+      null
+    ),
+    PROTO_UNSUPPORTED_MEDIA_TYPE: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "Mutating routes require a JSON content type.",
+      null
+    ),
+    PROTO_MISSING_CUSTOM_HEADER: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "Every route but health requires the client header, so a simple cross-origin request cannot reach a handler.",
+      null
+    ),
+    PROTO_STALE_REV: row(
+      SEVERITY.WARNING,
+      false,
+      SURFACE.CLI,
+      "This reply names a revision that has since been superseded. The newer revision stays outstanding.",
+      null
+    ),
+    PROTO_UNKNOWN_ITEM: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "No such item in this review.",
+      null
+    ),
+    PROTO_REVIEW_RETIRED: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This review was retired, so it takes no more comments.",
+      "Reload the page: it now answers with the file's current review, if it has one."
+    ),
+    PROTO_NOT_OWNER: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This review belongs to another agent session, so this session cannot retire it.",
+      "Ask your human. A handoff is lahe session takeover, which they ask for."
+    ),
+    PROTO_SECOND_WINDOW: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "Another window already holds this review.",
+      "Take over from the window you are in."
+    ),
+    PROTO_SECOND_INSTANCE: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "Another helper is already running for this data directory.",
+      "Use the running one, or stop it first."
+    ),
+    PROTO_CROSS_SITE: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This request did not come from the Library page itself, so it was refused.",
+      "Use the Library page at the helper's own address, /catalog."
+    ),
+    PROTO_NOT_OPENABLE: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This document cannot be opened from the Library: its files are missing, or it has no recorded server.",
+      "Ask your agent to serve it again with lahe review."
+    ),
+    PROTO_REQUEST_PENDING: row(
+      SEVERITY.INFO,
+      false,
+      SURFACE.CLI,
+      "This document already has a request waiting for an agent.",
+      "Wait for the agent to answer. Its answer shows on the row."
+    ),
+    PROTO_QUEUE_FULL: row(
+      SEVERITY.WARNING,
+      false,
+      SURFACE.CLI,
+      "Too many requests are already waiting for an agent.",
+      "Wait for the agent to answer some of them, then try again."
+    ),
+    PROTO_NO_AGENT: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "No agent is attached to the Library, or the attached agent has stopped watching.",
+      "Ask an agent to run lahe library with its own session, or copy the hand-off message into a new agent."
+    ),
+    PROTO_CONFIRM_NEEDED: row(
+      SEVERITY.INFO,
+      false,
+      SURFACE.CLI,
+      "Another agent is watching this document's session, so moving it needs your say-so.",
+      "Choose Move the session to confirm, or open it just to read."
+    ),
+    PROTO_NO_LAUNCH: row(
+      SEVERITY.INFO,
+      false,
+      SURFACE.CLI,
+      "A new agent can only be launched on a document with a session to take over and a file to serve. This one is from before sessions, or its worktree is gone and no main-repo copy passes the checks.",
+      "Choose Pick this up instead. The attached agent serves it in its own session."
+    ),
+    PROTO_CATALOG_UNREADABLE: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "The Library's saved stars file cannot be read, so stars cannot change. Lahe leaves the file as it is.",
+      "Fix or move aside catalog.json in the Lahe state folder, then try again."
+    ),
+    CLI_PATH_REFUSED: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "A write was refused because the destination resolved outside the review folder or is a symlink.",
+      null
+    ),
+    COPY_FAILED: row(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "The review was not copied to the clipboard, so there is nothing to paste.",
+      "Use Export to save it as a file instead."
+    ),
+    EXPORT_FAILED: row(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "The review could not be saved as a file.",
+      "Use Copy to put it on the clipboard instead."
+    )
+  };
+  var ANCHOR_FAILURE_CODES = [
+    "ANCHOR_NO_TEXT_MATCH",
+    "ANCHOR_AMBIGUOUS",
+    "ANCHOR_STRUCTURE_ONLY",
+    "ANCHOR_LOST",
+    "CHOICE_GROUP_GONE",
+    "CHOICE_GROUP_TWICE"
+  ];
+  function isAlias(name) {
+    return Object.hasOwn(ALIASES, name);
+  }
+  function unknownName(name) {
+    return new Error("unknown failure code: " + String(name) + ". Add it to src/contract/failures.ts");
+  }
+  function isFailureName(value) {
+    return typeof value === "string" && (Object.hasOwn(CODES, value) || Object.hasOwn(ALIASES, value));
+  }
+  function canonical(name) {
+    return isAlias(name) ? ALIASES[name] : name;
+  }
+  function describe(name) {
+    const code = canonical(name);
+    if (!Object.hasOwn(CODES, code)) throw unknownName(name);
+    return CODES[code];
+  }
+  function failure(name, detail) {
+    const definition = describe(name);
+    return {
+      code: name,
+      canonical_code: canonical(name),
+      severity: definition.severity,
+      persistent: definition.persistent,
+      standing: definition.standing,
+      surface: definition.surface,
+      message: definition.message,
+      remedy: definition.remedy,
+      detail: detail ?? null,
+      at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  }
+  function chipAction(code) {
+    if (!isFailureName(code)) return null;
+    const offer = CODES[canonical(code)].offer;
+    return offer.kind === "action" ? { label: offer.label, action: offer.action } : null;
+  }
+  function isCopyable(code) {
+    return isFailureName(code) && CODES[canonical(code)].offer.kind === "copy";
+  }
+  function isStorageQuota(err) {
+    if (typeof err !== "object" || err === null || !("failure" in err)) return false;
+    const inner = err.failure;
+    return typeof inner === "object" && inner !== null && "code" in inner && inner.code === "STORAGE_QUOTA";
+  }
+  function tolerateStorageQuota(run, report) {
+    try {
+      run();
+      return null;
+    } catch (err) {
+      if (!isStorageQuota(err)) throw err;
+      if (typeof report === "function") {
+        try {
+          report(err.failure);
+        } catch (reportErr) {
+          if (!isStorageQuota(reportErr)) throw reportErr;
+        }
+      }
+      return err.failure;
+    }
+  }
+
+  // lahe-register:src/contract/failures.ts
+  var converted2 = Object.assign({}, failures_exports);
+  globalThis.LAHE = globalThis.LAHE || {};
+  globalThis.LAHE.failures = converted2;
+
+  // src/contract/style-rules.ts
+  var style_rules_exports = {};
+  __export(style_rules_exports, {
+    DESCRIPTION_MAX: () => DESCRIPTION_MAX,
+    ID_PATTERN: () => ID_PATTERN,
+    NAME_MAX: () => NAME_MAX,
+    PALETTE_MAX: () => PALETTE_MAX,
+    RESERVED_ID: () => RESERVED_ID,
+    RESERVED_NAME: () => RESERVED_NAME,
+    isHexColour: () => isHexColour,
+    isStyleId: () => isStyleId,
+    isStyleName: () => isStyleName
+  });
+  var ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/;
+  var RESERVED_ID = "international";
+  var RESERVED_NAME = "International Style";
+  var NAME_MAX = 40;
+  var DESCRIPTION_MAX = 300;
+  var PALETTE_MAX = 6;
+  var HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+  var NAME_CHARS = /^[\p{L}\p{N} '&-]+$/u;
+  function isStyleId(value) {
+    return typeof value === "string" && ID_PATTERN.test(value);
+  }
+  function isHexColour(value) {
+    return typeof value === "string" && HEX.test(value);
+  }
+  function isStyleName(value) {
+    return typeof value === "string" && value.length > 0 && value.length <= NAME_MAX && value === value.trim() && NAME_CHARS.test(value);
+  }
+
+  // lahe-register:src/contract/style-rules.ts
+  var converted3 = Object.assign({}, style_rules_exports);
+  globalThis.LAHE = globalThis.LAHE || {};
+  globalThis.LAHE.styleRules = converted3;
+
+  // lahe-entry.js
   var import_record = __toESM(require_record());
   var import_lifecycle = __toESM(require_lifecycle());
   var import_merge = __toESM(require_merge());
   var import_regions = __toESM(require_regions());
   var import_uniqueness = __toESM(require_uniqueness());
-  var import_gestures = __toESM(require_gestures());
-  var import_epoch = __toESM(require_epoch());
+
+  // src/domain/gestures.ts
+  var gestures_exports = {};
+  __export(gestures_exports, {
+    BLOCK_TYPES: () => BLOCK_TYPES,
+    BREAK: () => BREAK,
+    EDGE: () => EDGE,
+    ENTER: () => ENTER,
+    FORMAT: () => FORMAT,
+    FORMAT_COMMANDS: () => FORMAT_COMMANDS,
+    GESTURE: () => GESTURE,
+    HISTORY: () => HISTORY,
+    OTHER_BLOCK_LABEL: () => OTHER_BLOCK_LABEL,
+    SEND_KEY: () => SEND_KEY,
+    TABLE: () => TABLE,
+    blockTypeChord: () => blockTypeChord,
+    blockTypeLabel: () => blockTypeLabel,
+    breakIntentFor: () => breakIntentFor,
+    chordLabelFor: () => chordLabelFor,
+    edgeDeleteFor: () => edgeDeleteFor,
+    enterIntentFor: () => enterIntentFor,
+    formatIntentFor: () => formatIntentFor,
+    gestureFor: () => gestureFor,
+    hintFor: () => hintFor,
+    hintLines: () => hintLines,
+    historyIntentFor: () => historyIntentFor,
+    isScrollbarPress: () => isScrollbarPress,
+    isSendEvent: () => isSendEvent,
+    isSendPress: () => isSendPress,
+    markdownShortcutFor: () => markdownShortcutFor,
+    normalizeSendKey: () => normalizeSendKey,
+    panelLines: () => panelLines,
+    sendKeyLabel: () => sendKeyLabel
+  });
+  var GESTURE = {
+    COMMENT_ON_SELECTION: "comment_on_selection",
+    ENTER_ELEMENT_PICK: "enter_element_pick",
+    PICK_ELEMENT: "pick_element",
+    EDIT_BLOCK: "edit_block",
+    ENTER_EDIT_STATE: "enter_edit_state",
+    CLOSE_MENU: "close_menu",
+    MARK_READY: "mark_ready",
+    COMMIT_EDIT: "commit_edit",
+    CANCEL: "cancel",
+    TOGGLE_PRESENT: "toggle_present",
+    TOGGLE_RAIL: "toggle_rail",
+    PAGE_DEFAULT: "page_default",
+    PRESS_CHOICE: "press_choice",
+    NONE: "none"
+  };
+  var SEND_KEY = { ENTER: "enter", MOD_ENTER: "mod_enter" };
+  var SEND_KEY_WORDS = {
+    enter: {
+      keys: "Enter",
+      hint: "Enter when done with this comment. Shift-Enter for a new line.",
+      panelHint: "Send your comment. Shift-Enter for a new line."
+    },
+    mod_enter: {
+      keys: "Cmd-Enter",
+      hint: "Cmd-Enter when done with this comment.",
+      panelHint: "Send your comment. Enter for a new line."
+    }
+  };
+  var TABLE = [
+    {
+      gesture: GESTURE.COMMENT_ON_SELECTION,
+      keys: "Cmd-Shift-C",
+      when: "text selected",
+      hint: "Select text and press Cmd-Shift-C to comment on it."
+    },
+    {
+      gesture: GESTURE.ENTER_ELEMENT_PICK,
+      keys: "Cmd-Shift-C",
+      when: "nothing selected",
+      hint: "Press Cmd-Shift-C with nothing selected, then click any element to comment on the whole thing.",
+      panelKeys: "Cmd-Shift-C (no selection)",
+      panelHint: "As you hover over elements, they will be outlined. Click an element to comment on the element. Useful for images and other hard to highlight elements."
+    },
+    {
+      gesture: GESTURE.PICK_ELEMENT,
+      keys: "click",
+      when: "element-pick mode is open",
+      hint: "Click the outlined element to comment on it. Esc cancels.",
+      inPanel: false
+    },
+    {
+      gesture: GESTURE.EDIT_BLOCK,
+      keys: "Cmd-Shift-E",
+      when: "the cursor or a selection is in a block",
+      hint: "Press Cmd-Shift-E to edit the block you are in. Just that block.",
+      panelHint: "Select text and press Cmd-Shift-E to edit it by hand."
+    },
+    {
+      gesture: GESTURE.ENTER_EDIT_STATE,
+      keys: "Cmd-Shift-E",
+      when: "the cursor is in no block",
+      hint: "Click + Write here to add text. Esc to finish.",
+      panelKeys: "Cmd-Shift-E (no selection)",
+      panelHint: "As you hover, editable areas will be outlined. Click an area to hand edit it. Esc to finish."
+    },
+    {
+      gesture: GESTURE.MARK_READY,
+      keys: SEND_KEY_WORDS.enter.keys,
+      when: "a comment box is focused",
+      hint: SEND_KEY_WORDS.enter.hint,
+      panelHint: SEND_KEY_WORDS.enter.panelHint
+    },
+    {
+      gesture: GESTURE.COMMIT_EDIT,
+      keys: "Cmd-Enter, Esc, or a click outside",
+      when: "a block is in edit state",
+      hint: "Cmd-Enter, Esc, or click outside to finish the edit and give the page back.",
+      panelKeys: "Cmd-Enter or Esc",
+      panelHint: "Finish your edit."
+    },
+    {
+      gesture: GESTURE.CANCEL,
+      keys: "Esc",
+      when: "element-pick mode is open, or a comment box is focused",
+      hint: "Esc closes the comment box or cancels picking. Your draft is kept.",
+      panelHint: "Esc closes the comment box or cancels picking. Half-written drafts are kept in the chat bar."
+    },
+    {
+      gesture: GESTURE.TOGGLE_PRESENT,
+      keys: "Cmd-Shift-X",
+      when: "always, including while the tool is hidden",
+      hint: "Press Cmd-Shift-X to hide the review while you present, and again to bring it back.",
+      panelHint: "Presentation mode. Toggle hiding the chat bar and the pill."
+    },
+    {
+      gesture: GESTURE.TOGGLE_RAIL,
+      keys: "Cmd-Shift-1",
+      when: "always, except while the review is hidden for presenting",
+      hint: "Press Cmd-Shift-1 to open or close the review panel.",
+      panelHint: "Toggle the chat bar."
+    },
+    {
+      gesture: GESTURE.PAGE_DEFAULT,
+      keys: "everything else",
+      when: "always",
+      hint: "Everything else is the page. Links, buttons, and forms work exactly as they do without this.",
+      panelKeys: "page hotkeys",
+      panelHint: "Other page hotkeys should work as normal."
+    }
+  ];
+  function normalizeSendKey(value) {
+    return value === SEND_KEY.MOD_ENTER ? SEND_KEY.MOD_ENTER : SEND_KEY.ENTER;
+  }
+  function sendKeyLabel(sendKey) {
+    return SEND_KEY_WORDS[normalizeSendKey(sendKey)].keys;
+  }
+  function isPrimaryModifier(modifiers) {
+    return modifiers.metaKey === true || modifiers.ctrlKey === true;
+  }
+  function isKey(key, letter) {
+    return key !== void 0 && key.toLowerCase() === letter;
+  }
+  function isDigitOne(event) {
+    return event.code === "Digit1" || event.key === "1" || event.key === "!";
+  }
+  function isSend(facts) {
+    if (facts.key !== "Enter" || facts.composing) return false;
+    if (facts.primary) return true;
+    if (normalizeSendKey(facts.sendKey) !== SEND_KEY.ENTER) return false;
+    return !facts.shift && !facts.alt;
+  }
+  function isSendPress(input) {
+    return isSend({
+      key: input.key,
+      composing: input.isComposing === true,
+      primary: isPrimaryModifier(input),
+      shift: input.shiftKey === true,
+      alt: input.altKey === true,
+      sendKey: input.sendKey
+    });
+  }
+  var IME_KEY_CODE = 229;
+  function isSendEvent(event, sendKey) {
+    return isSend({
+      key: event.key,
+      composing: event.isComposing === true || event.keyCode === IME_KEY_CODE,
+      primary: isPrimaryModifier(event),
+      shift: event.shiftKey === true,
+      alt: event.altKey === true,
+      sendKey
+    });
+  }
+  function taken(gesture, reason) {
+    return { gesture, passThrough: false, preventDefault: true, reason };
+  }
+  function handedToPage(gesture, reason) {
+    return { gesture, passThrough: true, preventDefault: false, reason };
+  }
+  function neither(gesture, reason) {
+    return { gesture, passThrough: false, preventDefault: false, reason };
+  }
+  function keydownDecision(e) {
+    const chord = isPrimaryModifier(e) && e.shiftKey === true;
+    if (chord && isKey(e.key, "x")) {
+      return taken(GESTURE.TOGGLE_PRESENT, "Cmd-Shift-X hides the review for presenting, and shows it again");
+    }
+    if (chord && isDigitOne(e)) {
+      return taken(GESTURE.TOGGLE_RAIL, "Cmd-Shift-1 opens the review panel, or closes it");
+    }
+    if (e.key === "Escape") {
+      if (e.blockMenuOpen === true) {
+        return taken(GESTURE.CLOSE_MENU, "Esc closes the block-type menu and leaves the edit open");
+      }
+      if (e.editing === true || e.editState === true) {
+        return taken(GESTURE.COMMIT_EDIT, "Esc commits the open edit and gives the block back to the page");
+      }
+      if (e.pickMode === true || e.inCommentBox === true) {
+        return taken(GESTURE.CANCEL, "Esc closes the box or cancels picking; the draft is kept either way");
+      }
+      return handedToPage(GESTURE.NONE, "nothing of the library's is open, so Esc is the page's");
+    }
+    if (e.key === "Enter" && e.inCommentBox === true) {
+      if (isSendPress(e)) {
+        return taken(GESTURE.MARK_READY, sendKeyLabel(e.sendKey) + " marks this comment ready for the agent");
+      }
+      return handedToPage(GESTURE.NONE, "a new line in the comment box, or an input method finishing a character");
+    }
+    if (e.key === "Enter" && isPrimaryModifier(e)) {
+      if (e.editing === true) {
+        return taken(GESTURE.COMMIT_EDIT, "Cmd-Enter commits the open edit and gives the block back to the page");
+      }
+      return handedToPage(GESTURE.NONE, "Cmd-Enter outside a comment box is the page's");
+    }
+    if (chord && isKey(e.key, "c")) {
+      if (e.hasSelection === true) {
+        return taken(GESTURE.COMMENT_ON_SELECTION, "Cmd-Shift-C with a selection comments on that passage");
+      }
+      return taken(GESTURE.ENTER_ELEMENT_PICK, "Cmd-Shift-C with nothing selected picks an element");
+    }
+    if (chord && isKey(e.key, "e")) {
+      if (e.inBlock === false) {
+        return taken(GESTURE.ENTER_EDIT_STATE, "Cmd-Shift-E with the cursor in no block opens edit state with no block open");
+      }
+      return taken(GESTURE.EDIT_BLOCK, "Cmd-Shift-E edits the block under the cursor, and nothing else");
+    }
+    return handedToPage(GESTURE.NONE, "not a library gesture; the page and the edited block keep it");
+  }
+  function pointerDecision(e) {
+    if (e.editing !== true || e.inEditedBlock === true) {
+      return handedToPage(GESTURE.PAGE_DEFAULT, "a pointer going down with no edit open is the page's");
+    }
+    if (e.onScrollbar === true) {
+      return handedToPage(GESTURE.PAGE_DEFAULT, "the press was on a scrollbar, which is scrolling rather than leaving the block");
+    }
+    if (e.button !== void 0 && e.button !== null && e.button !== 0) {
+      return handedToPage(GESTURE.PAGE_DEFAULT, "only a primary-button press is the reviewer leaving the block");
+    }
+    return handedToPage(GESTURE.COMMIT_EDIT, "the pointer went down outside the edited block, so the edit commits");
+  }
+  function choiceRefusal(e) {
+    if (e.inArmedChoice !== true) return "not a button in an armed choice group";
+    if (e.documentPage !== true) return "a choice group arms only on a page the helper serves as a document";
+    if (e.pickMode === true) return "element-pick mode is open, so the click picks";
+    if (e.editing === true || e.editState === true) return "an edit is open, so the page is not in browse";
+    if (e.presenting === true) return "the review is hidden for presenting";
+    if (e.mayWrite !== true) return "this window is read-only for the review";
+    return null;
+  }
+  function clickDecision(e) {
+    if (e.inOverlay === true) {
+      return neither(GESTURE.NONE, "inside the library's own overlay; the rail handles its own events");
+    }
+    if (e.pickMode === true) {
+      return taken(GESTURE.PICK_ELEMENT, "element-pick mode is open, so this click comments on the element");
+    }
+    if (e.editing === true && e.inEditedBlock !== true) {
+      return handedToPage(GESTURE.COMMIT_EDIT, "a click outside the edited block commits it, and the page still gets the click");
+    }
+    const refusal = choiceRefusal(e);
+    if (refusal === null) {
+      return taken(GESTURE.PRESS_CHOICE, "a click on an armed choice group's button is the reviewer's answer");
+    }
+    if (e.inArmedChoice === true) return handedToPage(GESTURE.PAGE_DEFAULT, refusal);
+    return handedToPage(GESTURE.PAGE_DEFAULT, "browse is the page untouched");
+  }
+  function gestureFor(input) {
+    switch (input.type) {
+      case "keydown":
+        return keydownDecision(input);
+      case "pointerdown":
+      case "mousedown":
+        return pointerDecision(input);
+      case "click":
+        return clickDecision(input);
+    }
+  }
+  function rowFor(row2, sendKey) {
+    if (row2.gesture !== GESTURE.MARK_READY) return row2;
+    const words = SEND_KEY_WORDS[normalizeSendKey(sendKey)];
+    return { ...row2, keys: words.keys, hint: words.hint, panelHint: words.panelHint };
+  }
+  function hintFor(gesture, sendKey) {
+    const row2 = TABLE.find((one) => one.gesture === gesture);
+    return row2 === void 0 ? null : rowFor(row2, sendKey).hint;
+  }
+  function hintLines(sendKey) {
+    return TABLE.map((row2) => {
+      const got = rowFor(row2, sendKey);
+      return { keys: got.keys, hint: got.hint };
+    });
+  }
+  function panelLines(sendKey) {
+    return TABLE.filter((row2) => row2.inPanel !== false).map((row2) => {
+      const got = rowFor(row2, sendKey);
+      return { keys: got.panelKeys ?? got.keys, hint: got.panelHint ?? got.hint };
+    });
+  }
+  function isScrollbarPress(geometry) {
+    const inWidthGutter = geometry.contentWidth > 0 && geometry.x >= geometry.contentWidth && geometry.x <= geometry.boxWidth;
+    const inHeightGutter = geometry.contentHeight > 0 && geometry.y >= geometry.contentHeight && geometry.y <= geometry.boxHeight;
+    return inWidthGutter || inHeightGutter;
+  }
+  var BREAK = { PARAGRAPH: "paragraph", LINE: "line" };
+  function breakIntentFor(input) {
+    if (input.inputType === "insertLineBreak") return BREAK.LINE;
+    if (input.inputType === "insertParagraph") return input.shiftKey === true ? BREAK.LINE : BREAK.PARAGRAPH;
+    return null;
+  }
+  var FORMAT = { APPLY: "apply", REMOVE: "remove" };
+  var FORMAT_COMMANDS = ["bold", "italic"];
+  function formatIntentFor(input) {
+    if (!FORMAT_COMMANDS.some((command) => command === input.command)) return null;
+    return input.active === true ? FORMAT.REMOVE : FORMAT.APPLY;
+  }
+  var BLOCK_TYPES = [
+    {
+      tag: "p",
+      label: "Paragraph",
+      code: "Digit0",
+      chords: { mac: "Cmd-Option-0", other: "Ctrl-Shift-0" },
+      shortcuts: []
+    },
+    {
+      tag: "h2",
+      label: "Heading",
+      code: "Digit2",
+      chords: { mac: "Cmd-Option-2", other: "Ctrl-Shift-2" },
+      shortcuts: ["## ", "# "]
+    },
+    {
+      tag: "h3",
+      label: "Subheading",
+      code: "Digit3",
+      chords: { mac: "Cmd-Option-3", other: "Ctrl-Shift-3" },
+      shortcuts: ["### "]
+    },
+    {
+      tag: "h4",
+      label: "Small heading",
+      code: "Digit4",
+      chords: { mac: "Cmd-Option-4", other: "Ctrl-Shift-4" },
+      shortcuts: ["#### "]
+    },
+    {
+      tag: "ul",
+      label: "Bulleted list",
+      code: "Digit8",
+      chords: { mac: "Cmd-Shift-8", other: "Ctrl-Shift-8" },
+      shortcuts: ["- ", "* "]
+    },
+    {
+      tag: "ol",
+      label: "Numbered list",
+      code: "Digit7",
+      chords: { mac: "Cmd-Shift-7", other: "Ctrl-Shift-7" },
+      shortcuts: ["1. "]
+    }
+  ];
+  var OTHER_BLOCK_LABEL = "Other block";
+  var BLOCK_ROWS = BLOCK_TYPES;
+  function blockTypeLabel(tag) {
+    return BLOCK_ROWS.find((row2) => row2.tag === tag)?.label ?? null;
+  }
+  function chordLabelFor(tag, platform) {
+    const row2 = BLOCK_ROWS.find((one) => one.tag === tag);
+    if (row2 === void 0) return null;
+    return platform === "mac" ? row2.chords.mac : row2.chords.other;
+  }
+  function isListTag(tag) {
+    return tag === "ul" || tag === "ol";
+  }
+  function blockTypeChord(input) {
+    if (input.altGraph === true) return null;
+    const mac = input.platform === "mac";
+    for (const row2 of BLOCK_TYPES) {
+      if (input.code !== row2.code) continue;
+      if (mac) {
+        if (input.metaKey !== true || input.ctrlKey === true) return null;
+        if (isListTag(row2.tag)) return input.shiftKey === true && input.altKey !== true ? row2.tag : null;
+        return input.altKey === true && input.shiftKey !== true ? row2.tag : null;
+      }
+      if (input.ctrlKey !== true || input.metaKey === true || input.altKey === true) return null;
+      return input.shiftKey === true ? row2.tag : null;
+    }
+    return null;
+  }
+  var NO_BREAK_SPACE = "\xA0";
+  function hasShortcut(shortcuts, text) {
+    return shortcuts.includes(text);
+  }
+  function markdownShortcutFor(textBeforeCaret) {
+    const text = textBeforeCaret.replaceAll(NO_BREAK_SPACE, " ");
+    for (const row2 of BLOCK_TYPES) {
+      if (hasShortcut(row2.shortcuts, text)) return row2.tag;
+    }
+    return null;
+  }
+  var ENTER = {
+    SIBLING: "sibling",
+    SPLIT: "split",
+    NEW_ITEM: "new_item",
+    END_LIST: "end_list",
+    LINE: "line",
+    BREAK_RULE: "break_rule"
+  };
+  function enterIntentFor(input) {
+    if (input.shiftKey === true) return ENTER.LINE;
+    if (input.runAllowed === false) return ENTER.BREAK_RULE;
+    if (input.inListItem === true) {
+      return input.itemEmpty === true && input.lastItem === true ? ENTER.END_LIST : ENTER.NEW_ITEM;
+    }
+    return input.atEnd === true ? ENTER.SIBLING : ENTER.SPLIT;
+  }
+  var EDGE = {
+    MERGE_PREVIOUS: "merge_previous",
+    MERGE_NEXT: "merge_next",
+    DELETE_SELECTION: "delete_selection",
+    REFUSE: "refuse"
+  };
+  function edgeDeleteFor(input) {
+    if (input.key !== "Backspace" && input.key !== "Delete") return null;
+    if (input.collapsed === false) return input.spansBlocks === true ? EDGE.DELETE_SELECTION : null;
+    if (input.key === "Backspace") {
+      if (input.atBlockStart !== true) return null;
+      return input.firstBlock === true ? EDGE.REFUSE : EDGE.MERGE_PREVIOUS;
+    }
+    if (input.atBlockEnd !== true) return null;
+    return input.lastBlock === true ? EDGE.REFUSE : EDGE.MERGE_NEXT;
+  }
+  var HISTORY = { UNDO: "undo", REDO: "redo" };
+  function historyIntentFor(input) {
+    if (input.editing !== true) return null;
+    if (input.inputType === "historyUndo") return HISTORY.UNDO;
+    if (input.inputType === "historyRedo") return HISTORY.REDO;
+    if (!isPrimaryModifier(input) || input.altKey === true) return null;
+    if (input.code === "KeyZ" || isKey(input.key, "z")) return input.shiftKey === true ? HISTORY.REDO : HISTORY.UNDO;
+    if (input.platform !== "mac" && input.ctrlKey === true && (input.code === "KeyY" || isKey(input.key, "y"))) {
+      return HISTORY.REDO;
+    }
+    return null;
+  }
+
+  // lahe-register:src/domain/gestures.ts
+  var converted4 = Object.assign({}, gestures_exports);
+  globalThis.LAHE = globalThis.LAHE || {};
+  globalThis.LAHE.gestures = converted4;
+
+  // src/browser/review-layer/editing/write-epoch.ts
+  var write_epoch_exports = {};
+  __export(write_epoch_exports, {
+    createEpoch: () => createEpoch,
+    epoch: () => epoch,
+    isWriting: () => isWriting,
+    noteExternalMutation: () => noteExternalMutation,
+    onIdle: () => onIdle,
+    takePendingExternal: () => takePendingExternal,
+    write: () => write
+  });
+  function createEpoch() {
+    let depth = 0;
+    let current = 0;
+    let pendingExternal = false;
+    const idleListeners = [];
+    function close() {
+      if (depth > 0) depth -= 1;
+      if (depth !== 0 || !pendingExternal) return;
+      for (const listener of [...idleListeners]) listener();
+    }
+    return {
+      write(reason, fn) {
+        if (reason === "") {
+          throw new TypeError("write-epoch.write: reason must be a non-empty string naming the caller");
+        }
+        depth += 1;
+        try {
+          return fn();
+        } finally {
+          current += 1;
+          queueMicrotask(close);
+        }
+      },
+      isWriting() {
+        return depth > 0;
+      },
+      epoch() {
+        return current;
+      },
+      noteExternalMutation() {
+        pendingExternal = true;
+      },
+      takePendingExternal() {
+        const was = pendingExternal;
+        pendingExternal = false;
+        return was;
+      },
+      onIdle(listener) {
+        idleListeners.push(listener);
+        return () => {
+          const at = idleListeners.indexOf(listener);
+          if (at !== -1) idleListeners.splice(at, 1);
+        };
+      }
+    };
+  }
+  var pageEpoch = createEpoch();
+  function write(reason, fn) {
+    return pageEpoch.write(reason, fn);
+  }
+  function isWriting() {
+    return pageEpoch.isWriting();
+  }
+  function epoch() {
+    return pageEpoch.epoch();
+  }
+  function noteExternalMutation() {
+    pageEpoch.noteExternalMutation();
+  }
+  function takePendingExternal() {
+    return pageEpoch.takePendingExternal();
+  }
+  function onIdle(listener) {
+    return pageEpoch.onIdle(listener);
+  }
+
+  // lahe-register:src/browser/review-layer/editing/write-epoch.ts
+  var converted5 = Object.assign({}, write_epoch_exports);
+  globalThis.LAHE = globalThis.LAHE || {};
+  globalThis.LAHE.epoch = converted5;
 
   // src/domain/elapsed.ts
   var elapsed_exports = {};
@@ -36532,9 +36417,9 @@
   }
 
   // lahe-register:src/domain/elapsed.ts
-  var converted = Object.assign({}, elapsed_exports);
+  var converted6 = Object.assign({}, elapsed_exports);
   globalThis.LAHE = globalThis.LAHE || {};
-  globalThis.LAHE.elapsed = converted;
+  globalThis.LAHE.elapsed = converted6;
 
   // lahe-entry.js
   var import_protocol = __toESM(require_protocol());
