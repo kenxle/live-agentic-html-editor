@@ -4,13 +4,12 @@ read-when: Checking where the TypeScript migration stands, what it waits on, or 
 
 # Progress: TypeScript migration
 
-The architecture and the plan are written and served to Ken, and he has answered one of the three questions. No code has changed yet. The next step is slice S0a (raise the Node floor), which does not depend on the two open questions.
+The architecture and the plan are written and served to Ken, and he has answered two of the three questions. No code has changed yet. The next step is slice S0a (raise the Node floor), which does not depend on the open question.
 
 ## Attention needed
 
-Two questions on [the plan](02_plan_typescript_migration.md#needs-your-answer), each with a default the build follows until Ken answers:
+One question on [the plan](02_plan_typescript_migration.md#needs-your-answer), with a default the build follows until Ken answers:
 
-- what replaces the `read-when` header in source files (default: a lint-checked table per folder in docs);
 - whether the Node minimum is 24.12 or 22.18 (default: 24.12).
 
 ## Documents
@@ -32,3 +31,4 @@ Two questions on [the plan](02_plan_typescript_migration.md#needs-your-answer), 
 
 - **2026-11-12 11:32.** Plan and architecture written. Version facts were rechecked live at Ken's request. TypeScript stays on 6.0.3, because typescript-eslint cannot load TypeScript 7 yet. Node 24.12.0 is proposed as the minimum, since it is the first release where running `.ts` directly is stable. No approval is needed to start: Ken said the planner and builders go ahead without waiting.
 - **2026-11-12 11:34.** Ken chose to rename "helper" in user-facing text, following BRAND. Slice W1 does it after the CLI converts.
+- **2026-11-12 11:35.** Ken ruled that the `read-when` header is metadata, not a comment. It stays as the one comment lint allows, with its shape checked. The why behind the code still moves to a doc per source folder.

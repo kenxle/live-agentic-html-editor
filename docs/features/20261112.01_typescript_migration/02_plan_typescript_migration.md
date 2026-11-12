@@ -4,7 +4,7 @@ read-when: Building, reviewing or orchestrating a slice of the TypeScript migrat
 
 # Plan: move Lahe to strict TypeScript in slices that each leave main working
 
-This page lists every slice of the migration: what each one changes, what it waits on, and how it proves it is done. Two questions at the top still need your answer; the first is settled. Work starts without them: the first slices depend on neither, and each question shows the default the builders will follow until you choose. The reasoning behind each slice is in [the architecture](01_architecture_typescript_migration.md). Where every file goes is in [the target layout](parts/target_layout.md). [The progress page](03_progress_typescript_migration.md) tracks the build.
+This page lists every slice of the migration: what each one changes, what it waits on, and how it proves it is done. One question at the top still needs your answer; the first two are settled. Work starts without them: the first slices do not depend on it, and it shows the default the builders will follow until you choose. The reasoning behind each slice is in [the architecture](01_architecture_typescript_migration.md). Where every file goes is in [the target layout](parts/target_layout.md). [The progress page](03_progress_typescript_migration.md) tracks the build.
 
 ## Needs your answer
 
@@ -16,12 +16,12 @@ This page lists every slice of the migration: what each one changes, what it wai
 <button type="button" value="keep">Keep "helper" in user-facing text</button>
 </div>
 
-**2. What replaces the `read-when` header at the top of each source file?** Your global rule asks every file to start with one, and your instruction for this repo says no comments. Recommendation: no comments at all in `.ts` files. Each source folder gets one doc, `docs/ongoing/code/<folder>.md`, that opens with a table listing every file in the folder with its read-when line, and lint fails when a file is missing from that table. An agent finds the right file the same way, and the table cannot fall out of date. The other choice keeps a single `/** read-when: ... */` line as the one comment lint allows, with its shape checked. If you pick the first, your global rule in `~/.claude/rules/file-headers.md` needs a line exempting this repo's `.ts` files; I will draft it for you to approve.
+**2. Does the `read-when` header stay?** **Decided: yes.** Your note on the page: frontmatter and metadata are not comments. Each `.ts` file opens with one header block holding only the `read-when` field, and `not-for` when it applies, as your global rule describes. Lint allows exactly that block, first in the file, in that shape, and rejects every other comment. The why, the traps and the history that comments carry today move to a doc per source folder, `docs/ongoing/code/<folder>.md`.
 
 <div class="choice" data-choice="read-when-headers">
 <p class="choice-q">How do agents find the right source file?</p>
 <button type="button" value="folder-doc" data-recommended>A table per folder in docs, checked by lint; no comments</button>
-<button type="button" value="header">Keep one read-when header line per file</button>
+<button type="button" value="header" data-chosen>Keep one read-when header line per file</button>
 </div>
 
 **3. Is Node 24.12 the right minimum?** You asked for the lowest Node line that is not past end of life and runs `.ts` files directly. Read literally, that is Node 22.18. But Node 22 reaches end of life on 2027-04-30, and its own documentation still calls the `.ts` feature a release candidate. 24.12.0 is the first release where the feature is marked stable, and Node 24 is supported until 2028-04-30. Recommendation: 24.12. The [architecture](01_architecture_typescript_migration.md#question-4-the-node-minimum) has the table. Slice S0a uses 24.12 unless you choose 22.
@@ -184,7 +184,8 @@ The rest of the contract:
   - no behavior change;
   - exported names stay the same;
   - the unchanged unit suite passes;
-  - comments move to the folder doc or are dropped as history;
+  - each `.ts` file keeps a `read-when` header (and `not-for` only when it applies), rewritten to route, not summarize;
+  - every other comment moves to the folder doc or is dropped as history;
   - a bug the types reveal is reported, and fixed only if the fix is a few lines, needed for the compiler and tested;
   - a `.ts` file imports only `.ts` files.
 - **uncertainty_rule:** read the code and its tests first. Raise the question with the orchestrator, rather than inventing a design, when a type would need a cast or an `any` to compile, when a parser would be stricter than today's check, or when a dependency is not yet converted.
@@ -244,7 +245,7 @@ This is the one verification table for the migration. A slice links to its rows 
 | Every switch on a state or kind handles every case | A fixture switch missing a union member fails | same test | S0b | not started |
 | Folder boundaries enforced by the compiler | A browser fixture importing server code fails with TS6307; `document` in a server fixture fails; `node:fs` in a browser fixture fails | same test | S0b | not started |
 | `tsc` runs in `gate:unit` | `npm run gate:unit` output shows `tsc -b` and ESLint | read the gate output | S0b | not started |
-| The gate rejects new comments | A fixture with a comment fails `lahe/no-comments` | same test | S0b | not started |
+| The gate rejects new comments, and allows only the header | A fixture with a comment fails `lahe/no-comments`; a header with a field other than `read-when` or `not-for`, or not first in the file, fails; a file with the correct header passes | same test | S0b | not started |
 | Node floor is 24.12 everywhere | `engines`, `.nvmrc`, CI and docs agree; `bin/lahe.js` on Node 20 prints the message and exits non-zero | unit test of the message; a manual run with `~/.nvm/versions/node/v20.19.0/bin/node bin/lahe.js status` | S0a | not started |
 | The server runs `.ts` with no build step | `lahe review` on Ken's machine serves a page after SV7; no compiled server output exists | real use, and `git ls-files` shows no server build output | SV7 | not started |
 | Browser bundle built by esbuild, committed, reproducible | `check:layer` passes on Mac and in Linux CI on the same commit | CI run and local run | S0c | not started |

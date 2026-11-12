@@ -28,7 +28,7 @@ This document answers the eight questions in the [handoff](HANDOFF.md), which se
 | A6 | One TypeScript project per folder, with references as the allowed imports | The compiler, not a review, refuses a forbidden import. |
 | A7 | TypeScript 6.0.3 now, TypeScript 7 when typescript-eslint supports it | typescript-eslint refuses TypeScript 6.1 and later today. |
 | A8 | ESLint 10.14.0 and typescript-eslint 8.72.2 as dev dependencies, plus two local rules | tsc cannot ban `any`, casts, `!` or comments by itself. |
-| A9 | No comments in `.ts` files, header included; each source folder gets a doc with a file table that lint checks | Keeps the routing a header gave, in a place lint keeps current. One question for Ken. |
+| A9 | No comments in `.ts` files except the `read-when` header, which is metadata; the why moves to a doc per source folder | Ken's ruling on the plan page: frontmatter and metadata are not comments. |
 | A10 | Unit tests stay JavaScript while the source converts, then convert in their own wave | Unchanged tests passing is the proof that a conversion changed no behavior. |
 | A11 | Two temporary bridges during the mixed period: a one-line forwarder at each old Node path, and a generated registration for each converted browser module | Lets each slice touch only its own files. Both are removed in the finishing slice. |
 
@@ -143,13 +143,13 @@ Each folder's `tsconfig.json` extends the base, sets its `lib` and `types`, and 
 | `no-restricted-imports` per folder | a second, readable error beside TS6307 |
 | `naming-convention` | types PascalCase, values camelCase, constants UPPER_CASE |
 | `no-restricted-syntax` | default exports, top-level `await`, `enum`, `namespace`, `require` in `.ts` |
-| local `lahe/no-comments` | any comment in a `.ts` file under `src/` and, from the test wave, `test/` |
+| local `lahe/no-comments` | any comment in a `.ts` file under `src/` and, from the test wave, `test/`, except one header block first in the file holding only `read-when` and, optionally, `not-for`, one line each |
 | local `lahe/no-js-imports` | a `.ts` file importing a `.js` file (the mixed-period rule below) |
 | `max-lines` | very large files. Off until each area's split slice, then on (see the plan) |
 
 The two local rules live in `scripts/eslint-rules/`. Both are short: one reports every comment ESLint's parser finds, the other checks import specifiers. typescript-eslint was chosen over a hand-written checker because the type-aware rules (`no-unsafe-*`, the switch check) need the type checker. Rebuilding those would be a project of its own.
 
-`scripts/lint.ts` keeps what only it does: no jsdom, Lua compiles, no duplicate top-level functions in the remaining `.js`, kebab-case file names, every file in its folder doc's table, and no `.js` left under `src/` once the finishing slice runs. It also stops walking `docs/` and `.claude/worktrees/`, which it walks today by mistake.
+`scripts/lint.ts` keeps what only it does: no jsdom, Lua compiles, no duplicate top-level functions in the remaining `.js`, kebab-case file names, and no `.js` left under `src/` once the finishing slice runs. It also stops walking `docs/` and `.claude/worktrees/`, which it walks today by mistake.
 
 **Every rule has a proof.** `test/unit/strictness_gate.test.js` feeds the compiler and ESLint one small fixture per rule. Each fixture holds one violation (an `any`, a cast, a missing switch case, a browser import of server code, a comment, and so on), and the test asserts the gate rejects each one. A rule someone turns off later fails this test.
 
@@ -179,7 +179,7 @@ Slices follow the target layout, so each file has exactly one owning slice. The 
 
 - **A conversion changes no behavior.** The unchanged unit suite is the proof.
 - **A bug the types reveal gets its own fix.** A tiny fix that is the only way to satisfy the compiler may stay in the slice, if the builder lists it under "Deviations" with a test. Anything else goes on the board as its own row.
-- **Comments move to docs in the same slice.** Each target folder gets one doc, `docs/ongoing/code/<folder>.md`, owned by the slice that creates the folder. It opens with a table of the folder's files and a read-when line for each, which lint checks. Then comes the why, the traps and the history worth keeping. History with no future use (old task owners, decision numbers that no longer resolve) is dropped. Existing subsystem docs, such as `FINGERPRINTING.md`, only gain a link, so parallel slices never edit the same doc.
+- **Comments move to docs in the same slice.** Each target folder gets one doc, `docs/ongoing/code/<folder>.md`, owned by the slice that creates the folder. It holds the why, the traps and the history worth keeping; each file's own `read-when` header does the routing. History with no future use (old task owners, decision numbers that no longer resolve) is dropped. Existing subsystem docs, such as `FINGERPRINTING.md`, only gain a link, so parallel slices never edit the same doc.
 - **Splitting very large files is its own refactor slice.** `overlay.js` (8,878 lines), `editing.js` (6,066) and four more files over 3,000 lines first convert as single files. Then a split slice for each area breaks them up and turns `max-lines` on for that folder.
 
 The slice list, the order, the owners and the evidence are in [the plan](02_plan_typescript_migration.md).
@@ -216,4 +216,4 @@ New dev dependencies (TypeScript, ESLint, typescript-eslint, esbuild, `@types/no
 | Rename every `.js` to `.cjs` and flip the root to ES modules first | A thousand-file mechanical commit that every later slice conflicts with, for what nested `package.json` files give for free. |
 | Hand-written lint over the TypeScript compiler API instead of ESLint | Feasible for comments, but rebuilding the type-aware `any` and switch checks is a project of its own. Also, TypeScript 7 ships no compiler API. |
 | TypeScript 7 now | typescript-eslint cannot load it; the `tsgo` backend is marked not ready by its maintainer. |
-| Keep one-line `read-when` headers in `.ts` files | Reasonable, and offered to Ken as the other answer. The folder doc table gives the same routing, and lint can check that it stays complete. |
+| Drop the `read-when` header too, and route through a file table in each folder doc | Ken ruled the header is metadata, not a comment, so it stays. |
