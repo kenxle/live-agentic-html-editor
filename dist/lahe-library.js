@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor Library page
- * version 0.4.0+de514863c063
+ * version 0.4.0+2aac4a0d02b6
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -27,6 +27,10 @@
       throw mod = 0, e;
     }
   };
+  var __export = (target, all) => {
+    for (var name in all)
+      __defProp(target, name, { get: all[name], enumerable: true });
+  };
   var __copyProps = (to, from, except, desc) => {
     if (from && typeof from === "object" || typeof from === "function") {
       for (let key of __getOwnPropNames(from))
@@ -44,1477 +48,6 @@
     mod
   ));
 
-  // src/shared/protocol.js
-  var require_protocol = __commonJS({
-    "src/shared/protocol.js"(exports, module) {
-      (function(root, factory) {
-        "use strict";
-        var browser = typeof window !== "undefined" && !!window.document;
-        if (browser) {
-          root.LAHE = root.LAHE || {};
-          root.LAHE.protocol = factory(root.LAHE.failures);
-        } else {
-          module.exports = factory(__require("./failures.js"));
-        }
-      })(typeof globalThis !== "undefined" ? globalThis : exports, function(failures) {
-        "use strict";
-        var API_VERSION = "v1";
-        var SERVICE_CONTRACT = 17;
-        var CONTRACT_VERDICT = { CURRENT: "current", OLDER: "older", NEWER: "newer" };
-        function helperContractVerdict(health) {
-          var live = health && Number.isInteger(health.service_contract) ? health.service_contract : 0;
-          if (live > SERVICE_CONTRACT) return CONTRACT_VERDICT.NEWER;
-          if (live < SERVICE_CONTRACT) return CONTRACT_VERDICT.OLDER;
-          return CONTRACT_VERDICT.CURRENT;
-        }
-        var BASE = "/lahe/" + API_VERSION;
-        var DEFAULT_PORT = 7817;
-        var DEFAULT_HOST = "127.0.0.1";
-        var DEFAULT_HELPER_ORIGIN = "http://" + DEFAULT_HOST + ":" + DEFAULT_PORT;
-        var ALLOWED_HOST_NAMES = ["127.0.0.1", "localhost", "[::1]", "::1"];
-        var LOOPBACK_ORIGIN_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
-        var ORIGIN_LIMIT = 16;
-        function isRegisterableOrigin(origin) {
-          if (typeof origin !== "string" || !origin) return false;
-          if (origin === "null") return true;
-          var parsed;
-          try {
-            parsed = new URL(origin);
-          } catch (err) {
-            return false;
-          }
-          if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-          if (parsed.pathname !== "/" || parsed.search || parsed.hash || parsed.username || parsed.password) return false;
-          if (origin !== parsed.origin) return false;
-          return LOOPBACK_ORIGIN_HOSTS.indexOf(parsed.hostname) !== -1;
-        }
-        var HEADER = {
-          // The required custom header. Its only job is to be non-simple: a form or
-          // an img tag on a hostile page cannot set it, so a CORS-simple request can
-          // never reach a handler. Value is CLIENT_LAYER or CLIENT_CLI.
-          CLIENT: "x-lahe-client",
-          // The per-review token (D11). Minted by the add step, embedded on the
-          // script tag, and readable by anything running on the reviewed page, which
-          // is exactly why it is scoped to one review and never to the machine.
-          TOKEN: "x-lahe-token",
-          // Echoed on every response so a chip in the rail can be matched to a line
-          // in the helper log.
-          REQUEST_ID: "x-lahe-request-id",
-          CONTENT_TYPE: "content-type",
-          ORIGIN: "origin",
-          HOST: "host",
-          // Set by the browser, never by a script. The Library's routes read it to
-          // tell their own page apart from a document on another loopback port,
-          // which sends "same-site" (see CATALOG_ROUTES).
-          SEC_FETCH_SITE: "sec-fetch-site",
-          SEC_FETCH_MODE: "sec-fetch-mode",
-          SEC_FETCH_DEST: "sec-fetch-dest",
-          // The CLI secret (stable addresses): read from an owner-only file in the
-          // state folder and sent only by the CLI on site.bind. A page can never read
-          // it, so a page holding a review token still cannot name a file to serve.
-          CLI_SECRET: "x-lahe-cli-secret",
-          // The signed-request wire (AUTH.CLI_PROOF): the menu bar app proves it can
-          // read the CLI secret without ever sending it. See PROOF below.
-          PROOF_TS: "x-lahe-proof-ts",
-          PROOF_NONCE: "x-lahe-proof-nonce",
-          PROOF: "x-lahe-proof",
-          PROOF_REPLY: "x-lahe-proof-reply"
-        };
-        var CLIENT_LAYER = "layer";
-        var CLIENT_CLI = "cli";
-        var CLIENTS = [CLIENT_LAYER, CLIENT_CLI];
-        var CLIENT_CATALOG = "catalog";
-        var JSON_CONTENT_TYPE = "application/json";
-        var AUTH = {
-          // Liveness only. Carries no review data, so it needs no credential.
-          NONE: "none",
-          // A valid token for the review named in the request.
-          REVIEW_TOKEN: "review_token",
-          // The Library token (a D11 amendment): minted in memory at each helper
-          // start, carried only by the served Library page. It can list, open
-          // (restart recorded servers only), star, and queue a request. It cannot
-          // post to a review, read comment text, or name a file to serve. Which
-          // checks each catalog route runs is the per-route table in CATALOG_ROUTES.
-          CATALOG_TOKEN: "catalog_token",
-          // The CLI secret (stable addresses). Only site.bind takes it, and that
-          // route also refuses any request carrying an Origin header, so only a
-          // process that can read the state folder's owner-only file can bind.
-          CLI_SECRET: "cli_secret",
-          // The CLI proof (the menu bar app): a request signed with HMAC-SHA256
-          // keyed by the CLI secret, within PROOF.WINDOW_MS, with a nonce never seen
-          // before, and an answer signed back. The secret itself never travels, so
-          // a program squatting on the port learns one used proof and nothing else.
-          // No browser can send one: the routes refuse any Sec-Fetch header.
-          CLI_PROOF: "cli_proof"
-        };
-        var PROOF = {
-          REQUEST_PREFIX: "lahe-proof-v1",
-          REPLY_PREFIX: "lahe-proof-reply-v1",
-          // A timestamp this far from the helper's clock, either way, is refused.
-          WINDOW_MS: 30 * 1e3,
-          TS_PATTERN: /^[0-9]{1,16}$/,
-          // 16 random bytes, as lowercase hex.
-          NONCE_PATTERN: /^[0-9a-f]{32}$/,
-          // A lowercase hex HMAC-SHA256.
-          MAC_PATTERN: /^[0-9a-f]{64}$/
-        };
-        var SUMMARY_VERSION = 1;
-        var SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-        function isSafeId(value) {
-          return typeof value === "string" && SAFE_ID.test(value);
-        }
-        var ROUTES = [
-          {
-            name: "health",
-            method: "GET",
-            path: BASE + "/health",
-            auth: AUTH.NONE,
-            mutating: false,
-            why: "liveness and version only, so `add` can tell a helper that is up from one that is not",
-            response: "{ok, version, api, service_contract, started_at, catalog_seen_at}"
-          },
-          {
-            name: "events.append",
-            method: "POST",
-            path: BASE + "/events",
-            auth: AUTH.REVIEW_TOKEN,
-            mutating: true,
-            why: "the library posts each event as it happens and re-posts anything unacknowledged on reconnect",
-            request: "{review, events: [event...]}",
-            response: "{accepted: [event_id...], seq}"
-          },
-          {
-            name: "library.get",
-            method: "GET",
-            path: "/lahe-layer.js",
-            auth: AUTH.NONE,
-            mutating: false,
-            why: "the helper serves the built library, so the script line can be an absolute URL that works from any folder. Unauthenticated on purpose: these are the tool's own public bytes, the same file that ships in the repo, with no review data and no token in them. It is exempt the same visible way health is, through AUTH.NONE",
-            response: "the built library, as application/javascript"
-          },
-          {
-            name: "review.write",
-            method: "POST",
-            path: BASE + "/review",
-            auth: AUTH.REVIEW_TOKEN,
-            mutating: true,
-            why: "what `add` calls for a review the helper already holds: the helper applies the writes itself, so `add` never has to stop a helper that is holding somebody's live review. Its origins are DELIBERATELY NARROWER than what `add` may write to disk: only \"null\" and loopback http/https pass (isRegisterableOrigin), capped at ORIGIN_LIMIT per review. A body-supplied origin is the one way a script on an allowed page could widen the allowlist with a token it read off the script tag, which would leave the token as the only factor guarding the review. only_recorded_pages is accepted as true and never as false, for the same reason: narrowing a review to the pages it recorded is the reviewer's `--only`, and widening one back out is what a leaked token would ask for. notes is accepted as true and never as false, the same way: it marks a `lahe write` notes review, whose long sittings are not proofread (acceptsNotesFlag)",
-            request: "{review, origins: [origin...], target_path?, source_path?, source_hint?, page_path?, only_recorded_pages?: true, notes?: true}",
-            response: "{origins, recorded_source, recorded_paths, only_recorded_pages, seq}"
-          },
-          {
-            name: "review.read",
-            method: "GET",
-            path: BASE + "/review",
-            auth: AUTH.REVIEW_TOKEN,
-            mutating: false,
-            why: "the projection the library reconciles against on load and on every reconnect",
-            request: "?review=<id>",
-            response: "the review.json projection, plus {seq}"
-          },
-          {
-            name: "records.read",
-            method: "GET",
-            path: BASE + "/records",
-            auth: AUTH.REVIEW_TOKEN,
-            mutating: false,
-            why: "stable addresses, V31: the records this review holds for the asking page, whole, so a comment made at the page's old 127.0.0.1:<port> address shows at its new one. review.read is the projection, which drops the anchor fields a card needs. Only this review, only this page (its own address, the old origins of its site, and for a Markdown review the rendered file's old path), and never a draft. The page's Origin must be a site address; any other gets an empty list",
-            request: "?review=<id>&page_path=<location.pathname>",
-            response: "{records: [record...], seq}"
-          },
-          {
-            name: "replies.poll",
-            method: "GET",
-            path: BASE + "/replies",
-            auth: AUTH.REVIEW_TOKEN,
-            mutating: false,
-            why: "the library's reply poll loop. The cursor is a seq, never a timestamp and never an offset. It also carries the reviewed file's mtime, which is R36's refresh trigger for a static page: a changed value means the agent rebuilt the page and the library reloads it",
-            request: "?review=<id>&since=<seq>&page_path=<location.pathname>",
-            response: "{events: [event...], seq, target_mtime, stamp_carriable, agent_liveness}; target_mtime is the requesting page's ISO mtime, or null when its retained target cannot be identified or the file is missing. stamp_carriable says whether the SOURCE behind this page could hold a data-lahe-id attribute at all: false for a Markdown or plain-text source, which is what stops the page check asking an agent for an id that source cannot carry. agent_liveness is {state, unanswered, oldest_unanswered_at, last_reply_at, listening, monitor_at, activity_at}: how long it has been since the agent answered, read off the review's own replies and the owning session's files rather than taken from anything the agent said"
-          },
-          {
-            name: "window.claim",
-            method: "POST",
-            path: BASE + "/window",
-            auth: AUTH.REVIEW_TOKEN,
-            mutating: true,
-            why: "D5's second-window refusal for windows that cannot see each other's storage, plus the takeover",
-            request: "{review, window_id, session_secret?, takeover?, quiet?}",
-            response: "grant {granted:true, since, heartbeat_seconds, quiet_heartbeat_seconds, took_over, session_secret}; refusal {granted:false, since, heartbeat_seconds, quiet_heartbeat_seconds, reason, deposed} (no holder id, no secret). quiet:true on a claim says nobody is looking at that window, so it beats every quiet_heartbeat_seconds and the helper holds it for a longer window. deposed is true only when the refused window is the one an explicit Review-here-instead threw out, which is the one refusal the page acts on immediately; every other refusal it waits out, because a helper being replaced looks the same from there"
-          },
-          {
-            name: "window.release",
-            method: "POST",
-            path: BASE + "/window/release",
-            auth: AUTH.REVIEW_TOKEN,
-            mutating: true,
-            why: "the holder saying goodbye on its way out, so a reload does not have to wait out the staleness clock against its own outgoing page and tell the reviewer their review is open in another window",
-            request: "{review, session_secret}",
-            // The secret is the proof, exactly as it is on a heartbeat: without it
-            // this would let any window that can name a review evict the real holder.
-            response: "{released}"
-          },
-          {
-            name: "review.end",
-            method: "POST",
-            path: BASE + "/end",
-            auth: AUTH.REVIEW_TOKEN,
-            mutating: true,
-            why: "the reviewer chooses End review on the rail; the review is archived, never truncated",
-            request: "{review}",
-            // outstanding_kept is how many items are still READY, counted through the
-            // projection. It used to be the length of the event log, which made a
-            // ten-comment review report hundreds.
-            response: "{ended_at, outstanding_kept}"
-          }
-        ];
-        var CATALOG_PAGE_PATH = "/catalog";
-        var CATALOG_API_BASE = BASE + "/catalog";
-        var CATALOG_ROUTES = [
-          {
-            name: "catalog.page",
-            method: "GET",
-            path: CATALOG_PAGE_PATH,
-            auth: AUTH.CATALOG_TOKEN,
-            mutating: false,
-            // top_level_navigation: any top-level navigation opens the page, from any
-            // site: a link in a document or an email, a bookmark, a typed address.
-            // That is Sec-Fetch-Mode navigate with Sec-Fetch-Dest document, whatever
-            // Sec-Fetch-Site says, or a request with no Sec-Fetch headers at all. A
-            // cross-site navigation cannot read the page it loads. The page sends
-            // X-Frame-Options DENY, frame-ancestors 'none' and a same-origin
-            // Cross-Origin-Opener-Policy, so it can be neither framed nor scripted by
-            // its opener, and no script on it reads its own URL. A fetch or an
-            // iframe asking for it is still refused.
-            checks: { sec_fetch_site: ["none", "same-origin"], top_level_navigation: true, token: false, json_body: false, origin: null },
-            why: "the Library page itself, with the Library token in its meta tag",
-            response: "text/html"
-          },
-          {
-            name: "catalog.asset",
-            method: "GET",
-            path: CATALOG_PAGE_PATH + "/assets/",
-            prefix: true,
-            auth: AUTH.CATALOG_TOKEN,
-            mutating: false,
-            checks: { sec_fetch_site: ["none", "same-origin"], token: false, json_body: false, origin: null },
-            why: "the page's script, view model, protocol.js, the style bundle and the fonts, served raw from src/ from a fixed allowlist. Any other name is a 404 with no file bytes",
-            request: "<allowlisted name> after the path",
-            response: "the file"
-          },
-          {
-            name: "catalog.list",
-            method: "GET",
-            path: CATALOG_API_BASE + "/list",
-            auth: AUTH.CATALOG_TOKEN,
-            mutating: false,
-            checks: { sec_fetch_site: ["same-origin"], token: true, json_body: false, origin: null },
-            why: "every review, grouped by session. Only an authenticated list updates catalog_seen_at",
-            response: "{attached, sessions: [...]}"
-          },
-          {
-            name: "catalog.open",
-            method: "POST",
-            path: CATALOG_API_BASE + "/open",
-            auth: AUTH.CATALOG_TOKEN,
-            mutating: true,
-            checks: { sec_fetch_site: ["same-origin"], token: true, json_body: true, origin: "exact" },
-            why: "restart a review's recorded server and return its URL; never serves a path the helper did not serve before",
-            request: "{review, handoff, confirmed}",
-            response: "{url, request_id, not_asked}"
-          },
-          {
-            name: "catalog.star",
-            method: "POST",
-            path: CATALOG_API_BASE + "/star",
-            auth: AUTH.CATALOG_TOKEN,
-            mutating: true,
-            checks: { sec_fetch_site: ["same-origin"], token: true, json_body: true, origin: "exact" },
-            why: "star or unstar a review in catalog.json",
-            request: "{review, starred}",
-            response: "{review, starred}"
-          },
-          {
-            name: "catalog.rename",
-            method: "POST",
-            path: CATALOG_API_BASE + "/rename",
-            auth: AUTH.CATALOG_TOKEN,
-            mutating: true,
-            checks: { sec_fetch_site: ["same-origin"], token: true, json_body: true, origin: "exact" },
-            why: "the reviewer's own name for a review, in catalog.json; empty clears it. Display text for the Library only, never in an agent's input",
-            request: "{review, name}",
-            response: "{review, name}"
-          },
-          {
-            name: "catalog.request",
-            method: "POST",
-            path: CATALOG_API_BASE + "/request",
-            auth: AUTH.CATALOG_TOKEN,
-            mutating: true,
-            checks: { sec_fetch_site: ["same-origin"], token: true, json_body: true, origin: "exact" },
-            why: "queue a pick-up or a launch for the attached agent. Ids only; extra body fields are dropped",
-            request: "{review, action, confirmed}",
-            response: "{request_id}"
-          }
-        ];
-        var CATALOG_TOKEN_META = "lahe-catalog-token";
-        var PAGES = {
-          PORT: 1483,
-          // Tests (and a person who needs another port) set this; 0 means any.
-          PORT_ENV: "LAHE_PAGES_PORT",
-          SUFFIX: "lahe.localhost",
-          PRINTED_ENDING: "lahe.localhost",
-          // Why: what `lahe status` and the start log line say about the ending.
-          PRINTED_ENDING_REASON: "every browser treats .localhost names as this computer and as secure, with no setup",
-          PORT_FREE_OFF_REASON: "the port-80 forward is not set up",
-          LAHE_NAMES_OFF_REASON: "the .lahe option is not set up",
-          LIBRARY_NAME: "library",
-          MAX_LABELS: 4,
-          LABEL_MAX: 63,
-          NAME_MAX: 150,
-          RESERVED_NAMES: ["library", "lahe", "www", "api"],
-          // service.json's pages.mode: the helper serves pages itself. The only mode.
-          MODE_SITES: "sites",
-          // Every page response carries this, so another website cannot embed it.
-          CORP: "same-origin"
-        };
-        function isSiteLabel(value) {
-          if (typeof value !== "string" || !value || value.length > PAGES.LABEL_MAX) return false;
-          if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)) return false;
-          if (value.slice(0, 4) === "xn--" || value.slice(2, 4) === "--") return false;
-          return true;
-        }
-        function isSiteName(value) {
-          if (typeof value !== "string" || !value || value.length > PAGES.NAME_MAX) return false;
-          var labels = value.split(".");
-          if (labels.length > PAGES.MAX_LABELS) return false;
-          return labels.every(isSiteLabel);
-        }
-        var HOST_FAMILY = { API: "api", LIBRARY: "library", PAGE: "page", BAD: "bad" };
-        var SITE_HOST = /^([a-z0-9.-]+)\.lahe\.localhost(?::(\d{1,5}))?$/;
-        var SHORT_HOST = /^([a-z0-9.-]+)\.lahe(?::(\d{1,5}))?$/;
-        function classifyHost(hostHeader, options) {
-          var opts = options || {};
-          if (typeof hostHeader !== "string" || !hostHeader) return { family: HOST_FAMILY.BAD };
-          if (hostAllowed(hostHeader)) return { family: HOST_FAMILY.API };
-          var match = SITE_HOST.exec(hostHeader);
-          if (!match) {
-            var short = opts.laheNames === true ? SHORT_HOST.exec(hostHeader) : null;
-            if (!short || short[1] === PAGES.LIBRARY_NAME || !isSiteName(short[1])) return { family: HOST_FAMILY.BAD };
-            if (short[2] !== void 0 && Number(short[2]) !== opts.pagesPort) return { family: HOST_FAMILY.BAD };
-            return { family: HOST_FAMILY.PAGE, name: short[1] };
-          }
-          var name = match[1];
-          if (match[2] !== void 0 && Number(match[2]) !== opts.pagesPort) return { family: HOST_FAMILY.BAD };
-          if (name === PAGES.LIBRARY_NAME) return { family: HOST_FAMILY.LIBRARY, name };
-          if (!isSiteName(name)) return { family: HOST_FAMILY.BAD };
-          return { family: HOST_FAMILY.PAGE, name };
-        }
-        function siteOrigin(name, port) {
-          return "http://" + name + "." + PAGES.SUFFIX + (port === 80 ? "" : ":" + port);
-        }
-        function siteNameFromOrigin(origin, pagesPort, laheNames) {
-          if (typeof origin !== "string") return null;
-          var match = /^http:\/\/([a-z0-9.-]+)\.lahe\.localhost(?::(\d{1,5}))?$/.exec(origin) || (laheNames === true ? /^http:\/\/([a-z0-9.-]+)\.lahe(?::(\d{1,5}))?$/.exec(origin) : null);
-          if (!match || !isSiteName(match[1]) || match[1] === PAGES.LIBRARY_NAME) return null;
-          return match[2] === void 0 || Number(match[2]) === pagesPort ? match[1] : null;
-        }
-        var SITE_ROUTES = [
-          {
-            name: "site.bind",
-            method: "POST",
-            path: BASE + "/site/bind",
-            auth: AUTH.CLI_SECRET,
-            mutating: true,
-            why: "lahe review and lahe write bind a review to a site: find or make the site's name for a root the CLI names, record its mounts and linked files, stamp the review as re-served, and drop the review's old loopback origins. CLI-only: the CLI secret, and any request carrying an Origin header is refused, so a page holding a review token can neither name a file nor move a rail",
-            request: '{review, root, mode: "folder"|"page-only", entry, mounts?: {prefix: dir}, linked?: [file]}',
-            response: "{name, origin, url, printed_ending}"
-          },
-          {
-            name: "review.retire",
-            method: "POST",
-            path: BASE + "/review/retire",
-            auth: AUTH.CLI_SECRET,
-            mutating: true,
-            why: "lahe review retire ends a review on purpose, so `lahe review` of its file makes a new one. Only the owning agent session may retire its review. A retired review no longer answers on any page, fails the Origin check, and takes no events. CLI-only, like site.bind",
-            request: "{review, session}",
-            response: "{review, retired_at}"
-          }
-        ];
-        var SUMMARY_ROUTES = [
-          {
-            name: "summary.read",
-            method: "GET",
-            path: BASE + "/summary",
-            auth: AUTH.CLI_PROOF,
-            mutating: false,
-            why: "the menu bar app's poll: what is waiting on the reviewer, what is waiting on agents, open documents, connected sessions and recent documents, with titles and ~ paths and never comment text. ?v=<summary_version>",
-            response: "docs/CONTRACTS.md, the summary.read table; test/fixtures/menubar/summary.json"
-          },
-          {
-            name: "summary.open",
-            method: "POST",
-            path: BASE + "/summary/open",
-            auth: AUTH.CLI_PROOF,
-            mutating: true,
-            refuse_origin: true,
-            why: "a click on a menu row: the address catalog Open would use, found with no hand-off, so it never queues a request for an agent",
-            request: "{review, summary_version}",
-            response: "{url} or {url: null} for a row only an agent can serve"
-          }
-        ];
-        function route(name) {
-          var lists = [ROUTES, CATALOG_ROUTES, SITE_ROUTES, SUMMARY_ROUTES];
-          for (var l = 0; l < lists.length; l += 1) {
-            for (var i = 0; i < lists[l].length; i += 1) {
-              if (lists[l][i].name === name) return lists[l][i];
-            }
-          }
-          throw new Error("unknown route: " + String(name) + ". Routes are listed in src/shared/protocol.js");
-        }
-        var HEALTH_FIELD = {
-          // The time of the last authenticated catalog.list, or null. `lahe session
-          // close` reads it to decide whether the Library keeps the helper up.
-          CATALOG_SEEN_AT: "catalog_seen_at"
-        };
-        function requiredHeaders(routeName) {
-          var r = route(routeName);
-          var out = [];
-          if (r.auth === AUTH.NONE) return out;
-          out.push({ header: HEADER.CLIENT, value: "layer or cli", why: "a custom header cannot ride on a CORS-simple request" });
-          out.push({ header: HEADER.TOKEN, value: "<per-review token>", why: "the per-review credential (D11)" });
-          if (r.mutating) {
-            out.push({ header: HEADER.CONTENT_TYPE, value: JSON_CONTENT_TYPE, why: "a JSON content type forces a preflight" });
-          }
-          return out;
-        }
-        var CHECK = {
-          HOST: "host",
-          CUSTOM_HEADER: "custom_header",
-          CONTENT_TYPE: "content_type",
-          REVIEW_KNOWN: "review_known",
-          TOKEN: "token",
-          ORIGIN: "origin",
-          // Catalog routes only (see CATALOG_ROUTES[].checks.sec_fetch_site).
-          SEC_FETCH_SITE: "sec_fetch_site",
-          // The summary routes only (AUTH.CLI_PROOF).
-          SEC_FETCH: "sec_fetch",
-          PROOF: "proof"
-        };
-        var CHECKS = [
-          {
-            name: CHECK.HOST,
-            code: "PROTO_BAD_HOST",
-            why: "the Host header must name the helper itself, or a rebound DNS name reaches a handler with the browser's help"
-          },
-          {
-            name: CHECK.CUSTOM_HEADER,
-            code: "PROTO_MISSING_CUSTOM_HEADER",
-            why: "a form post or an img tag cannot set a custom header, so requiring one refuses every CORS-simple write"
-          },
-          {
-            name: CHECK.CONTENT_TYPE,
-            code: "PROTO_UNSUPPORTED_MEDIA_TYPE",
-            why: "mutating routes take JSON only, which is not a content type a simple request can send"
-          },
-          {
-            name: CHECK.REVIEW_KNOWN,
-            code: "PROTO_UNKNOWN_REVIEW",
-            why: "an unknown review id has no token to check against, so it is refused rather than defaulted"
-          },
-          {
-            name: CHECK.TOKEN,
-            code: "PROTO_UNAUTHORIZED",
-            why: "the per-review token, compared in full. Absent configuration fails closed"
-          },
-          {
-            name: CHECK.ORIGIN,
-            code: "PROTO_FORBIDDEN_ORIGIN",
-            why: "the origin comes from the request's own header, never from its body, and must be one the add step registered"
-          },
-          {
-            name: CHECK.SEC_FETCH_SITE,
-            code: "PROTO_CROSS_SITE",
-            why: "catalog routes only. A document under review on another loopback port sends same-site, and it is the page most likely to run a script the reviewer did not write, so the Library's API takes exactly same-origin"
-          },
-          {
-            name: CHECK.SEC_FETCH,
-            code: "AUTH_REFUSED",
-            why: "summary routes only. Current browsers send Sec-Fetch-Site, -Mode or -Dest on every request to a loopback address and the menu bar app sends none, so any of them means a page is asking"
-          },
-          {
-            name: CHECK.PROOF,
-            code: "AUTH_REFUSED",
-            why: "summary routes only. A request signed with the CLI secret, within the window, with a nonce not seen in it, compared in constant time. The raw secret header is refused: it must never travel"
-          }
-        ];
-        function checkNamed(name) {
-          for (var i = 0; i < CHECKS.length; i += 1) {
-            if (CHECKS[i].name === name) return CHECKS[i];
-          }
-          throw new Error("unknown check: " + String(name));
-        }
-        function tokensEqual(a, b) {
-          var max = Math.max(a.length, b.length);
-          var diff = a.length === b.length ? 0 : 1;
-          for (var i = 0; i < max; i += 1) {
-            diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
-          }
-          return diff === 0;
-        }
-        function headerOf(headers, name) {
-          if (!headers) return null;
-          if (Object.prototype.hasOwnProperty.call(headers, name)) return headers[name];
-          var lower = String(name).toLowerCase();
-          var keys = Object.keys(headers);
-          for (var i = 0; i < keys.length; i += 1) {
-            if (keys[i].toLowerCase() === lower) return headers[keys[i]];
-          }
-          return null;
-        }
-        function hostAllowed(hostHeader) {
-          if (typeof hostHeader !== "string" || !hostHeader) return false;
-          var name = hostHeader.replace(/:\d+$/, "");
-          return ALLOWED_HOST_NAMES.indexOf(name) !== -1;
-        }
-        function checkRequest(request, config) {
-          var req = request || {};
-          var r = route(req.routeName);
-          var headers = req.headers || {};
-          function refuse(name, detail) {
-            var c = checkNamed(name);
-            return {
-              ok: false,
-              check: name,
-              code: c.code,
-              log: "refused " + r.name + ": check " + name + " failed" + (detail ? " (" + detail + ")" : "")
-            };
-          }
-          if (!hostAllowed(headerOf(headers, HEADER.HOST))) {
-            return refuse(CHECK.HOST, String(headerOf(headers, HEADER.HOST)));
-          }
-          if (r.auth === AUTH.NONE) {
-            return { ok: true, review: null, origin: headerOf(headers, HEADER.ORIGIN) || null };
-          }
-          if (CLIENTS.indexOf(headerOf(headers, HEADER.CLIENT)) === -1) {
-            return refuse(CHECK.CUSTOM_HEADER, null);
-          }
-          if (r.mutating) {
-            var ct = String(headerOf(headers, HEADER.CONTENT_TYPE) || "").split(";")[0].trim().toLowerCase();
-            if (ct !== JSON_CONTENT_TYPE) return refuse(CHECK.CONTENT_TYPE, ct || "none");
-          }
-          var reviews = config && config.reviews || null;
-          var reviewId = req.review;
-          if (!reviews || !isSafeId(reviewId) || !Object.prototype.hasOwnProperty.call(reviews, reviewId)) {
-            return refuse(CHECK.REVIEW_KNOWN, String(reviewId));
-          }
-          var registered = reviews[reviewId];
-          var presented = headerOf(headers, HEADER.TOKEN);
-          if (!registered.token || typeof presented !== "string" || !tokensEqual(presented, registered.token)) {
-            return refuse(CHECK.TOKEN, null);
-          }
-          var origin = headerOf(headers, HEADER.ORIGIN);
-          var allowed = registered.origins || [];
-          var effective = origin === null || origin === void 0 || origin === "" ? "null" : String(origin);
-          if (allowed.indexOf(effective) === -1) return refuse(CHECK.ORIGIN, effective);
-          return { ok: true, review: reviewId, origin: effective };
-        }
-        var STATUS_FOR_CODE = {
-          PROTO_BAD_REQUEST: 400,
-          PROTO_BAD_HOST: 400,
-          PROTO_MISSING_CUSTOM_HEADER: 400,
-          PROTO_UNSUPPORTED_MEDIA_TYPE: 415,
-          PROTO_UNAUTHORIZED: 401,
-          PROTO_FORBIDDEN_ORIGIN: 403,
-          PROTO_UNKNOWN_REVIEW: 404,
-          PROTO_UNKNOWN_ITEM: 404,
-          PROTO_STALE_REV: 409,
-          // A review retired on purpose (`lahe review retire`) takes no events.
-          PROTO_REVIEW_RETIRED: 410,
-          // `lahe review retire` of a review another agent session owns.
-          PROTO_NOT_OWNER: 403,
-          PROTO_SECOND_WINDOW: 409,
-          PROTO_SECOND_INSTANCE: 409,
-          // The Library's codes. Messages and remedies are in failures.js, like every
-          // other code; the page shows the remedy.
-          PROTO_CROSS_SITE: 403,
-          PROTO_NOT_OPENABLE: 409,
-          PROTO_REQUEST_PENDING: 409,
-          PROTO_QUEUE_FULL: 429,
-          PROTO_NO_AGENT: 409,
-          PROTO_CONFIRM_NEEDED: 409,
-          PROTO_NO_LAUNCH: 409,
-          PROTO_CATALOG_UNREADABLE: 500,
-          // The summary routes' two refusals, both signed.
-          AUTH_REFUSED: 401,
-          SUMMARY_VERSION: 409
-        };
-        function statusFor(code) {
-          return Object.prototype.hasOwnProperty.call(STATUS_FOR_CODE, code) ? STATUS_FOR_CODE[code] : 500;
-        }
-        function errorBody(code, detail, requestId, check) {
-          var f = failures.failure(code, detail);
-          return {
-            error: {
-              code: f.code,
-              message: f.message,
-              remedy: f.remedy,
-              detail: f.detail,
-              check: check || null,
-              request_id: requestId || null
-            }
-          };
-        }
-        var CATALOG = {
-          // An unanswered request expires.
-          REQUEST_EXPIRY_MS: 30 * 60 * 1e3,
-          // A Library poll this recent keeps the helper up when the last session closes.
-          LIBRARY_SEEN_MS: 2 * 60 * 1e3,
-          // The Library calls an agent "working" when its monitor is not live but it
-          // ran a lahe command this recently. Past it, and with no live monitor, the
-          // card says only when the agent was last active, and Open does not ask
-          // before a hand-over. Much shorter than AGENT_LIVENESS.RECENT_COMMAND_MS on
-          // purpose: that window only withholds an accusation on the rail, while
-          // this one decides whether a person is told another agent has the session.
-          WORKING_MS: 2 * 60 * 1e3,
-          // A session bare `lahe library` started closes once it owns no reviews and
-          // its agent has been quiet this long (no live monitor, no lahe command).
-          LIBRARY_SESSION_IDLE_MS: 30 * 60 * 1e3,
-          // session.json's `created_by` on a session bare `lahe library` started.
-          // Written by the CLI when it creates the session; the helper only reads it.
-          CREATED_BY_LIBRARY: "library",
-          // Pending requests across the whole Library.
-          QUEUE_CAP: 5,
-          // The largest review log the reader will re-project.
-          REPROJECT_MAX_BYTES: 5 * 1024 * 1024,
-          // The page's poll, and how long a server probe is cached.
-          POLL_MS: 15e3,
-          // How long an answer stays on its row.
-          ANSWER_SHOWN_MS: 24 * 60 * 60 * 1e3,
-          // The longest answer `lahe library answer` accepts, in characters.
-          ANSWER_TEXT_MAX: 500,
-          // Sessions active this recently are open in the default view.
-          DEFAULT_VIEW_DAYS: 7,
-          // Reviews created before this instant (midnight US Eastern, 2026-09-17)
-          // can fold into one row per folder.
-          FOLD_CUTOFF: "2026-09-17T04:00:00Z"
-        };
-        function CATALOG_LEGACY_NOTE(reviewId) {
-          return "It belongs to no session. Serving it takes review " + reviewId + " into your session, with its old comments; drain it for any still waiting.";
-        }
-        var CATALOG_LOG = {
-          PREFIX: "catalog",
-          ACTION: { OPEN: "open", STAR: "star", UNSTAR: "unstar", PICKUP: "pickup", LAUNCH: "launch" },
-          FORMAT: "catalog <action> review=<id> age_days=<n>"
-        };
-        function catalogLogLine(action, reviewId, ageDays) {
-          return CATALOG_LOG.PREFIX + " " + String(action) + " review=" + String(reviewId) + " age_days=" + String(ageDays);
-        }
-        var EVENT = {
-          REVIEW_CREATED: "review.created",
-          ORIGIN_REGISTERED: "origin.registered",
-          // {origin}. A restarted static server's earlier loopback origins, and only
-          // those, are removed. Recovery applies it in order with origin.registered,
-          // so a removed origin stays removed after a helper restart.
-          ORIGIN_REMOVED: "origin.removed",
-          PAGE_VISITED: "page.visited",
-          ITEM_CREATED: "item.created",
-          // Every content change, INCLUDING every draft keystroke batch. This is the
-          // event the flush policy below governs.
-          ITEM_CONTENT: "item.content",
-          ITEM_READY: "item.ready",
-          ITEM_DELETED: "item.deleted",
-          ITEM_REOPENED: "item.reopened",
-          // {item, rev}. The reviewer marked the item done themselves ("Mark as
-          // done"). An explicit act at one revision, never a state claim: it carries
-          // no record, and the projection applies it only when the item is still
-          // outstanding at exactly that revision (lifecycle.canClose).
-          ITEM_CLOSED: "item.closed",
-          // {item, stamp}. The rail marked an agent reply read (its card was
-          // opened), naming the reply by record.replyStamp. No record, and not a
-          // lifecycle move: the projection records it on the item as reply_seen only
-          // when it names the item's current reply, and no agent acts on it.
-          REPLY_SEEN: "reply.seen",
-          REPLY_FOLDED: "reply.folded",
-          REPLY_REJECTED: "reply.rejected",
-          REVIEW_ARCHIVED: "review.archived",
-          // {agent_session_id}. A review from before sessions (owner "legacy") was
-          // taken into an agent session, once, by a Library pick-up. It belongs to
-          // that session from here on. A review with a real session is never adopted.
-          REVIEW_ADOPTED: "review.adopted"
-        };
-        CATALOG.NOT_WORK_EVENTS = [
-          EVENT.ORIGIN_REGISTERED,
-          EVENT.ORIGIN_REMOVED,
-          EVENT.PAGE_VISITED,
-          EVENT.REVIEW_ADOPTED,
-          EVENT.REPLY_SEEN
-        ];
-        var EVENT_TYPES = Object.keys(EVENT).map(function(k) {
-          return EVENT[k];
-        });
-        var EVENT_FIELD = {
-          EVENT: "event",
-          EVENT_ID: "event_id",
-          TS: "ts",
-          SEQ: "seq",
-          REVIEW: "review",
-          ITEM: "item",
-          REV: "rev",
-          PAGE_PATH: "page_path",
-          PAGE_TITLE: "page_title",
-          PAGE_SEQ: "page_seq",
-          SOURCE_HINT: "source_hint",
-          // WHEN THE HELPER TOOK THE EVENT IN, by the helper's own clock. The helper
-          // stamps it at append and overwrites anything a client sent under this
-          // name, so it is the one time on an event a page cannot choose. `ts` is
-          // when the browser made the event, which for a held comment can be most of
-          // an hour before anyone could have seen it (Hold queues the event in the
-          // browser, docs/features/20260917.01_hold_toggle); the waiting clock on the
-          // rail starts here instead, so releasing Hold never trips the overdue alert
-          // at once (board row LAHE-held-release-waiting-clock).
-          RECEIVED_AT: "received_at"
-        };
-        var IDEMPOTENCE_KEY = EVENT_FIELD.EVENT_ID;
-        function newEvent(input) {
-          var src = input || {};
-          if (EVENT_TYPES.indexOf(src.event) === -1) {
-            throw new Error("newEvent: event must be one of " + EVENT_TYPES.join(", ") + ", got " + String(src.event));
-          }
-          if (typeof src.event_id !== "string" || !src.event_id) {
-            throw new Error("newEvent: event_id is required and is client-minted; idempotence is by event_id");
-          }
-          if (!isSafeId(src.review)) {
-            throw new Error("newEvent: review must be a safe id, got " + String(src.review));
-          }
-          var e = {};
-          e[EVENT_FIELD.EVENT] = src.event;
-          e[EVENT_FIELD.EVENT_ID] = src.event_id;
-          e[EVENT_FIELD.TS] = src.ts || (/* @__PURE__ */ new Date()).toISOString();
-          e[EVENT_FIELD.SEQ] = typeof src.seq === "number" ? src.seq : null;
-          e[EVENT_FIELD.REVIEW] = src.review;
-          e[EVENT_FIELD.ITEM] = src.item || null;
-          e[EVENT_FIELD.REV] = typeof src.rev === "number" ? src.rev : null;
-          e[EVENT_FIELD.PAGE_PATH] = src.page_path || null;
-          e[EVENT_FIELD.PAGE_TITLE] = src.page_title || null;
-          e[EVENT_FIELD.PAGE_SEQ] = typeof src.page_seq === "number" ? src.page_seq : null;
-          e[EVENT_FIELD.SOURCE_HINT] = src.source_hint || null;
-          if (src.payload && typeof src.payload === "object") {
-            Object.keys(src.payload).forEach(function(k) {
-              if (!Object.prototype.hasOwnProperty.call(e, k)) e[k] = src.payload[k];
-            });
-          }
-          return e;
-        }
-        function encodeEventLine(event) {
-          return JSON.stringify(event) + "\n";
-        }
-        function parseEventLine(line) {
-          var parsed;
-          try {
-            parsed = JSON.parse(line);
-          } catch (err) {
-            return { ok: false, reason: "not JSON: " + err.message };
-          }
-          if (!parsed || typeof parsed !== "object") return { ok: false, reason: "not an object" };
-          if (EVENT_TYPES.indexOf(parsed[EVENT_FIELD.EVENT]) === -1) {
-            return { ok: false, reason: "unknown event type " + String(parsed[EVENT_FIELD.EVENT]) };
-          }
-          if (typeof parsed[EVENT_FIELD.EVENT_ID] !== "string" || !parsed[EVENT_FIELD.EVENT_ID]) {
-            return { ok: false, reason: "missing event_id, which is the idempotence key" };
-          }
-          return { ok: true, event: parsed };
-        }
-        var FLUSH = {
-          // Synchronous, every keystroke, no debounce. A reload, a crash, or a sleep
-          // costs nothing.
-          TO_BROWSER_STORAGE: "every keystroke, synchronously",
-          // To the helper within 750ms of being queued.
-          HELPER_DEBOUNCE_MS: 750,
-          // An item whose queued events are ALL drafts goes to the helper at most
-          // once per this long (spec 20260922.01, requirement 4). The browser already
-          // has every keystroke; the helper copy is a crash backup, and a few seconds
-          // of it is an acceptable loss (Ken, 2026-09-22). It is a deadline from the
-          // item's last draft post, not a timer that typing pushes back. The poll
-          // loop cannot get round it either: flush itself applies it.
-          DRAFT_FLOOR_MS: 1e4,
-          // A free-writing run record's drafts carry the whole run, so they wait
-          // longer (docs/features/20260928.01_free_writing). A commit is never held.
-          RUN_DRAFT_FLOOR_MS: 3e4,
-          // Choice buttons (docs/features/20261013.01_choice_buttons): every event of
-          // a choice item waits until this long after the page's last press, so
-          // presses made close together reach the helper in one post and wake the
-          // agent once. Capped at PRESS_CAP_MS from the first held press, so steady
-          // clicking cannot hold work back for minutes. Hiding the tab and leaving
-          // the page flush at once, as for drafts; Hold's gate still applies.
-          PRESS_QUIET_MS: 3e3,
-          PRESS_CAP_MS: 1e4,
-          // Plus an immediate flush on each of these, with no debounce and no draft
-          // floor. `hide` is the tab being hidden, which is often the last thing a
-          // page hears before the browser discards it.
-          IMMEDIATE_ON: ["blur", "hide", "ready", "navigation", "unload"],
-          // THE UNLOAD POST USES fetch(..., {keepalive: true}), NEVER sendBeacon.
-          // sendBeacon cannot set the custom header D11 requires and cannot set the
-          // JSON content type, so the obvious tool either drops the header (silently
-          // breaking "no exceptions") or watches the post get refused during unload,
-          // when nothing is watching.
-          TRANSPORT_ON_UNLOAD: "fetch keepalive",
-          SEND_BEACON_IS_FORBIDDEN: true,
-          // Keepalive carries headers at the cost of a body limit of roughly 64KB
-          // across all in-flight keepalive requests.
-          KEEPALIVE_MAX_BYTES: 64 * 1024,
-          // An edit too large for that is already safe in browser storage and goes to
-          // the helper on the next load, so the cap costs latency, never work.
-          OVERSIZE_FALLBACK: "leave it in browser storage; post it on the next load"
-        };
-        function byteLength(text) {
-          var s = String(text === null || text === void 0 ? "" : text);
-          if (typeof TextEncoder === "function") return new TextEncoder().encode(s).length;
-          return Buffer.byteLength(s, "utf8");
-        }
-        function fitsKeepalive(body) {
-          return byteLength(typeof body === "string" ? body : JSON.stringify(body)) <= FLUSH.KEEPALIVE_MAX_BYTES;
-        }
-        var REPLY_FIELD = {
-          ITEM: "item",
-          REV: "rev",
-          STATUS: "status",
-          AGENT: "agent",
-          REASON: "reason",
-          TEXT: "text",
-          FILES: "files",
-          NEEDS_SEE: "user_needs_to_see_reply",
-          // A proofread question on a long hand-written run: the agent placed the
-          // words as written and lists fixes as {block, from, to}, block being the
-          // index in new_blocks. Accepted on a question only.
-          PROOFREAD: "proofread",
-          SUGGESTIONS: "suggestions"
-        };
-        function acceptsNotesFlag(body) {
-          return !!body && body.notes === true;
-        }
-        var SUGGESTIONS_MAX = 400;
-        var SUGGESTION_TEXT_MAX = 2e5;
-        function suggestionsProblem(list) {
-          if (!Array.isArray(list)) return "suggestions must be a list";
-          if (list.length > SUGGESTIONS_MAX) return "suggestions holds " + list.length + " fixes, more than " + SUGGESTIONS_MAX;
-          for (var i = 0; i < list.length; i += 1) {
-            var s = list[i];
-            if (!s || typeof s !== "object" || Array.isArray(s)) return "suggestion " + i + " must be an object";
-            if (!Number.isInteger(s.block) || s.block < 0) return "suggestion " + i + " block must be a whole number from 0";
-            if (typeof s.from !== "string" || !s.from) return "suggestion " + i + " from must be a non-empty string";
-            if (typeof s.to !== "string") return "suggestion " + i + " to must be a string";
-            if (s.from.length > SUGGESTION_TEXT_MAX || s.to.length > SUGGESTION_TEXT_MAX) return "suggestion " + i + " from or to is over " + SUGGESTION_TEXT_MAX + " characters";
-          }
-          return null;
-        }
-        var REPLY_STATUS = { HANDLED: "handled", NOT_HANDLED: "not_handled", QUESTION: "question" };
-        var REPLY_STATUSES = [REPLY_STATUS.HANDLED, REPLY_STATUS.NOT_HANDLED, REPLY_STATUS.QUESTION];
-        var REPLY_REQUIRED = {
-          handled: [REPLY_FIELD.ITEM, REPLY_FIELD.REV, REPLY_FIELD.STATUS],
-          not_handled: [REPLY_FIELD.ITEM, REPLY_FIELD.REV, REPLY_FIELD.STATUS, REPLY_FIELD.REASON],
-          question: [REPLY_FIELD.ITEM, REPLY_FIELD.REV, REPLY_FIELD.STATUS, REPLY_FIELD.TEXT]
-        };
-        var REPLY_FILE = {
-          SINGLE: "replies.jsonl",
-          PATTERN: /^replies(?:-([A-Za-z0-9][A-Za-z0-9._-]{0,63}))?\.jsonl$/,
-          prefix: "replies-",
-          suffix: ".jsonl"
-        };
-        function agentFromFilename(filename) {
-          var m = REPLY_FILE.PATTERN.exec(String(filename || ""));
-          if (!m) return { ok: false, agent: null, reason: "reply file name is not replies.jsonl or replies-<agent>.jsonl" };
-          return { ok: true, agent: m[1] || null, reason: null };
-        }
-        function parseReplyLine(line, options) {
-          var opts = options || {};
-          var parsed;
-          try {
-            parsed = JSON.parse(line);
-          } catch (err) {
-            return { ok: false, code: "REPLY_LINE_MALFORMED", reason: "not JSON: " + err.message };
-          }
-          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-            return { ok: false, code: "REPLY_LINE_MALFORMED", reason: "a reply line must be a JSON object" };
-          }
-          var status = parsed[REPLY_FIELD.STATUS];
-          if (REPLY_STATUSES.indexOf(status) === -1) {
-            return {
-              ok: false,
-              code: "REPLY_LINE_MALFORMED",
-              reason: "status must be one of " + REPLY_STATUSES.join(", ") + ", got " + JSON.stringify(status)
-            };
-          }
-          var missing = [];
-          REPLY_REQUIRED[status].forEach(function(field) {
-            var v = parsed[field];
-            if (v === null || v === void 0 || v === "" || typeof v === "string" && !v.trim()) missing.push(field);
-          });
-          if (typeof parsed[REPLY_FIELD.ITEM] !== "string") missing.push(REPLY_FIELD.ITEM);
-          if (typeof parsed[REPLY_FIELD.REV] !== "number") missing.push(REPLY_FIELD.REV);
-          if (missing.length) {
-            return {
-              ok: false,
-              code: "REPLY_LINE_MALFORMED",
-              reason: "status " + status + " needs " + REPLY_REQUIRED[status].join(", ") + "; missing or wrong type: " + missing.join(", ")
-            };
-          }
-          var marksProofread = parsed[REPLY_FIELD.PROOFREAD] !== void 0 || parsed[REPLY_FIELD.SUGGESTIONS] !== void 0;
-          if (marksProofread) {
-            if (status !== REPLY_STATUS.QUESTION) {
-              return { ok: false, code: "REPLY_LINE_MALFORMED", reason: "proofread and suggestions belong on a question reply only" };
-            }
-            if (parsed[REPLY_FIELD.PROOFREAD] !== true) {
-              return { ok: false, code: "REPLY_LINE_MALFORMED", reason: "proofread must be true when suggestions are given" };
-            }
-            var problem = suggestionsProblem(parsed[REPLY_FIELD.SUGGESTIONS] === void 0 ? [] : parsed[REPLY_FIELD.SUGGESTIONS]);
-            if (problem) return { ok: false, code: "REPLY_LINE_MALFORMED", reason: problem };
-          }
-          var agent = typeof parsed[REPLY_FIELD.AGENT] === "string" && parsed[REPLY_FIELD.AGENT] ? parsed[REPLY_FIELD.AGENT] : opts.filenameAgent || null;
-          var reply = {};
-          reply[REPLY_FIELD.ITEM] = parsed[REPLY_FIELD.ITEM];
-          reply[REPLY_FIELD.REV] = parsed[REPLY_FIELD.REV];
-          reply[REPLY_FIELD.STATUS] = status;
-          reply[REPLY_FIELD.AGENT] = agent;
-          reply[REPLY_FIELD.REASON] = typeof parsed[REPLY_FIELD.REASON] === "string" ? parsed[REPLY_FIELD.REASON] : null;
-          reply[REPLY_FIELD.TEXT] = typeof parsed[REPLY_FIELD.TEXT] === "string" ? parsed[REPLY_FIELD.TEXT] : null;
-          reply[REPLY_FIELD.FILES] = Array.isArray(parsed[REPLY_FIELD.FILES]) ? parsed[REPLY_FIELD.FILES].slice() : [];
-          reply[REPLY_FIELD.NEEDS_SEE] = parsed[REPLY_FIELD.NEEDS_SEE] === true;
-          if (marksProofread) {
-            reply[REPLY_FIELD.PROOFREAD] = true;
-            reply[REPLY_FIELD.SUGGESTIONS] = (parsed[REPLY_FIELD.SUGGESTIONS] || []).map(function(sg) {
-              return { block: sg.block, from: sg.from, to: sg.to };
-            });
-          }
-          return { ok: true, reply, reason: null };
-        }
-        var REPLY_POLL = {
-          INTERVAL_MS: 5e3,
-          // A file SHORTER than its recorded offset was truncated or rewritten rather
-          // than appended to, so the offset resets to zero and the file is re-folded.
-          // Safe, because folding is idempotent.
-          RESET_ON_SHRINK: true,
-          // A final line with no trailing newline is HELD until it completes, so a
-          // torn write is never half-parsed.
-          HOLD_TORN_FINAL_LINE: true
-        };
-        var REPLY_CURSOR_FIELD = EVENT_FIELD.SEQ;
-        function nextReadOffset(recordedOffset, fileSize) {
-          if (typeof fileSize !== "number" || fileSize < 0) throw new Error("nextReadOffset: fileSize must be a number");
-          var offset = typeof recordedOffset === "number" && recordedOffset > 0 ? recordedOffset : 0;
-          if (fileSize < offset) return { offset: 0, refold: true };
-          return { offset, refold: false };
-        }
-        function splitCompleteLines(chunk) {
-          var text = String(chunk || "");
-          var lines = text.split("\n");
-          var remainder = lines.pop();
-          return { lines, remainder };
-        }
-        var SCRIPT_ATTR = {
-          REVIEW: "data-lahe-review",
-          TOKEN: "data-lahe-token",
-          HELPER: "data-lahe-helper",
-          FALLBACK: "data-lahe-fallback",
-          FRAMES: "data-lahe-frames",
-          START: "data-lahe-start",
-          // A `lahe write` notes review (free writing, design call 2). The layer
-          // reads it at boot, before the helper has answered anything, so an empty
-          // notes page can open for typing and no other empty page does.
-          NOTES: "data-lahe-notes",
-          // Choice buttons (docs/features/20261013.01_choice_buttons): present on the
-          // tag of a page the helper serves itself as a document, added at response
-          // time and never written to disk. `lahe add` and heal never pass it. The
-          // layer arms choice groups only when it is there.
-          DOCUMENT: "data-lahe-document",
-          // Stable addresses: the old page-server origins of this page's site, as a
-          // JSON array. The layer reads a record made on one of them as made on this
-          // page, so a review's old comments show at its new address. Written only by
-          // the helper, from its own records (page_routes.aliasesFor).
-          ALIASES: "data-lahe-aliases",
-          // Stable addresses, V31: the old paths of this page, as a JSON array. Only
-          // an old Markdown review has one: its page was the rendered file
-          // (/<name>-<hash>.html), and its new address is the source (/doc.md). Read
-          // only together with an old origin (record.samePage).
-          PATH_ALIASES: "data-lahe-path-aliases",
-          // Each page carries its own comments (Part 2): this page's other addresses
-          // in the review that answers on it, as a JSON array of "origin path"
-          // strings: a link address on another page's site, an old address. Written
-          // only by the helper, from the review's own records (page_routes.spellingsFor).
-          SPELLINGS: "data-lahe-spellings"
-        };
-        var LOOPBACK_PORT_ORIGIN = /^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/;
-        function isLoopbackPortOrigin(value) {
-          return typeof value === "string" && LOOPBACK_PORT_ORIGIN.test(value);
-        }
-        var ALIAS_MAX = 16;
-        var PATH_ALIAS = /^\/[^"'<>\s\\]{0,511}$/;
-        function isPathAlias(value) {
-          return typeof value === "string" && PATH_ALIAS.test(value);
-        }
-        var SPELLING_ORIGIN = /^http:\/\/[a-z0-9.-]{1,253}(?::\d{1,5})?$/;
-        function isSpellingOrigin(value) {
-          return typeof value === "string" && SPELLING_ORIGIN.test(value);
-        }
-        function isSpelling(value) {
-          if (typeof value !== "string") return false;
-          var at = value.indexOf(" ");
-          return at > 0 && isSpellingOrigin(value.slice(0, at)) && isPathAlias(value.slice(at + 1));
-        }
-        function spellingsAttribute(list) {
-          if (!Array.isArray(list)) throw new Error("scriptTag: spellings must be a list");
-          if (list.length > ALIAS_MAX) throw new Error("scriptTag: at most " + ALIAS_MAX + " spellings");
-          list.forEach(function(one) {
-            if (!isSpelling(one)) throw new Error('scriptTag: a spelling is "origin path", not ' + JSON.stringify(one));
-          });
-          return JSON.stringify(list).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-        }
-        function pathAliasesAttribute(paths) {
-          if (!Array.isArray(paths)) throw new Error("scriptTag: pathAliases must be a list");
-          if (paths.length > ALIAS_MAX) throw new Error("scriptTag: at most " + ALIAS_MAX + " path aliases");
-          paths.forEach(function(one) {
-            if (!isPathAlias(one)) throw new Error("scriptTag: a path alias must be an absolute path, not " + JSON.stringify(one));
-          });
-          return JSON.stringify(paths).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-        }
-        function aliasesAttribute(aliases) {
-          if (!Array.isArray(aliases)) throw new Error("scriptTag: aliases must be a list");
-          if (aliases.length > ALIAS_MAX) throw new Error("scriptTag: at most " + ALIAS_MAX + " aliases");
-          aliases.forEach(function(alias) {
-            if (!isLoopbackPortOrigin(alias)) {
-              throw new Error("scriptTag: an alias must be a loopback http origin, not " + JSON.stringify(alias));
-            }
-          });
-          return JSON.stringify(aliases).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        }
-        var FRAMES_ALLOW = "allow";
-        var START_HIDDEN = "hidden";
-        var NOTES_ON = "true";
-        var DOCUMENT_ON = "true";
-        var SCRIPT_FALLBACK_ONERROR = "var s=document.createElement('script');s.src=this.getAttribute('" + SCRIPT_ATTR.FALLBACK + "');document.head.appendChild(s)";
-        var SCRIPT_SELECTOR = "script[" + SCRIPT_ATTR.REVIEW + "]";
-        function scriptTag(options) {
-          var o = options || {};
-          if (!o.src) throw new Error("scriptTag: src is required (the path to the built library)");
-          if (!isSafeId(o.review)) throw new Error("scriptTag: review must be a safe id");
-          if (!o.token) throw new Error("scriptTag: token is required; absent configuration fails closed");
-          var fallback = o.fallback ? "        " + SCRIPT_ATTR.FALLBACK + '="' + o.fallback + '"\n        onerror="' + SCRIPT_FALLBACK_ONERROR + '"\n' : "";
-          return '<script src="' + o.src + '"\n        ' + SCRIPT_ATTR.REVIEW + '="' + o.review + '"\n        ' + SCRIPT_ATTR.TOKEN + '="' + o.token + '"\n        ' + SCRIPT_ATTR.HELPER + '="' + (o.helper || DEFAULT_HELPER_ORIGIN) + '"\n' + fallback + (o.notes === true ? "        " + SCRIPT_ATTR.NOTES + '="' + NOTES_ON + '"\n' : "") + (o.document === true ? "        " + SCRIPT_ATTR.DOCUMENT + '="' + DOCUMENT_ON + '"\n' : "") + (o.aliases !== void 0 ? "        " + SCRIPT_ATTR.ALIASES + '="' + aliasesAttribute(o.aliases) + '"\n' : "") + (o.pathAliases !== void 0 ? "        " + SCRIPT_ATTR.PATH_ALIASES + '="' + pathAliasesAttribute(o.pathAliases) + '"\n' : "") + (o.spellings !== void 0 ? "        " + SCRIPT_ATTR.SPELLINGS + '="' + spellingsAttribute(o.spellings) + '"\n' : "") + "        defer><\/script>";
-        }
-        var CLI_EXIT = {
-          OK: 0,
-          HELPER_UNREACHABLE: 2,
-          UNKNOWN_REVIEW: 3,
-          BAD_USAGE: 4,
-          // The agent session is closed. Monitoring has ended; do not relaunch.
-          SESSION_CLOSED: 5,
-          // Another agent ran `lahe session takeover`. This monitor is fenced and the
-          // work it was about to print belongs to the new owner.
-          SESSION_TAKEN_OVER: 6
-        };
-        var WAKE = {
-          FILE: "wake.log",
-          KIND: {
-            // A ready item landed for a review this session owns.
-            WORK: "work",
-            // Another agent ran `lahe session takeover` on this session.
-            TAKEOVER: "takeover",
-            // The session was closed. Nothing more will be appended.
-            CLOSED: "closed",
-            // The reviewer pressed End review on the rail, for a review this session
-            // owns. It carries a review and no item, because it is about the review
-            // rather than about one piece of work.
-            //
-            // IT IS NOT "STOP". An ended review's unanswered items are still the
-            // reviewer's requests, so the answer to this line is the same drain as
-            // any other, followed by the end-of-review routine in the contract. Only
-            // TAKEOVER and CLOSED mean stop.
-            //
-            // Without this line the feed had no way to say a review had ended, and
-            // the contract's promise that the reviewer "can end a review from the
-            // page ... and you are woken" was false. Worse than silent: an ended
-            // review drains to zero ready items, which is exactly what a review the
-            // agent has kept up with looks like, so the agent reads "finished" as
-            // "quiet" and waits.
-            ENDED: "ended"
-          },
-          FIELD: {
-            AT: "at",
-            KIND: "kind",
-            REVIEW: "review",
-            ITEM: "item",
-            REV: "rev",
-            DRAIN: "drain"
-          }
-        };
-        function shellWord(value) {
-          var text = String(value);
-          if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(text)) return text;
-          return "'" + text.replace(/'/g, "'\\''") + "'";
-        }
-        function stateDirFlag(stateDirPath) {
-          if (typeof stateDirPath !== "string" || !stateDirPath) return "";
-          return " --state-dir " + shellWord(stateDirPath);
-        }
-        function drainCommand(sessionId, stateDirPath) {
-          return "lahe status --session " + String(sessionId) + " --json --quiet" + stateDirFlag(stateDirPath);
-        }
-        function monitorCommand(sessionId, stateDirPath, handoffRevisions) {
-          var ids = Array.isArray(sessionId) ? sessionId : [sessionId];
-          return "lahe monitor" + ids.map(function(id) {
-            return " --session " + String(id) + (handoffRevisions && Number.isInteger(handoffRevisions[id]) ? " --handoff-rev " + handoffRevisions[id] : "");
-          }).join("") + stateDirFlag(stateDirPath);
-        }
-        function takeoverCommand(sessionId, stateDirPath, requestId) {
-          return "lahe session takeover " + String(sessionId) + stateDirFlag(stateDirPath) + (isSafeId(requestId) ? " --request " + requestId : "");
-        }
-        function reviewCommand(target, sessionId, stateDirPath) {
-          return "lahe review " + shellWord(target) + " --session " + String(sessionId) + stateDirFlag(stateDirPath);
-        }
-        var MONITOR = {
-          // The heartbeat and the activity stamp are separate files on purpose:
-          // session.json is rewritten by takeover, and a heartbeat sharing that file
-          // would race it.
-          HEARTBEAT_FILE: "monitor.json",
-          ACTIVITY_FILE: "activity.json",
-          // The items (review, id, rev) the monitor has already printed to the agent
-          // holding this handoff rev. A relaunch with only these still unanswered
-          // waits rather than printing them again and exiting at once.
-          DELIVERED_FILE: "delivered.json",
-          // The monitor's default local poll interval, in seconds. The heartbeat is
-          // written once per loop, so a heartbeat older than a few intervals means the
-          // process is gone rather than slow.
-          INTERVAL_SECONDS: 15,
-          // How many intervals a heartbeat may be behind and still count as watching.
-          FRESH_INTERVALS: 3,
-          // PRIMARY (LAHE Library): the first --session of the monitor writing this
-          // heartbeat. A monitor watching several sessions writes one heartbeat into
-          // each, all naming the same primary, so the Library can say which agent is
-          // watching a session it picked up.
-          HEARTBEAT_FIELD: { PID: "pid", HANDOFF_REV: "handoff_rev", AT: "at", PRIMARY: "primary" },
-          ACTIVITY_FIELD: { AT: "at" }
-        };
-        MONITOR.HEARTBEAT_FRESH_MS = MONITOR.INTERVAL_SECONDS * MONITOR.FRESH_INTERVALS * 1e3;
-        MONITOR.ACTIVITY_FRESH_MS = 18e4;
-        var AGENT_LIVENESS = {
-          STATE: {
-            // Items are waiting, and the agent has run a lahe command or landed a
-            // reply in the last few minutes. It is mid-task, which is not alarming
-            // however long the item has been in the queue behind it.
-            WORKING: "working",
-            // Items are waiting and nothing has come back for a while.
-            WAITING: "waiting",
-            // Items are waiting, nothing has come back, and the machine can see that
-            // nothing is listening: no process holds this session's wake feed open, no
-            // live monitor, no lahe command in minutes. A different next move for the
-            // reviewer, so a different state.
-            NO_AGENT: "no_agent",
-            // NOTHING IS WAITING. Says nothing at all, and this is the state a healthy
-            // review spends most of its life in.
-            NONE: "none"
-          },
-          FIELD: {
-            STATE: "state",
-            UNANSWERED: "unanswered",
-            OLDEST_UNANSWERED_AT: "oldest_unanswered_at",
-            // When the newest reply on this review landed, or null if none ever has.
-            // It is evidence of an agent doing something recently, and it is what
-            // `lahe session list` shows a human. It is never on the reviewer's line by
-            // itself: an old reply on a fully answered review is not news.
-            LAST_REPLY_AT: "last_reply_at",
-            // true, false, or NULL FOR CANNOT TELL. Null is a real answer and it is
-            // the answer on any host where the machine cannot be asked. It never
-            // produces a claim in either direction; the line falls back to the wait.
-            LISTENING: "listening",
-            MONITOR_AT: "monitor_at",
-            ACTIVITY_AT: "activity_at",
-            // The session that owns this review, or null for a review with no
-            // session. The rail's handoff message names it in the takeover command.
-            SESSION_ID: "session_id",
-            // true when the session's state is outside the default folder, so a copied
-            // command needs --state-dir. A boolean on purpose: the page is never sent
-            // a filesystem path.
-            STATE_DIR_FLAG: "state_dir_flag_needed",
-            // The id of the oldest waiting item. With oldest_unanswered_at (its
-            // wait-start) it keys the one notice the rail raises for a late wait.
-            OLDEST_ITEM: "oldest_unanswered_item",
-            // The human's name for the owning session (set with --name or `lahe
-            // session name`), or null. Display text: the rail draws it as text only.
-            NAME: "session_name",
-            // true when NAME was read off a page's own title (`lahe session name
-            // --from-review`). The rail still shows it, but its hand-off message,
-            // which a new agent reads as its first prompt, leaves it out.
-            NAME_FROM_PAGE: "session_name_from_page",
-            // One of PRESENCE below: what the Library may say about the agent,
-            // whether or not anything is waiting.
-            PRESENCE: "presence"
-          },
-          // listening: a live monitor heartbeat on this handoff rev (or a process
-          //            holding the wake feed open).
-          // working:   neither, but a lahe command within CATALOG.WORKING_MS.
-          // away:      neither of those. The Library says when it was last active.
-          PRESENCE: { LISTENING: "listening", WORKING: "working", AWAY: "away" },
-          // THE WORDS, SPELLED ONCE, HERE. They used to be hand-copied into the layer,
-          // which is two spellings of one wire value: rename a state and the rail
-          // silently stopped recognising it, which looks exactly like a healthy rail
-          // with nothing to say. `{age}` is how long the oldest unanswered item has
-          // waited, filled in by whoever draws the line off its own clock, so a helper
-          // repeating an unchanged payload cannot freeze a number that is growing.
-          //
-          // They are in a reviewer's words, not ours. No monitors, no heartbeats, no
-          // wake feeds: none of that is the reviewer's problem, and naming it in front
-          // of them asks them to care about our plumbing.
-          //
-          // `none` is deliberately absent: a state with no words draws nothing.
-          TEXT: {
-            working: "agent is working, {age}",
-            waiting: "nothing back yet, {age}",
-            no_agent: "nobody has picked this up, {age}"
-          },
-          // THE QUIET INDICATOR, which is what the line wears the rest of the time.
-          //
-          // It is a convenience rather than an alarm, and it exists because there are
-          // two moments a reviewer actually looks: at the start ("will my comments
-          // reach the agent, did this set up correctly?") and after a break ("did
-          // anything die while I was away?"). Both are the same question, is the chain
-          // intact, and both deserve a glanceable answer rather than a blank space.
-          //
-          // Two words, no punctuation, no verb: it must never look like it wants
-          // reading. `null` when the machine cannot be asked, because a shrug is not a
-          // status and inventing either answer would be worse than silence.
-          CONNECTION: {
-            connected: "agent listening",
-            absent: "no agent listening"
-          },
-          // THE HOVER TEXT, assembled from these in order by whoever draws the line.
-          //
-          // This is where everything the tool actually knows about the connection
-          // goes: whether the helper is answering, whether an agent has this review
-          // open, when it last replied, and where the work is being kept. The line
-          // itself stays short; a reviewer who is curious, or worried, hovers.
-          //
-          // Still no monitors, no heartbeats and no wake feeds. "Has this review open"
-          // is what the machine can actually see (a process holding this session's
-          // feed open) said in words that mean something to the person reading them.
-          DETAIL: {
-            helper_up: "The helper is answering this page, so comments and edits reach it as you make them.",
-            helper_down: "The helper is not answering right now, so your work is being kept in this browser until it is.",
-            agent_connected: "An agent has this review open.",
-            agent_absent: "No agent has this review open.",
-            agent_unknown: "Whether an agent has this review open cannot be checked on this computer.",
-            agent_named: "The agent on this review is named {name}.",
-            replied: "The agent last replied {reply} ago.",
-            never_replied: "The agent has not replied on this review yet.",
-            waiting: "Your oldest unanswered item has been waiting {age}.",
-            stored: "Your comments and edits are stored in this browser and in the helper's log on disk.",
-            save: "You can get your own copy any time: use Copy review or Export review to file in the menu."
-          },
-          // THE LOUD HALF, made prominent (Ken, 2026-09-16: "active boxes should
-          // change color if they haven't been picked up after a certain amount of
-          // time. something with more prominence should tell you to go check your
-          // agent or assign a new one to this doc.").
-          //
-          // Shown only while the wait is overdue (see `overdue` below): a banner at
-          // the top of the rail and a word on each late card. Same rule as the TEXT
-          // above: a reviewer's words, no plumbing. `{age}` is filled in the same way.
-          PROMINENT: {
-            BANNER: {
-              no_agent: "Nobody has picked up your comments in {age}.",
-              waiting: "Nothing has come back on your comments in {age}."
-            },
-            CHECK: "Check your agent's window first. It may have stopped, or it may be waiting on you.",
-            // When the session has a name, say which agent. Ken runs many at once.
-            CHECK_NAMED: "Check the agent named {name} first. It may have stopped, or it may be waiting on you.",
-            HANDOFF_BUTTON: "Copy a message for a new agent",
-            COPIED: "Copied. Paste it into a new agent and it will pick up your comments.",
-            COPY_FAILED: "Could not copy. Select the message below and copy it yourself.",
-            CARD: "waiting {age}",
-            // The one pop-up notice raised when a wait first goes late. A notice has
-            // no buttons of its own, so it points at the rail, where the banner is.
-            TOAST_LABEL: "Comments waiting",
-            TOAST_CHECK: "Check your agent's window.",
-            TOAST_CHECK_NAMED: "Check the agent named {name}.",
-            TOAST_OPEN: "Open the rail to hand this doc to a new agent."
-          },
-          // WHEN THE LINE STARTS SPEAKING, counted from the moment the reviewer
-          // submitted, not from anything about a process.
-          //
-          // Thirty seconds, because that is where a person who has just typed
-          // something starts wondering whether it went anywhere. Not minutes: they are
-          // sitting there. Not instant either, because an agent that has had a comment
-          // for five seconds is reading it and a stopwatch started that fast is noise
-          // on every single comment.
-          //
-          // THE CLOCK STARTS ON SUBMITTED WORK ONLY. A draft the reviewer is still
-          // typing is waiting on nobody: drafts are invisible to agents everywhere
-          // else in this design (`record.isUnansweredReady` requires READY), and they
-          // are invisible to this clock for the same reason.
-          QUIET_MS: 3e4,
-          // A lahe command or a landed reply this recent is an agent mid-task. It is
-          // the difference the reviewer actually asked for: "waiting 10m and nothing
-          // has happened" is worth knowing, "waiting 10m while the agent works" is
-          // not alarming.
-          //
-          // Deliberately the same number as RECENT_COMMAND_MS. A model thinking
-          // through one hard comment leaves no footprint at all while it thinks, and
-          // no monitor is armed while an agent works the batch it was handed. At
-          // three minutes that quiet read as an empty chair, and a reviewer who
-          // commented mid-thought was told nobody had picked it up. One number for
-          // both means the agent counts as working for exactly as long as the machine
-          // counts somebody as being on the review.
-          ACTIVE_MS: 6e5,
-          // Past this, a wait with nothing happening is loud. Nothing the machine can
-          // see about listeners buys quiet here: a file tail can be armed all
-          // afternoon over an agent that stopped reading.
-          STALE_MS: 6e5,
-          // How recently a lahe command must have run for the machine to count as
-          // having somebody on it. The same as ACTIVE_MS on purpose, and only ever used
-          // to WITHHOLD the "no agent listening" wording: an exit-on-work monitor is
-          // gone the moment work arrives, so an agent can be mid-edit with nothing
-          // holding the feed open and no heartbeat.
-          RECENT_COMMAND_MS: 6e5,
-          // When "nobody has picked this up" goes loud. The words start at QUIET_MS
-          // like every other state, but the amber banner and the late card wait until
-          // here. Not being able to see a listener is weak evidence: an agent can be
-          // mid-thought with nothing holding the feed open, so half a minute of it is
-          // not enough to tell the reviewer their comment landed nowhere.
-          NO_AGENT_LOUD_MS: 12e4
-        };
-        function livenessOverdue(state, waitedMs) {
-          if (typeof state !== "string" || !Object.prototype.hasOwnProperty.call(AGENT_LIVENESS.TEXT, state)) return false;
-          if (typeof waitedMs !== "number" || !isFinite(waitedMs) || waitedMs < AGENT_LIVENESS.QUIET_MS) return false;
-          if (state === AGENT_LIVENESS.STATE.WORKING) return false;
-          if (state === AGENT_LIVENESS.STATE.NO_AGENT) return waitedMs >= AGENT_LIVENESS.NO_AGENT_LOUD_MS;
-          return waitedMs >= AGENT_LIVENESS.STALE_MS;
-        }
-        AGENT_LIVENESS.overdue = livenessOverdue;
-        function handoffMessage(sessionId, name, stateDirFlagNeeded, options) {
-          var library = !!(options && options.library === true);
-          var requestId = library && options && isSafeId(options.request) ? options.request : null;
-          var dirPath = library && typeof options.stateDir === "string" && options.stateDir ? options.stateDir : null;
-          var flag = stateDirFlag(dirPath);
-          var hasId = typeof sessionId === "string" && isSafeId(sessionId);
-          var elsewhere = !library && stateDirFlagNeeded === true ? [
-            "This review keeps its files outside Lahe's default folder, so add --state-dir with the folder the earlier agent's lahe commands used. If you cannot find it, ask me.",
-            ""
-          ] : [];
-          var run = hasId ? ["Run this command:", "", "    " + takeoverCommand(sessionId, dirPath, requestId), ""].concat(elsewhere) : [
-            "Run `lahe session list" + flag + "` to find the session for this document, then take it over with:",
-            "",
-            "    lahe session takeover <session-id>" + flag,
-            ""
-          ].concat(elsewhere);
-          var named = typeof name === "string" && name ? ", the session named " + JSON.stringify(name) : "";
-          var why = library ? "I am handing it to you from the Lahe Library so you can continue it." : "The agent that was working on it stopped answering my comments, and I am asking you to continue it.";
-          return ["Please take over my live Lahe review" + named + ". " + why, ""].concat(run).concat([
-            "It prints the commands to catch up. Then work every comment that is waiting and reply to each one, and keep watching for new ones."
-          ]).join("\n");
-        }
-        AGENT_LIVENESS.handoffMessage = handoffMessage;
-        return {
-          API_VERSION,
-          SERVICE_CONTRACT,
-          CONTRACT_VERDICT,
-          helperContractVerdict,
-          acceptsNotesFlag,
-          BASE,
-          DEFAULT_PORT,
-          DEFAULT_HOST,
-          DEFAULT_HELPER_ORIGIN,
-          ALLOWED_HOST_NAMES,
-          LOOPBACK_ORIGIN_HOSTS,
-          ORIGIN_LIMIT,
-          isRegisterableOrigin,
-          HEADER,
-          CLIENT_LAYER,
-          CLIENT_CLI,
-          CLIENTS,
-          CLIENT_CATALOG,
-          JSON_CONTENT_TYPE,
-          AUTH,
-          SAFE_ID,
-          isSafeId,
-          ROUTES,
-          CATALOG_ROUTES,
-          CATALOG_PAGE_PATH,
-          CATALOG_API_BASE,
-          CATALOG_TOKEN_META,
-          HEALTH_FIELD,
-          route,
-          requiredHeaders,
-          CHECK,
-          CHECKS,
-          checkNamed,
-          checkRequest,
-          hostAllowed,
-          STATUS_FOR_CODE,
-          statusFor,
-          errorBody,
-          CATALOG,
-          CATALOG_LEGACY_NOTE,
-          CATALOG_LOG,
-          catalogLogLine,
-          EVENT,
-          EVENT_TYPES,
-          EVENT_FIELD,
-          IDEMPOTENCE_KEY,
-          newEvent,
-          encodeEventLine,
-          parseEventLine,
-          FLUSH,
-          byteLength,
-          fitsKeepalive,
-          REPLY_FIELD,
-          REPLY_STATUS,
-          REPLY_STATUSES,
-          REPLY_REQUIRED,
-          REPLY_FILE,
-          agentFromFilename,
-          parseReplyLine,
-          SUGGESTIONS_MAX,
-          SUGGESTION_TEXT_MAX,
-          REPLY_POLL,
-          REPLY_CURSOR_FIELD,
-          nextReadOffset,
-          splitCompleteLines,
-          SCRIPT_ATTR,
-          ALIAS_MAX,
-          isLoopbackPortOrigin,
-          isPathAlias,
-          isSpellingOrigin,
-          isSpelling,
-          FRAMES_ALLOW,
-          START_HIDDEN,
-          NOTES_ON,
-          DOCUMENT_ON,
-          SCRIPT_SELECTOR,
-          SCRIPT_FALLBACK_ONERROR,
-          scriptTag,
-          PAGES,
-          isSiteLabel,
-          isSiteName,
-          HOST_FAMILY,
-          classifyHost,
-          siteOrigin,
-          siteNameFromOrigin,
-          SITE_ROUTES,
-          SUMMARY_ROUTES,
-          PROOF,
-          SUMMARY_VERSION,
-          CLI_EXIT,
-          WAKE,
-          stateDirFlag,
-          drainCommand,
-          monitorCommand,
-          takeoverCommand,
-          reviewCommand,
-          MONITOR,
-          AGENT_LIVENESS
-        };
-      });
-    }
-  });
-
   // src/layer/catalog/view_model.js
   var require_view_model = __commonJS({
     "src/layer/catalog/view_model.js"(exports, module) {
@@ -1529,7 +62,7 @@
         }
       })(typeof globalThis !== "undefined" ? globalThis : exports, function(protocol) {
         "use strict";
-        var CATALOG = protocol.CATALOG;
+        var CATALOG2 = protocol.CATALOG;
         var LEGACY_SESSION = "legacy";
         var TEXT = {
           TITLE: "Lahe Library",
@@ -1717,14 +250,14 @@
         }
         function withFetch(state, result) {
           var fetchState = "unreachable";
-          var failure = null;
+          var failure2 = null;
           if (result && result.ok) fetchState = "ok";
           else if (result && result.status === 401) fetchState = "unauthorized";
           else if (result && !result.unreachable && typeof result.status === "number") {
             fetchState = "failed";
-            failure = errorText(result.error);
+            failure2 = errorText(result.error);
           }
-          return assign({}, state, { fetch: fetchState, fetchFailure: failure });
+          return assign({}, state, { fetch: fetchState, fetchFailure: failure2 });
         }
         function shouldPoll(state) {
           return state.fetch !== "unauthorized";
@@ -1876,9 +409,12 @@
           var legacy = !session || isLegacy(session);
           var name = legacy || session.name_from_page === true ? null : session.name || null;
           var dirPath = list && typeof list.state_dir === "string" && list.state_dir ? list.state_dir : null;
-          return protocol.AGENT_LIVENESS.handoffMessage(legacy ? null : session.id, name, false, {
-            library: true,
-            stateDir: dirPath
+          return protocol.handoffMessage({
+            from: "library",
+            sessionId: legacy ? null : session.id,
+            name,
+            stateDir: dirPath,
+            request: null
           });
         }
         function sameWatcher(a, b) {
@@ -2135,15 +671,15 @@
         function hoistNotes(rows) {
           if (rows.length < 2) return [];
           var shared = rows[0].notices.filter(function(n) {
-            return rows.every(function(row) {
-              return row.notices.some(function(m) {
+            return rows.every(function(row2) {
+              return row2.notices.some(function(m) {
                 return m.text === n.text;
               });
             });
           });
           if (!shared.length) return [];
-          rows.forEach(function(row) {
-            row.notices = row.notices.filter(function(n) {
+          rows.forEach(function(row2) {
+            row2.notices = row2.notices.filter(function(n) {
               return !shared.some(function(m) {
                 return m.text === n.text;
               });
@@ -2275,7 +811,7 @@
           }
           var ts = terms(state.query);
           var searching = ts.length > 0;
-          var weekMs = CATALOG.DEFAULT_VIEW_DAYS * 24 * 60 * 60 * 1e3;
+          var weekMs = CATALOG2.DEFAULT_VIEW_DAYS * 24 * 60 * 60 * 1e3;
           var top = [];
           var week = [];
           var older = [];
@@ -2325,9 +861,9 @@
             if (!searching && rows.length > CARD_ROWS_SHOWN) {
               var hidden = 0;
               if (!cardOpenAll) {
-                rows = rows.filter(function(row, i) {
+                rows = rows.filter(function(row2, i) {
                   var r = visible[i];
-                  var keep = i < CARD_ROWS_SHOWN || r.waiting > 0 || row.starred || actingOn(state, r.id);
+                  var keep = i < CARD_ROWS_SHOWN || r.waiting > 0 || row2.starred || actingOn(state, r.id);
                   if (!keep) hidden += 1;
                   return keep;
                 });
@@ -2735,8 +1271,1428 @@
     }
   });
 
+  // src/contract/protocol.ts
+  var protocol_exports = {};
+  __export(protocol_exports, {
+    AGENT_LIVENESS: () => AGENT_LIVENESS,
+    ALIAS_MAX: () => ALIAS_MAX,
+    API_VERSION: () => API_VERSION,
+    AUTH: () => AUTH,
+    BASE: () => BASE,
+    CATALOG: () => CATALOG,
+    CATALOG_LOG: () => CATALOG_LOG,
+    CATALOG_PAGE_PATH: () => CATALOG_PAGE_PATH,
+    CATALOG_ROUTES: () => CATALOG_ROUTES,
+    CATALOG_TOKEN_META: () => CATALOG_TOKEN_META,
+    CHECK: () => CHECK,
+    CHECKS: () => CHECKS,
+    CLIENT_CATALOG: () => CLIENT_CATALOG,
+    CLIENT_CLI: () => CLIENT_CLI,
+    CLIENT_LAYER: () => CLIENT_LAYER,
+    CLI_EXIT: () => CLI_EXIT,
+    CONTRACT_VERDICT: () => CONTRACT_VERDICT,
+    DEFAULT_HELPER_ORIGIN: () => DEFAULT_HELPER_ORIGIN,
+    DEFAULT_HOST: () => DEFAULT_HOST,
+    DEFAULT_PORT: () => DEFAULT_PORT,
+    DOCUMENT_ON: () => DOCUMENT_ON,
+    EVENT: () => EVENT,
+    EVENT_FIELD: () => EVENT_FIELD,
+    EVENT_TYPES: () => EVENT_TYPES,
+    FLUSH: () => FLUSH,
+    FRAMES_ALLOW: () => FRAMES_ALLOW,
+    HEADER: () => HEADER,
+    HEALTH_FIELD: () => HEALTH_FIELD,
+    HOST_FAMILY: () => HOST_FAMILY,
+    IDEMPOTENCE_KEY: () => IDEMPOTENCE_KEY,
+    JSON_CONTENT_TYPE: () => JSON_CONTENT_TYPE,
+    LOOPBACK_ORIGIN_HOSTS: () => LOOPBACK_ORIGIN_HOSTS,
+    MONITOR: () => MONITOR,
+    NOTES_ON: () => NOTES_ON,
+    ORIGIN_LIMIT: () => ORIGIN_LIMIT,
+    PAGES: () => PAGES,
+    PROOF: () => PROOF,
+    REPLY_CURSOR_FIELD: () => REPLY_CURSOR_FIELD,
+    REPLY_FIELD: () => REPLY_FIELD,
+    REPLY_FILE: () => REPLY_FILE,
+    REPLY_POLL: () => REPLY_POLL,
+    REPLY_STATUS: () => REPLY_STATUS,
+    REPLY_STATUSES: () => REPLY_STATUSES,
+    ROUTES: () => ROUTES,
+    SAFE_ID: () => SAFE_ID,
+    SCRIPT_ATTR: () => SCRIPT_ATTR,
+    SCRIPT_FALLBACK_ONERROR: () => SCRIPT_FALLBACK_ONERROR,
+    SCRIPT_SELECTOR: () => SCRIPT_SELECTOR,
+    SERVICE_CONTRACT: () => SERVICE_CONTRACT,
+    SITE_ROUTES: () => SITE_ROUTES,
+    START_HIDDEN: () => START_HIDDEN,
+    SUGGESTIONS_MAX: () => SUGGESTIONS_MAX,
+    SUGGESTION_TEXT_MAX: () => SUGGESTION_TEXT_MAX,
+    SUMMARY_ROUTES: () => SUMMARY_ROUTES,
+    SUMMARY_VERSION: () => SUMMARY_VERSION,
+    WAKE: () => WAKE,
+    acceptsNotesFlag: () => acceptsNotesFlag,
+    agentFromFilename: () => agentFromFilename,
+    catalogLogLine: () => catalogLogLine,
+    checkRequest: () => checkRequest,
+    classifyHost: () => classifyHost,
+    drainCommand: () => drainCommand,
+    encodeEventLine: () => encodeEventLine,
+    errorBody: () => errorBody,
+    fitsKeepalive: () => fitsKeepalive,
+    handoffMessage: () => handoffMessage,
+    helperContractVerdict: () => helperContractVerdict,
+    hostAllowed: () => hostAllowed,
+    isJsonObject: () => isJsonObject,
+    isLoopbackPortOrigin: () => isLoopbackPortOrigin,
+    isPathAlias: () => isPathAlias,
+    isRegisterableOrigin: () => isRegisterableOrigin,
+    isSafeId: () => isSafeId,
+    isSiteLabel: () => isSiteLabel,
+    isSiteName: () => isSiteName,
+    isSpelling: () => isSpelling,
+    isSpellingOrigin: () => isSpellingOrigin,
+    legacyPickupNote: () => legacyPickupNote,
+    livenessOverdue: () => livenessOverdue,
+    monitorCommand: () => monitorCommand,
+    newEvent: () => newEvent,
+    nextReadOffset: () => nextReadOffset,
+    parseEventLine: () => parseEventLine,
+    parseReplyLine: () => parseReplyLine,
+    route: () => route,
+    scriptTag: () => scriptTag,
+    siteNameFromOrigin: () => siteNameFromOrigin,
+    siteOrigin: () => siteOrigin,
+    splitCompleteLines: () => splitCompleteLines,
+    stateDirFlag: () => stateDirFlag,
+    statusFor: () => statusFor,
+    takeoverCommand: () => takeoverCommand
+  });
+
+  // src/contract/json-object.ts
+  function isJsonObject(value) {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+  }
+
+  // src/contract/safe-id.ts
+  var SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+  function isSafeId(value) {
+    return typeof value === "string" && SAFE_ID.test(value);
+  }
+
+  // src/contract/service-contract.ts
+  var API_VERSION = "v1";
+  var SERVICE_CONTRACT = 17;
+  var CONTRACT_VERDICT = { CURRENT: "current", OLDER: "older", NEWER: "newer" };
+  function helperContractVerdict(health) {
+    const reported = isJsonObject(health) ? health["service_contract"] : void 0;
+    const live = typeof reported === "number" && Number.isInteger(reported) ? reported : 0;
+    if (live > SERVICE_CONTRACT) return CONTRACT_VERDICT.NEWER;
+    if (live < SERVICE_CONTRACT) return CONTRACT_VERDICT.OLDER;
+    return CONTRACT_VERDICT.CURRENT;
+  }
+
+  // src/contract/helper-address.ts
+  var DEFAULT_PORT = 7817;
+  var DEFAULT_HOST = "127.0.0.1";
+  var DEFAULT_HELPER_ORIGIN = "http://" + DEFAULT_HOST + ":" + String(DEFAULT_PORT);
+  var ALLOWED_HOST_NAMES = ["127.0.0.1", "localhost", "[::1]"];
+  function hostAllowed(hostHeader) {
+    if (typeof hostHeader !== "string" || hostHeader === "") return false;
+    const name = hostHeader.replace(/:\d+$/, "");
+    return ALLOWED_HOST_NAMES.some((allowed) => allowed === name);
+  }
+
+  // src/contract/review-write.ts
+  var LOOPBACK_ORIGIN_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
+  var ORIGIN_LIMIT = 16;
+  var DEFAULT_PORT_OF = { http: "80", https: "443" };
+  var ORIGIN_PATTERN = new RegExp(
+    "^(https?)://(" + LOOPBACK_ORIGIN_HOSTS.map((host) => host.replace(/[.[\]]/g, "\\$&")).join("|") + ")(?::(0|[1-9][0-9]{0,4}))?$"
+  );
+  function isRegisterableOrigin(origin) {
+    if (typeof origin !== "string") return false;
+    if (origin === "null") return true;
+    const match = ORIGIN_PATTERN.exec(origin);
+    const scheme = match?.[1];
+    if (scheme !== "http" && scheme !== "https") return false;
+    const port = match?.[3];
+    if (port === void 0) return true;
+    return Number(port) <= 65535 && port !== DEFAULT_PORT_OF[scheme];
+  }
+  function acceptsNotesFlag(body) {
+    return isJsonObject(body) && body["notes"] === true;
+  }
+
+  // src/contract/site-addresses.ts
+  var PAGES = {
+    PORT: 1483,
+    PORT_ENV: "LAHE_PAGES_PORT",
+    SUFFIX: "lahe.localhost",
+    PRINTED_ENDING: "lahe.localhost",
+    PRINTED_ENDING_REASON: "every browser treats .localhost names as this computer and as secure, with no setup",
+    PORT_FREE_OFF_REASON: "the port-80 forward is not set up",
+    LAHE_NAMES_OFF_REASON: "the .lahe option is not set up",
+    LIBRARY_NAME: "library",
+    MAX_LABELS: 4,
+    LABEL_MAX: 63,
+    NAME_MAX: 150,
+    RESERVED_NAMES: ["library", "lahe", "www", "api"],
+    MODE_SITES: "sites",
+    CORP: "same-origin"
+  };
+  var SITE_LABEL = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+  var SITE_HOST = /^([a-z0-9.-]+)\.lahe\.localhost(?::(\d{1,5}))?$/;
+  var SHORT_HOST = /^([a-z0-9.-]+)\.lahe(?::(\d{1,5}))?$/;
+  function isSiteLabel(value) {
+    return typeof value === "string" && value.length > 0 && value.length <= PAGES.LABEL_MAX && SITE_LABEL.test(value);
+  }
+  function isSiteName(value) {
+    if (typeof value !== "string" || value === "" || value.length > PAGES.NAME_MAX) return false;
+    const labels = value.split(".");
+    return labels.length <= PAGES.MAX_LABELS && labels.every((label) => isSiteLabel(label));
+  }
+  var HOST_FAMILY = { API: "api", LIBRARY: "library", PAGE: "page", BAD: "bad" };
+  function readSiteAddress(address, laheNames) {
+    const full = SITE_HOST.exec(address);
+    const short = full === null && laheNames ? SHORT_HOST.exec(address) : null;
+    const match = full ?? short;
+    const name = match?.[1];
+    if (name === void 0) return null;
+    return { name, port: match?.[2], short: full === null };
+  }
+  function portMatches(port, pagesPort) {
+    return port === void 0 || Number(port) === pagesPort;
+  }
+  function classifyHost(hostHeader, options) {
+    if (typeof hostHeader !== "string" || hostHeader === "") return { family: HOST_FAMILY.BAD };
+    if (hostAllowed(hostHeader)) return { family: HOST_FAMILY.API };
+    const address = readSiteAddress(hostHeader, options?.laheNames === true);
+    if (address === null || !portMatches(address.port, options?.pagesPort)) return { family: HOST_FAMILY.BAD };
+    const name = address.name;
+    if (name === PAGES.LIBRARY_NAME) {
+      return address.short ? { family: HOST_FAMILY.BAD } : { family: HOST_FAMILY.LIBRARY, name: PAGES.LIBRARY_NAME };
+    }
+    return isSiteName(name) ? { family: HOST_FAMILY.PAGE, name } : { family: HOST_FAMILY.BAD };
+  }
+  function siteOrigin(name, port) {
+    return "http://" + name + "." + PAGES.SUFFIX + (port === 80 ? "" : ":" + String(port));
+  }
+  function siteNameFromOrigin(origin, pagesPort, laheNames) {
+    const scheme = "http://";
+    if (typeof origin !== "string" || !origin.startsWith(scheme)) return null;
+    const address = readSiteAddress(origin.slice(scheme.length), laheNames === true);
+    if (address === null || address.name === PAGES.LIBRARY_NAME) return null;
+    const name = address.name;
+    return isSiteName(name) && portMatches(address.port, pagesPort) ? name : null;
+  }
+
+  // src/contract/headers.ts
+  var HEADER = {
+    CLIENT: "x-lahe-client",
+    TOKEN: "x-lahe-token",
+    REQUEST_ID: "x-lahe-request-id",
+    CONTENT_TYPE: "content-type",
+    ORIGIN: "origin",
+    HOST: "host",
+    SEC_FETCH_SITE: "sec-fetch-site",
+    SEC_FETCH_MODE: "sec-fetch-mode",
+    SEC_FETCH_DEST: "sec-fetch-dest",
+    CLI_SECRET: "x-lahe-cli-secret",
+    PROOF_TS: "x-lahe-proof-ts",
+    PROOF_NONCE: "x-lahe-proof-nonce",
+    PROOF: "x-lahe-proof",
+    PROOF_REPLY: "x-lahe-proof-reply"
+  };
+  var CLIENT_LAYER = "layer";
+  var CLIENT_CLI = "cli";
+  var CLIENT_CATALOG = "catalog";
+  var JSON_CONTENT_TYPE = "application/json";
+  var PROOF = {
+    REQUEST_PREFIX: "lahe-proof-v1",
+    REPLY_PREFIX: "lahe-proof-reply-v1",
+    WINDOW_MS: 3e4,
+    TS_PATTERN: /^[0-9]{1,16}$/,
+    NONCE_PATTERN: /^[0-9a-f]{32}$/,
+    MAC_PATTERN: /^[0-9a-f]{64}$/
+  };
+  var SUMMARY_VERSION = 1;
+
+  // src/contract/routes.ts
+  var BASE = "/lahe/" + API_VERSION;
+  var AUTH = {
+    NONE: "none",
+    REVIEW_TOKEN: "review_token",
+    CATALOG_TOKEN: "catalog_token",
+    CLI_SECRET: "cli_secret",
+    CLI_PROOF: "cli_proof"
+  };
+  var ROUTES = [
+    { name: "health", method: "GET", path: "/lahe/v1/health", auth: "none", mutating: false },
+    { name: "events.append", method: "POST", path: "/lahe/v1/events", auth: "review_token", mutating: true },
+    { name: "library.get", method: "GET", path: "/lahe-layer.js", auth: "none", mutating: false },
+    { name: "review.write", method: "POST", path: "/lahe/v1/review", auth: "review_token", mutating: true },
+    { name: "review.read", method: "GET", path: "/lahe/v1/review", auth: "review_token", mutating: false },
+    { name: "records.read", method: "GET", path: "/lahe/v1/records", auth: "review_token", mutating: false },
+    { name: "replies.poll", method: "GET", path: "/lahe/v1/replies", auth: "review_token", mutating: false },
+    { name: "window.claim", method: "POST", path: "/lahe/v1/window", auth: "review_token", mutating: true },
+    { name: "window.release", method: "POST", path: "/lahe/v1/window/release", auth: "review_token", mutating: true },
+    { name: "review.end", method: "POST", path: "/lahe/v1/end", auth: "review_token", mutating: true }
+  ];
+  var CATALOG_PAGE_PATH = "/catalog";
+  var CATALOG_ROUTES = [
+    {
+      name: "catalog.page",
+      method: "GET",
+      path: "/catalog",
+      auth: "catalog_token",
+      mutating: false,
+      checks: { sec_fetch_site: ["none", "same-origin"], top_level_navigation: true, token: false, json_body: false, origin: null }
+    },
+    {
+      name: "catalog.asset",
+      method: "GET",
+      path: "/catalog/assets/",
+      prefix: true,
+      auth: "catalog_token",
+      mutating: false,
+      checks: { sec_fetch_site: ["none", "same-origin"], token: false, json_body: false, origin: null }
+    },
+    {
+      name: "catalog.list",
+      method: "GET",
+      path: "/lahe/v1/catalog/list",
+      auth: "catalog_token",
+      mutating: false,
+      checks: { sec_fetch_site: ["same-origin"], token: true, json_body: false, origin: null }
+    },
+    {
+      name: "catalog.open",
+      method: "POST",
+      path: "/lahe/v1/catalog/open",
+      auth: "catalog_token",
+      mutating: true,
+      checks: { sec_fetch_site: ["same-origin"], token: true, json_body: true, origin: "exact" }
+    },
+    {
+      name: "catalog.star",
+      method: "POST",
+      path: "/lahe/v1/catalog/star",
+      auth: "catalog_token",
+      mutating: true,
+      checks: { sec_fetch_site: ["same-origin"], token: true, json_body: true, origin: "exact" }
+    },
+    {
+      name: "catalog.rename",
+      method: "POST",
+      path: "/lahe/v1/catalog/rename",
+      auth: "catalog_token",
+      mutating: true,
+      checks: { sec_fetch_site: ["same-origin"], token: true, json_body: true, origin: "exact" }
+    },
+    {
+      name: "catalog.request",
+      method: "POST",
+      path: "/lahe/v1/catalog/request",
+      auth: "catalog_token",
+      mutating: true,
+      checks: { sec_fetch_site: ["same-origin"], token: true, json_body: true, origin: "exact" }
+    }
+  ];
+  var SITE_ROUTES = [
+    { name: "site.bind", method: "POST", path: "/lahe/v1/site/bind", auth: "cli_secret", mutating: true },
+    { name: "review.retire", method: "POST", path: "/lahe/v1/review/retire", auth: "cli_secret", mutating: true }
+  ];
+  var SUMMARY_ROUTES = [
+    { name: "summary.read", method: "GET", path: "/lahe/v1/summary", auth: "cli_proof", mutating: false },
+    { name: "summary.open", method: "POST", path: "/lahe/v1/summary/open", auth: "cli_proof", mutating: true, refuse_origin: true }
+  ];
+  var ALL_ROUTES = [...ROUTES, ...CATALOG_ROUTES, ...SITE_ROUTES, ...SUMMARY_ROUTES];
+  function route(name) {
+    const found = ALL_ROUTES.find((entry) => entry.name === name);
+    if (found === void 0) throw new Error("unknown route: " + name + ". Routes are listed in src/contract/routes.ts");
+    return found;
+  }
+  var CATALOG_TOKEN_META = "lahe-catalog-token";
+  var HEALTH_FIELD = { CATALOG_SEEN_AT: "catalog_seen_at" };
+
+  // src/contract/request-checks.ts
+  var CHECK = {
+    HOST: "host",
+    CUSTOM_HEADER: "custom_header",
+    CONTENT_TYPE: "content_type",
+    REVIEW_KNOWN: "review_known",
+    TOKEN: "token",
+    ORIGIN: "origin",
+    SEC_FETCH_SITE: "sec_fetch_site",
+    SEC_FETCH: "sec_fetch",
+    PROOF: "proof"
+  };
+  var CHECKS = [
+    { name: "host", code: "PROTO_BAD_HOST" },
+    { name: "custom_header", code: "PROTO_MISSING_CUSTOM_HEADER" },
+    { name: "content_type", code: "PROTO_UNSUPPORTED_MEDIA_TYPE" },
+    { name: "review_known", code: "PROTO_UNKNOWN_REVIEW" },
+    { name: "token", code: "PROTO_UNAUTHORIZED" },
+    { name: "origin", code: "PROTO_FORBIDDEN_ORIGIN" },
+    { name: "sec_fetch_site", code: "PROTO_CROSS_SITE" },
+    { name: "sec_fetch", code: "AUTH_REFUSED" },
+    { name: "proof", code: "AUTH_REFUSED" }
+  ];
+  var REVIEW_CLIENTS = [CLIENT_LAYER, CLIENT_CLI];
+  function headerValue(headers, name) {
+    if (Object.hasOwn(headers, name)) return headers[name];
+    const lower = name.toLowerCase();
+    for (const key of Object.keys(headers)) {
+      if (key.toLowerCase() === lower) return headers[key];
+    }
+    return void 0;
+  }
+  function textOf(value) {
+    if (value === void 0) return null;
+    return typeof value === "string" ? value : value.join(",");
+  }
+  function reviewRoute(name) {
+    const found = ROUTES.find((entry) => entry.name === name);
+    if (found === void 0) throw new Error("unknown route: " + name + ". Review routes are listed in src/contract/routes.ts");
+    return found;
+  }
+  function registeredReview(config, review) {
+    const reviews = config === null ? null : Reflect.get(config, "reviews");
+    if (!isJsonObject(reviews) || !isSafeId(review) || !Object.hasOwn(reviews, review)) return null;
+    const entry = reviews[review];
+    if (!isJsonObject(entry)) return null;
+    const token = entry["token"];
+    const origins = entry["origins"];
+    return { id: review, token: typeof token === "string" ? token : "", origins: Array.isArray(origins) ? origins : [] };
+  }
+  function tokensEqual(presented, registered) {
+    const longest = Math.max(presented.length, registered.length);
+    let difference = presented.length === registered.length ? 0 : 1;
+    for (let index = 0; index < longest; index += 1) {
+      difference |= (presented.charCodeAt(index) || 0) ^ (registered.charCodeAt(index) || 0);
+    }
+    return difference === 0;
+  }
+  function refusal(routeName, name, detail) {
+    const entry = CHECKS.find((candidate) => candidate.name === name);
+    if (entry === void 0) throw new Error("unknown check: " + name);
+    const log = "refused " + routeName + ": check " + name + " failed" + (detail === null || detail === "" ? "" : " (" + detail + ")");
+    return { ok: false, check: name, code: entry.code, log };
+  }
+  function checkRequest(request, config) {
+    const route2 = reviewRoute(request.routeName);
+    const headers = request.headers;
+    const refuse = (name, detail) => refusal(route2.name, name, detail);
+    const host = headerValue(headers, HEADER.HOST);
+    if (!hostAllowed(host)) return refuse(CHECK.HOST, textOf(host) ?? "null");
+    const origin = textOf(headerValue(headers, HEADER.ORIGIN));
+    if (route2.auth === "none") return { ok: true, review: null, origin: origin === "" ? null : origin };
+    const client = headerValue(headers, HEADER.CLIENT);
+    if (typeof client !== "string" || !REVIEW_CLIENTS.some((allowed) => allowed === client)) return refuse(CHECK.CUSTOM_HEADER, null);
+    if (route2.mutating) {
+      const [mediaType = ""] = (textOf(headerValue(headers, HEADER.CONTENT_TYPE)) ?? "").split(";");
+      const type = mediaType.trim().toLowerCase();
+      if (type !== JSON_CONTENT_TYPE) return refuse(CHECK.CONTENT_TYPE, type === "" ? "none" : type);
+    }
+    const registered = registeredReview(config, request.review);
+    if (registered === null) return refuse(CHECK.REVIEW_KNOWN, String(request.review));
+    const presented = headerValue(headers, HEADER.TOKEN);
+    if (registered.token === "" || typeof presented !== "string" || !tokensEqual(presented, registered.token)) {
+      return refuse(CHECK.TOKEN, null);
+    }
+    const effective = origin === null || origin === "" ? "null" : origin;
+    if (!registered.origins.some((allowed) => allowed === effective)) return refuse(CHECK.ORIGIN, effective);
+    return { ok: true, review: registered.id, origin: effective };
+  }
+
+  // src/contract/failures.ts
+  var SEVERITY = { BLOCKING: "blocking", WARNING: "warning", INFO: "info" };
+  var SURFACE = { FAILURES_LIST: "failures_list", CARD: "card", CLI: "cli" };
+  var ALIASES = {
+    SYNC_SERVICE_DOWN: "HELPER_UNREACHABLE",
+    CLI_NO_SERVICE: "HELPER_UNREACHABLE",
+    SYNC_POLICY_REFUSED: "CSP_REFUSED",
+    SECOND_TAB_REFUSED: "SECOND_WINDOW_REFUSED",
+    ANCHOR_SUBJECT_GONE: "ANCHOR_LOST",
+    ANCHOR_NOT_FOUND: "ANCHOR_LOST"
+  };
+  var NO_OFFER = { kind: "none" };
+  var COPY_OFFER = { kind: "copy" };
+  var TAKEOVER_OFFER = { kind: "action", label: "Review here", action: "takeover" };
+  function row(severity, persistent, surface, message, remedy, options = {}) {
+    return {
+      severity,
+      persistent,
+      surface,
+      message,
+      remedy,
+      standing: options.standing === true,
+      offer: options.offer ?? NO_OFFER
+    };
+  }
+  var CODES = {
+    HELPER_UNREACHABLE: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "The local helper is not reachable. Your feedback is safe in this browser and goes to the helper when it comes back.",
+      "Start the helper, or use Copy or Export to get everything out now.",
+      { standing: true }
+    ),
+    CSP_REFUSED: row(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "This page's content security policy refused the connection to the local helper. This is not the helper being down.",
+      "Add the helper's origin to connect-src in this app's development CSP.",
+      { offer: COPY_OFFER }
+    ),
+    SYNC_UNAUTHORIZED: row(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "The local helper refused this page's token.",
+      "Run the add step again for this review, then reload the page.",
+      { offer: COPY_OFFER }
+    ),
+    SYNC_ORIGIN_NOT_ALLOWED: row(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "This page's address is not registered for this review. The helper is fine; it refuses addresses it does not know.",
+      "Have your agent re-run the add step with this page's address, then reload.",
+      { offer: COPY_OFFER }
+    ),
+    STORAGE_QUOTA: row(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "Browser storage is full, so the last change could not be saved locally.",
+      "Export what you have, then clear storage for this origin."
+    ),
+    SECOND_WINDOW_REFUSED: row(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "Another window is already reviewing this page. This one is read-only so the two cannot overwrite each other.",
+      "Use Review here instead to move the review to this window.",
+      { standing: true, offer: TAKEOVER_OFFER }
+    ),
+    ANCHOR_NO_TEXT_MATCH: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "This feedback could not be safely matched to this version of the page. Nothing was moved or changed, and your feedback is kept.",
+      null
+    ),
+    ANCHOR_AMBIGUOUS: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "More than one place on this page matches this feedback, so nothing was moved or changed. Your feedback is kept.",
+      null
+    ),
+    ANCHOR_STRUCTURE_ONLY: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "A structurally similar place is still present, but its text does not match this feedback. Nothing was moved or changed, and your feedback is kept.",
+      null
+    ),
+    ANCHOR_LOST: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "This feedback could not be safely matched to this version of the page. Nothing was moved or changed, and your feedback is kept.",
+      null
+    ),
+    REPLAY_NEITHER_MATCHES: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "This region is neither what you edited nor what you changed it to, so nothing was written. Your text is kept.",
+      "Look at the region and reapply your change if it still makes sense."
+    ),
+    RUN_BLOCK_REFUSED: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "A new block in this edit is not a paragraph, heading or list the tool can store, or holds markup outside bold and italic.",
+      null
+    ),
+    RUN_OVER_CEILING: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This edit is larger than the helper stores in one record.",
+      null
+    ),
+    RUN_PLACEMENT_REFUSED: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This edit's placement is not after_anchor or start_of_container.",
+      null
+    ),
+    RUN_TAKEBACK_CARRIES_RUN: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "A take-back names blocks to remove and never carries new blocks.",
+      null
+    ),
+    REPLAY_RUN_WRONG_TAG: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "The agent placed '{first words}' as a {type}. You wrote a {type}, so Lahe sent it back.",
+      null
+    ),
+    REPLAY_RUN_PLACED_ELSEWHERE: row(
+      SEVERITY.INFO,
+      true,
+      SURFACE.CARD,
+      "'{first words}' is already further down the page, so Lahe did not add it again.",
+      null
+    ),
+    HELPER_CONTRACT_OLDER: row(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "The local helper is an older version than this page, so nothing you write here is sent to it. Your work is safe in this browser.",
+      "Ask your agent to restart the helper (lahe session list restarts an old one), then reload this page."
+    ),
+    RUN_EVENT_REFUSED: row(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.CARD,
+      "The helper refused this edit, so the agent has not seen it. Your words are still on this page.",
+      null
+    ),
+    SUGGESTION_NOT_FOUND: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "A proofreading suggestion's from text is not in its block exactly once, so it cannot be applied.",
+      null
+    ),
+    CHOICE_REFUSED: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "A choice record names its group and answer with short ids and carries nothing else, so this one was not stored.",
+      null
+    ),
+    CHOICE_GROUP_INERT: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "Some choices on this page cannot be pressed, so they show as plain text.",
+      "Ask your agent to fix them. Each one and the reason:",
+      { standing: true, offer: COPY_OFFER }
+    ),
+    CHOICE_GROUP_GONE: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "This choice is no longer on the page. Your answer is kept and is still with the agent.",
+      null
+    ),
+    CHOICE_GROUP_TWICE: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "Two choices on this page now share this one's name, so Lahe marked neither. Your answer is kept.",
+      null
+    ),
+    REPLY_LINE_MALFORMED: row(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "An agent wrote a reply line this tool could not read, so that line was skipped. Everything else was folded in.",
+      "The chip names the file and the line number; the agent that wrote it can fix and append again.",
+      { offer: COPY_OFFER }
+    ),
+    PROTO_BAD_REQUEST: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "The request was malformed.",
+      null
+    ),
+    PROTO_BAD_HOST: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "The Host header does not name the helper, so the request was refused.",
+      null
+    ),
+    PROTO_UNAUTHORIZED: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "Missing or invalid per-review token.",
+      null
+    ),
+    PROTO_FORBIDDEN_ORIGIN: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This origin is not registered for this review.",
+      null
+    ),
+    PROTO_UNKNOWN_REVIEW: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "No such review.",
+      null
+    ),
+    PROTO_UNSUPPORTED_MEDIA_TYPE: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "Mutating routes require a JSON content type.",
+      null
+    ),
+    PROTO_MISSING_CUSTOM_HEADER: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "Every route but health requires the client header, so a simple cross-origin request cannot reach a handler.",
+      null
+    ),
+    PROTO_STALE_REV: row(
+      SEVERITY.WARNING,
+      false,
+      SURFACE.CLI,
+      "This reply names a revision that has since been superseded. The newer revision stays outstanding.",
+      null
+    ),
+    PROTO_UNKNOWN_ITEM: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "No such item in this review.",
+      null
+    ),
+    PROTO_REVIEW_RETIRED: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This review was retired, so it takes no more comments.",
+      "Reload the page: it now answers with the file's current review, if it has one."
+    ),
+    PROTO_NOT_OWNER: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This review belongs to another agent session, so this session cannot retire it.",
+      "Ask your human. A handoff is lahe session takeover, which they ask for."
+    ),
+    PROTO_SECOND_WINDOW: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "Another window already holds this review.",
+      "Take over from the window you are in."
+    ),
+    PROTO_SECOND_INSTANCE: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "Another helper is already running for this data directory.",
+      "Use the running one, or stop it first."
+    ),
+    PROTO_CROSS_SITE: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This request did not come from the Library page itself, so it was refused.",
+      "Use the Library page at the helper's own address, /catalog."
+    ),
+    PROTO_NOT_OPENABLE: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This document cannot be opened from the Library: its files are missing, or it has no recorded server.",
+      "Ask your agent to serve it again with lahe review."
+    ),
+    PROTO_REQUEST_PENDING: row(
+      SEVERITY.INFO,
+      false,
+      SURFACE.CLI,
+      "This document already has a request waiting for an agent.",
+      "Wait for the agent to answer. Its answer shows on the row."
+    ),
+    PROTO_QUEUE_FULL: row(
+      SEVERITY.WARNING,
+      false,
+      SURFACE.CLI,
+      "Too many requests are already waiting for an agent.",
+      "Wait for the agent to answer some of them, then try again."
+    ),
+    PROTO_NO_AGENT: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "No agent is attached to the Library, or the attached agent has stopped watching.",
+      "Ask an agent to run lahe library with its own session, or copy the hand-off message into a new agent."
+    ),
+    PROTO_CONFIRM_NEEDED: row(
+      SEVERITY.INFO,
+      false,
+      SURFACE.CLI,
+      "Another agent is watching this document's session, so moving it needs your say-so.",
+      "Choose Move the session to confirm, or open it just to read."
+    ),
+    PROTO_NO_LAUNCH: row(
+      SEVERITY.INFO,
+      false,
+      SURFACE.CLI,
+      "A new agent can only be launched on a document with a session to take over and a file to serve. This one is from before sessions, or its worktree is gone and no main-repo copy passes the checks.",
+      "Choose Pick this up instead. The attached agent serves it in its own session."
+    ),
+    PROTO_CATALOG_UNREADABLE: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "The Library's saved stars file cannot be read, so stars cannot change. Lahe leaves the file as it is.",
+      "Fix or move aside catalog.json in the Lahe state folder, then try again."
+    ),
+    CLI_PATH_REFUSED: row(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "A write was refused because the destination resolved outside the review folder or is a symlink.",
+      null
+    ),
+    COPY_FAILED: row(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "The review was not copied to the clipboard, so there is nothing to paste.",
+      "Use Export to save it as a file instead."
+    ),
+    EXPORT_FAILED: row(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "The review could not be saved as a file.",
+      "Use Copy to put it on the clipboard instead."
+    )
+  };
+  function isAlias(name) {
+    return Object.hasOwn(ALIASES, name);
+  }
+  function unknownName(name) {
+    return new Error("unknown failure code: " + String(name) + ". Add it to src/contract/failures.ts");
+  }
+  function canonical(name) {
+    return isAlias(name) ? ALIASES[name] : name;
+  }
+  function describe(name) {
+    const code = canonical(name);
+    if (!Object.hasOwn(CODES, code)) throw unknownName(name);
+    return CODES[code];
+  }
+  function failure(name, detail) {
+    const definition = describe(name);
+    return {
+      code: name,
+      canonical_code: canonical(name),
+      severity: definition.severity,
+      persistent: definition.persistent,
+      standing: definition.standing,
+      surface: definition.surface,
+      message: definition.message,
+      remedy: definition.remedy,
+      detail: detail ?? null,
+      at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  }
+
+  // src/contract/error-body.ts
+  var STATUS = {
+    PROTO_BAD_REQUEST: 400,
+    PROTO_BAD_HOST: 400,
+    PROTO_MISSING_CUSTOM_HEADER: 400,
+    PROTO_UNSUPPORTED_MEDIA_TYPE: 415,
+    PROTO_UNAUTHORIZED: 401,
+    PROTO_FORBIDDEN_ORIGIN: 403,
+    PROTO_UNKNOWN_REVIEW: 404,
+    PROTO_UNKNOWN_ITEM: 404,
+    PROTO_STALE_REV: 409,
+    PROTO_REVIEW_RETIRED: 410,
+    PROTO_NOT_OWNER: 403,
+    PROTO_SECOND_WINDOW: 409,
+    PROTO_SECOND_INSTANCE: 409,
+    PROTO_CROSS_SITE: 403,
+    PROTO_NOT_OPENABLE: 409,
+    PROTO_REQUEST_PENDING: 409,
+    PROTO_QUEUE_FULL: 429,
+    PROTO_NO_AGENT: 409,
+    PROTO_CONFIRM_NEEDED: 409,
+    PROTO_NO_LAUNCH: 409,
+    PROTO_CATALOG_UNREADABLE: 500,
+    AUTH_REFUSED: 401,
+    SUMMARY_VERSION: 409
+  };
+  function hasStatus(code) {
+    return Object.hasOwn(STATUS, code);
+  }
+  function statusFor(code) {
+    return hasStatus(code) ? STATUS[code] : 500;
+  }
+  function errorBody(code, detail, requestId, check) {
+    const failed = failure(code, detail);
+    return {
+      error: {
+        code: failed.code,
+        message: failed.message,
+        remedy: failed.remedy,
+        detail: failed.detail,
+        check: check ?? null,
+        request_id: requestId === void 0 || requestId === "" ? null : requestId
+      }
+    };
+  }
+
+  // src/contract/events.ts
+  var EVENT = {
+    REVIEW_CREATED: "review.created",
+    ORIGIN_REGISTERED: "origin.registered",
+    ORIGIN_REMOVED: "origin.removed",
+    PAGE_VISITED: "page.visited",
+    ITEM_CREATED: "item.created",
+    ITEM_CONTENT: "item.content",
+    ITEM_READY: "item.ready",
+    ITEM_DELETED: "item.deleted",
+    ITEM_REOPENED: "item.reopened",
+    ITEM_CLOSED: "item.closed",
+    REPLY_SEEN: "reply.seen",
+    REPLY_FOLDED: "reply.folded",
+    REPLY_REJECTED: "reply.rejected",
+    REVIEW_ARCHIVED: "review.archived",
+    REVIEW_ADOPTED: "review.adopted"
+  };
+  var EVENT_TYPES = Object.values(EVENT);
+  var EVENT_FIELD = {
+    EVENT: "event",
+    EVENT_ID: "event_id",
+    TS: "ts",
+    SEQ: "seq",
+    REVIEW: "review",
+    ITEM: "item",
+    REV: "rev",
+    PAGE_PATH: "page_path",
+    PAGE_TITLE: "page_title",
+    PAGE_SEQ: "page_seq",
+    SOURCE_HINT: "source_hint",
+    RECEIVED_AT: "received_at"
+  };
+  var IDEMPOTENCE_KEY = EVENT_FIELD.EVENT_ID;
+  function isEventType(value) {
+    return typeof value === "string" && EVENT_TYPES.some((type) => type === value);
+  }
+  function numberOrNull(value) {
+    return typeof value === "number" ? value : null;
+  }
+  function textOrNull(value) {
+    return typeof value === "string" && value !== "" ? value : null;
+  }
+  function newEvent(input) {
+    const type = input.event;
+    if (!isEventType(type)) {
+      throw new Error("newEvent: event must be one of " + EVENT_TYPES.join(", ") + ", got " + String(type));
+    }
+    const eventId = input.event_id;
+    if (typeof eventId !== "string" || eventId === "") {
+      throw new Error("newEvent: event_id is required and is client-minted; idempotence is by event_id");
+    }
+    const review = input.review;
+    if (!isSafeId(review)) throw new Error("newEvent: review must be a safe id, got " + String(review));
+    const event = {
+      event: type,
+      event_id: eventId,
+      ts: typeof input.ts === "string" && input.ts !== "" ? input.ts : (/* @__PURE__ */ new Date()).toISOString(),
+      seq: numberOrNull(input.seq),
+      review,
+      item: textOrNull(input.item),
+      rev: numberOrNull(input.rev),
+      page_path: textOrNull(input.page_path),
+      page_title: textOrNull(input.page_title),
+      page_seq: numberOrNull(input.page_seq),
+      source_hint: textOrNull(input.source_hint)
+    };
+    const payload = input.payload;
+    if (isJsonObject(payload)) {
+      for (const [key, value] of Object.entries(payload)) {
+        if (!Object.hasOwn(event, key)) Object.defineProperty(event, key, { value, enumerable: true, writable: true, configurable: true });
+      }
+    }
+    return event;
+  }
+  function encodeEventLine(event) {
+    return JSON.stringify(event) + "\n";
+  }
+  function parseEventLine(line) {
+    let parsed;
+    try {
+      parsed = JSON.parse(line);
+    } catch (error) {
+      return { ok: false, reason: "not JSON: " + (error instanceof Error ? error.message : String(error)) };
+    }
+    if (!isJsonObject(parsed)) return { ok: false, reason: "not an object" };
+    const type = parsed[EVENT_FIELD.EVENT];
+    if (!isEventType(type)) return { ok: false, reason: "unknown event type " + String(type) };
+    const eventId = parsed[EVENT_FIELD.EVENT_ID];
+    if (typeof eventId !== "string" || eventId === "") {
+      return { ok: false, reason: "missing event_id, which is the idempotence key" };
+    }
+    return { ok: true, event: { ...parsed, event: type, event_id: eventId } };
+  }
+
+  // src/contract/flush.ts
+  var FLUSH = {
+    HELPER_DEBOUNCE_MS: 750,
+    DRAFT_FLOOR_MS: 1e4,
+    RUN_DRAFT_FLOOR_MS: 3e4,
+    PRESS_QUIET_MS: 3e3,
+    PRESS_CAP_MS: 1e4,
+    IMMEDIATE_ON: ["blur", "hide", "ready", "navigation", "unload"],
+    KEEPALIVE_MAX_BYTES: 65536
+  };
+  function jsonOf(value) {
+    return JSON.stringify(value);
+  }
+  function utf8Length(text) {
+    let bytes = 0;
+    for (const character of text) {
+      const code = character.codePointAt(0) ?? 0;
+      bytes += code < 128 ? 1 : code < 2048 ? 2 : code < 65536 ? 3 : 4;
+    }
+    return bytes;
+  }
+  function fitsKeepalive(body) {
+    const text = typeof body === "string" ? body : jsonOf(body) ?? "";
+    return utf8Length(text) <= FLUSH.KEEPALIVE_MAX_BYTES;
+  }
+
+  // src/contract/replies.ts
+  var REPLY_FIELD = {
+    ITEM: "item",
+    REV: "rev",
+    STATUS: "status",
+    AGENT: "agent",
+    REASON: "reason",
+    TEXT: "text",
+    FILES: "files",
+    NEEDS_SEE: "user_needs_to_see_reply",
+    PROOFREAD: "proofread",
+    SUGGESTIONS: "suggestions"
+  };
+  var REPLY_STATUS = { HANDLED: "handled", NOT_HANDLED: "not_handled", QUESTION: "question" };
+  var REPLY_STATUSES = Object.values(REPLY_STATUS);
+  var SUGGESTIONS_MAX = 400;
+  var SUGGESTION_TEXT_MAX = 2e5;
+  var REQUIRED = {
+    handled: [REPLY_FIELD.ITEM, REPLY_FIELD.REV, REPLY_FIELD.STATUS],
+    not_handled: [REPLY_FIELD.ITEM, REPLY_FIELD.REV, REPLY_FIELD.STATUS, REPLY_FIELD.REASON],
+    question: [REPLY_FIELD.ITEM, REPLY_FIELD.REV, REPLY_FIELD.STATUS, REPLY_FIELD.TEXT]
+  };
+  function malformed(reason) {
+    return { ok: false, code: "REPLY_LINE_MALFORMED", reason };
+  }
+  function isReplyStatus(value) {
+    return typeof value === "string" && REPLY_STATUSES.some((status) => status === value);
+  }
+  function nonBlankText(value) {
+    return typeof value === "string" && value.trim() !== "" ? value : null;
+  }
+  function parseSuggestions(list) {
+    if (!Array.isArray(list)) return { ok: false, reason: "suggestions must be a list" };
+    if (list.length > SUGGESTIONS_MAX) {
+      return { ok: false, reason: "suggestions holds " + String(list.length) + " fixes, more than " + String(SUGGESTIONS_MAX) };
+    }
+    const suggestions = [];
+    for (const [index, entry] of list.entries()) {
+      const candidate = entry;
+      const label = "suggestion " + String(index);
+      if (!isJsonObject(candidate)) return { ok: false, reason: label + " must be an object" };
+      const { block, from, to } = candidate;
+      if (typeof block !== "number" || !Number.isInteger(block) || block < 0) {
+        return { ok: false, reason: label + " block must be a whole number from 0" };
+      }
+      if (typeof from !== "string" || from === "") return { ok: false, reason: label + " from must be a non-empty string" };
+      if (typeof to !== "string") return { ok: false, reason: label + " to must be a string" };
+      if (from.length > SUGGESTION_TEXT_MAX || to.length > SUGGESTION_TEXT_MAX) {
+        return { ok: false, reason: label + " from or to is over " + String(SUGGESTION_TEXT_MAX) + " characters" };
+      }
+      suggestions.push({ block, from, to });
+    }
+    return { ok: true, suggestions };
+  }
+  function parseReplyLine(line, options) {
+    let parsed;
+    try {
+      parsed = JSON.parse(line);
+    } catch (error) {
+      return malformed("not JSON: " + (error instanceof Error ? error.message : String(error)));
+    }
+    if (!isJsonObject(parsed)) return malformed("a reply line must be a JSON object");
+    const status = parsed[REPLY_FIELD.STATUS];
+    if (!isReplyStatus(status)) {
+      return malformed("status must be one of " + REPLY_STATUSES.join(", ") + ", got " + JSON.stringify(status));
+    }
+    const item = nonBlankText(parsed[REPLY_FIELD.ITEM]);
+    const givenRev = parsed[REPLY_FIELD.REV];
+    const rev = typeof givenRev === "number" ? givenRev : null;
+    const givenReason = parsed[REPLY_FIELD.REASON];
+    const givenText = parsed[REPLY_FIELD.TEXT];
+    const reason = nonBlankText(givenReason);
+    const text = nonBlankText(givenText);
+    const found = { item, rev, status, reason, text };
+    const missing = REQUIRED[status].filter((field) => found[field] === null);
+    const incomplete = () => malformed("status " + status + " needs " + REQUIRED[status].join(", ") + "; missing or wrong type: " + missing.join(", "));
+    if (missing.length > 0 || item === null || rev === null) return incomplete();
+    const marksProofread = parsed[REPLY_FIELD.PROOFREAD] !== void 0 || parsed[REPLY_FIELD.SUGGESTIONS] !== void 0;
+    let proofread = null;
+    if (marksProofread) {
+      if (status !== REPLY_STATUS.QUESTION) return malformed("proofread and suggestions belong on a question reply only");
+      if (parsed[REPLY_FIELD.PROOFREAD] !== true) return malformed("proofread must be true when suggestions are given");
+      const given = parsed[REPLY_FIELD.SUGGESTIONS];
+      const checked = parseSuggestions(given === void 0 ? [] : given);
+      if (!checked.ok) return malformed(checked.reason);
+      proofread = checked.suggestions;
+    }
+    const lineAgent = parsed[REPLY_FIELD.AGENT];
+    const filenameAgent = options?.filenameAgent;
+    const agent = typeof lineAgent === "string" && lineAgent !== "" ? lineAgent : filenameAgent === void 0 || filenameAgent === "" ? null : filenameAgent;
+    const files = parsed[REPLY_FIELD.FILES];
+    const common = {
+      item,
+      rev,
+      status,
+      agent,
+      reason: typeof givenReason === "string" ? givenReason : null,
+      text: typeof givenText === "string" ? givenText : null,
+      files: Array.isArray(files) ? files.slice() : [],
+      user_needs_to_see_reply: parsed[REPLY_FIELD.NEEDS_SEE] === true
+    };
+    switch (status) {
+      case "handled":
+        return { ok: true, reply: { ...common, status: "handled" }, reason: null };
+      case "not_handled":
+        return reason === null ? incomplete() : { ok: true, reply: { ...common, status: "not_handled", reason }, reason: null };
+      case "question":
+        if (text === null) return incomplete();
+        return {
+          ok: true,
+          reply: proofread === null ? { ...common, status: "question", text } : { ...common, status: "question", text, proofread: true, suggestions: proofread },
+          reason: null
+        };
+    }
+  }
+  var REPLY_FILE = {
+    SINGLE: "replies.jsonl",
+    PATTERN: new RegExp("^replies(?:-(" + SAFE_ID.source.slice(1, -1) + "))?\\.jsonl$"),
+    prefix: "replies-",
+    suffix: ".jsonl"
+  };
+  function agentFromFilename(filename) {
+    const match = typeof filename === "string" ? REPLY_FILE.PATTERN.exec(filename) : null;
+    if (match === null) {
+      return { ok: false, agent: null, reason: "reply file name is not replies.jsonl or replies-<agent>.jsonl" };
+    }
+    const agent = match[1];
+    return { ok: true, agent: isSafeId(agent) ? agent : null, reason: null };
+  }
+  var REPLY_POLL = { INTERVAL_MS: 5e3 };
+  var REPLY_CURSOR_FIELD = "seq";
+  function nextReadOffset(recordedOffset, fileSize) {
+    const size = fileSize;
+    if (typeof size !== "number" || !Number.isFinite(size) || size < 0) throw new Error("nextReadOffset: fileSize must be a number");
+    const offset = typeof recordedOffset === "number" && recordedOffset > 0 ? recordedOffset : 0;
+    return size < offset ? { offset: 0, refold: true } : { offset, refold: false };
+  }
+  function splitCompleteLines(chunk) {
+    const lines = chunk.split("\n");
+    const remainder = lines.pop() ?? "";
+    return { lines, remainder };
+  }
+
+  // src/contract/script-tag.ts
+  var SCRIPT_ATTR = {
+    REVIEW: "data-lahe-review",
+    TOKEN: "data-lahe-token",
+    HELPER: "data-lahe-helper",
+    FALLBACK: "data-lahe-fallback",
+    FRAMES: "data-lahe-frames",
+    START: "data-lahe-start",
+    NOTES: "data-lahe-notes",
+    DOCUMENT: "data-lahe-document",
+    ALIASES: "data-lahe-aliases",
+    PATH_ALIASES: "data-lahe-path-aliases",
+    SPELLINGS: "data-lahe-spellings"
+  };
+  var ALIAS_MAX = 16;
+  var FRAMES_ALLOW = "allow";
+  var START_HIDDEN = "hidden";
+  var NOTES_ON = "true";
+  var DOCUMENT_ON = "true";
+  var SCRIPT_SELECTOR = "script[" + SCRIPT_ATTR.REVIEW + "]";
+  var SCRIPT_FALLBACK_ONERROR = "var s=document.createElement('script');s.src=this.getAttribute('" + SCRIPT_ATTR.FALLBACK + "');document.head.appendChild(s)";
+  var LOOPBACK_PORT_ORIGIN = /^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/;
+  var PATH_ALIAS = /^\/[^"'<>\s\\]{0,511}$/;
+  var SPELLING_ORIGIN = /^http:\/\/[a-z0-9.-]{1,253}(?::\d{1,5})?$/;
+  function isLoopbackPortOrigin(value) {
+    return typeof value === "string" && LOOPBACK_PORT_ORIGIN.test(value);
+  }
+  function isPathAlias(value) {
+    return typeof value === "string" && PATH_ALIAS.test(value);
+  }
+  function isSpellingOrigin(value) {
+    return typeof value === "string" && SPELLING_ORIGIN.test(value);
+  }
+  function isSpelling(value) {
+    if (typeof value !== "string") return false;
+    const space = value.indexOf(" ");
+    return space > 0 && isSpellingOrigin(value.slice(0, space)) && isPathAlias(value.slice(space + 1));
+  }
+  var ALIASES_RULE = {
+    option: "aliases",
+    plural: "aliases",
+    accepts: isLoopbackPortOrigin,
+    refusal: "an alias must be a loopback http origin, not "
+  };
+  var PATH_ALIASES_RULE = {
+    option: "pathAliases",
+    plural: "path aliases",
+    accepts: isPathAlias,
+    refusal: "a path alias must be an absolute path, not "
+  };
+  var SPELLINGS_RULE = {
+    option: "spellings",
+    plural: "spellings",
+    accepts: isSpelling,
+    refusal: 'a spelling is "origin path", not '
+  };
+  function listValue(list, rule) {
+    if (!Array.isArray(list)) throw new Error("scriptTag: " + rule.option + " must be a list");
+    if (list.length > ALIAS_MAX) throw new Error("scriptTag: at most " + String(ALIAS_MAX) + " " + rule.plural);
+    for (const entry of list) {
+      const member = entry;
+      if (!rule.accepts(member)) throw new Error("scriptTag: " + rule.refusal + JSON.stringify(member));
+    }
+    return JSON.stringify(list).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function attributeLine(name, value) {
+    return "        " + name + '="' + value + '"\n';
+  }
+  function scriptTag(options) {
+    const src = options.src;
+    if (typeof src !== "string" || src === "") throw new Error("scriptTag: src is required (the path to the built library)");
+    const review = options.review;
+    if (!isSafeId(review)) throw new Error("scriptTag: review must be a safe id");
+    const token = options.token;
+    if (typeof token !== "string" || token === "") throw new Error("scriptTag: token is required; absent configuration fails closed");
+    const fallback = options.fallback === void 0 || options.fallback === "" ? "" : attributeLine(SCRIPT_ATTR.FALLBACK, options.fallback) + attributeLine("onerror", SCRIPT_FALLBACK_ONERROR);
+    const optIns = (options.notes === true ? attributeLine(SCRIPT_ATTR.NOTES, NOTES_ON) : "") + (options.document === true ? attributeLine(SCRIPT_ATTR.DOCUMENT, DOCUMENT_ON) : "");
+    const lists = (options.aliases === void 0 ? "" : attributeLine(SCRIPT_ATTR.ALIASES, listValue(options.aliases, ALIASES_RULE))) + (options.pathAliases === void 0 ? "" : attributeLine(SCRIPT_ATTR.PATH_ALIASES, listValue(options.pathAliases, PATH_ALIASES_RULE))) + (options.spellings === void 0 ? "" : attributeLine(SCRIPT_ATTR.SPELLINGS, listValue(options.spellings, SPELLINGS_RULE)));
+    return '<script src="' + src + '"\n' + attributeLine(SCRIPT_ATTR.REVIEW, review) + attributeLine(SCRIPT_ATTR.TOKEN, token) + attributeLine(SCRIPT_ATTR.HELPER, options.helper === void 0 || options.helper === "" ? DEFAULT_HELPER_ORIGIN : options.helper) + fallback + optIns + lists + "        defer><\/script>";
+  }
+
+  // src/contract/agent-commands.ts
+  var CLI_EXIT = {
+    OK: 0,
+    HELPER_UNREACHABLE: 2,
+    UNKNOWN_REVIEW: 3,
+    BAD_USAGE: 4,
+    SESSION_CLOSED: 5,
+    SESSION_TAKEN_OVER: 6
+  };
+  var WAKE = {
+    FILE: "wake.log",
+    KIND: {
+      WORK: "work",
+      TAKEOVER: "takeover",
+      CLOSED: "closed",
+      ENDED: "ended"
+    },
+    FIELD: {
+      AT: "at",
+      KIND: "kind",
+      REVIEW: "review",
+      ITEM: "item",
+      REV: "rev",
+      DRAIN: "drain"
+    }
+  };
+  var SHELL_SAFE = /^[A-Za-z0-9_@%+=:,./-]+$/;
+  function shellWord(value) {
+    return SHELL_SAFE.test(value) ? value : "'" + value.replace(/'/g, "'\\''") + "'";
+  }
+  function stateDirFlag(stateDir) {
+    const dir = stateDir;
+    return typeof dir !== "string" || dir === "" ? "" : " --state-dir " + shellWord(dir);
+  }
+  function drainCommand(sessionId, stateDir) {
+    return "lahe status --session " + sessionId + " --json --quiet" + stateDirFlag(stateDir);
+  }
+  function monitorCommand(sessions, stateDir, handoffRevisions) {
+    const ids = typeof sessions === "string" ? [sessions] : sessions;
+    const watched = ids.map((id) => {
+      const revision = handoffRevisions?.[id];
+      return " --session " + id + (revision !== void 0 && Number.isInteger(revision) ? " --handoff-rev " + String(revision) : "");
+    });
+    return "lahe monitor" + watched.join("") + stateDirFlag(stateDir);
+  }
+  function takeoverCommand(sessionId, stateDir, requestId) {
+    return "lahe session takeover " + sessionId + stateDirFlag(stateDir) + (isSafeId(requestId) ? " --request " + requestId : "");
+  }
+
+  // src/contract/agent-liveness.ts
+  var INTERVAL_SECONDS = 15;
+  var FRESH_INTERVALS = 3;
+  var MONITOR = {
+    HEARTBEAT_FILE: "monitor.json",
+    ACTIVITY_FILE: "activity.json",
+    DELIVERED_FILE: "delivered.json",
+    INTERVAL_SECONDS,
+    FRESH_INTERVALS,
+    HEARTBEAT_FIELD: { PID: "pid", HANDOFF_REV: "handoff_rev", AT: "at", PRIMARY: "primary" },
+    ACTIVITY_FIELD: { AT: "at" },
+    HEARTBEAT_FRESH_MS: INTERVAL_SECONDS * FRESH_INTERVALS * 1e3
+  };
+  var AGENT_LIVENESS = {
+    STATE: {
+      WORKING: "working",
+      WAITING: "waiting",
+      NO_AGENT: "no_agent",
+      NONE: "none"
+    },
+    FIELD: {
+      STATE: "state",
+      UNANSWERED: "unanswered",
+      OLDEST_UNANSWERED_AT: "oldest_unanswered_at",
+      LAST_REPLY_AT: "last_reply_at",
+      LISTENING: "listening",
+      MONITOR_AT: "monitor_at",
+      ACTIVITY_AT: "activity_at",
+      SESSION_ID: "session_id",
+      STATE_DIR_FLAG: "state_dir_flag_needed",
+      OLDEST_ITEM: "oldest_unanswered_item",
+      NAME: "session_name",
+      NAME_FROM_PAGE: "session_name_from_page",
+      PRESENCE: "presence"
+    },
+    PRESENCE: { LISTENING: "listening", WORKING: "working", AWAY: "away" },
+    TEXT: {
+      working: "agent is working, {age}",
+      waiting: "nothing back yet, {age}",
+      no_agent: "nobody has picked this up, {age}"
+    },
+    CONNECTION: {
+      connected: "agent listening",
+      absent: "no agent listening"
+    },
+    DETAIL: {
+      helper_up: "The helper is answering this page, so comments and edits reach it as you make them.",
+      helper_down: "The helper is not answering right now, so your work is being kept in this browser until it is.",
+      agent_connected: "An agent has this review open.",
+      agent_absent: "No agent has this review open.",
+      agent_unknown: "Whether an agent has this review open cannot be checked on this computer.",
+      agent_named: "The agent on this review is named {name}.",
+      replied: "The agent last replied {reply} ago.",
+      never_replied: "The agent has not replied on this review yet.",
+      waiting: "Your oldest unanswered item has been waiting {age}.",
+      stored: "Your comments and edits are stored in this browser and in the helper's log on disk.",
+      save: "You can get your own copy any time: use Copy review or Export review to file in the menu."
+    },
+    PROMINENT: {
+      BANNER: {
+        no_agent: "Nobody has picked up your comments in {age}.",
+        waiting: "Nothing has come back on your comments in {age}."
+      },
+      CHECK: "Check your agent's window first. It may have stopped, or it may be waiting on you.",
+      CHECK_NAMED: "Check the agent named {name} first. It may have stopped, or it may be waiting on you.",
+      HANDOFF_BUTTON: "Copy a message for a new agent",
+      COPIED: "Copied. Paste it into a new agent and it will pick up your comments.",
+      COPY_FAILED: "Could not copy. Select the message below and copy it yourself.",
+      CARD: "waiting {age}",
+      TOAST_LABEL: "Comments waiting",
+      TOAST_CHECK: "Check your agent's window.",
+      TOAST_CHECK_NAMED: "Check the agent named {name}.",
+      TOAST_OPEN: "Open the rail to hand this doc to a new agent."
+    },
+    QUIET_MS: 3e4,
+    ACTIVE_MS: 6e5,
+    STALE_MS: 6e5,
+    RECENT_COMMAND_MS: 6e5,
+    NO_AGENT_LOUD_MS: 12e4
+  };
+  function livenessOverdue(state, waitedMs) {
+    if (typeof state !== "string" || !Object.hasOwn(AGENT_LIVENESS.TEXT, state)) return false;
+    if (typeof waitedMs !== "number" || !Number.isFinite(waitedMs) || waitedMs < AGENT_LIVENESS.QUIET_MS) return false;
+    if (state === AGENT_LIVENESS.STATE.WORKING) return false;
+    if (state === AGENT_LIVENESS.STATE.NO_AGENT) return waitedMs >= AGENT_LIVENESS.NO_AGENT_LOUD_MS;
+    return waitedMs >= AGENT_LIVENESS.STALE_MS;
+  }
+  var RAIL_REASON = "The agent that was working on it stopped answering my comments, and I am asking you to continue it.";
+  var LIBRARY_REASON = "I am handing it to you from the Lahe Library so you can continue it.";
+  var STATE_DIR_QUESTION = "This review keeps its files outside Lahe's default folder, so add --state-dir with the folder the earlier agent's lahe commands used. If you cannot find it, ask me.";
+  function handoffMessage(handoff) {
+    const stateDir = handoff.from === "library" ? handoff.stateDir : null;
+    const requestId = handoff.from === "library" ? handoff.request : null;
+    const flag = stateDirFlag(stateDir);
+    const sessionId = handoff.sessionId;
+    const run = isSafeId(sessionId) ? ["Run this command:", "", "    " + takeoverCommand(sessionId, stateDir, requestId), ""] : ["Run `lahe session list" + flag + "` to find the session for this document, then take it over with:", "", "    lahe session takeover <session-id>" + flag, ""];
+    const asksForStateDir = handoff.from === "rail" && handoff.stateDirFlagNeeded;
+    const named = handoff.name === null || handoff.name === "" ? "" : ", the session named " + JSON.stringify(handoff.name);
+    return [
+      "Please take over my live Lahe review" + named + ". " + (handoff.from === "rail" ? RAIL_REASON : LIBRARY_REASON),
+      "",
+      ...run,
+      ...asksForStateDir ? [STATE_DIR_QUESTION, ""] : [],
+      "It prints the commands to catch up. Then work every comment that is waiting and reply to each one, and keep watching for new ones."
+    ].join("\n");
+  }
+
+  // src/contract/library.ts
+  var CATALOG = {
+    REQUEST_EXPIRY_MS: 18e5,
+    LIBRARY_SEEN_MS: 12e4,
+    WORKING_MS: 12e4,
+    LIBRARY_SESSION_IDLE_MS: 18e5,
+    CREATED_BY_LIBRARY: "library",
+    QUEUE_CAP: 5,
+    REPROJECT_MAX_BYTES: 5242880,
+    POLL_MS: 15e3,
+    ANSWER_SHOWN_MS: 864e5,
+    ANSWER_TEXT_MAX: 500,
+    DEFAULT_VIEW_DAYS: 7,
+    FOLD_CUTOFF: "2026-09-17T04:00:00Z",
+    NOT_WORK_EVENTS: [EVENT.ORIGIN_REGISTERED, EVENT.ORIGIN_REMOVED, EVENT.PAGE_VISITED, EVENT.REVIEW_ADOPTED, EVENT.REPLY_SEEN]
+  };
+  function legacyPickupNote(reviewId) {
+    return "It belongs to no session. Serving it takes review " + reviewId + " into your session, with its old comments; drain it for any still waiting.";
+  }
+  var CATALOG_LOG = {
+    PREFIX: "catalog",
+    ACTION: { OPEN: "open", STAR: "star", UNSTAR: "unstar", PICKUP: "pickup", LAUNCH: "launch" },
+    FORMAT: "catalog <action> review=<id> age_days=<n>"
+  };
+  function catalogLogLine(action, reviewId, ageDays) {
+    return CATALOG_LOG.PREFIX + " " + action + " review=" + reviewId + " age_days=" + String(ageDays);
+  }
+
+  // lahe-register:src/contract/protocol.ts
+  var converted = Object.assign({}, protocol_exports);
+  globalThis.LAHE = globalThis.LAHE || {};
+  globalThis.LAHE.protocol = converted;
+
   // lahe-entry.js
-  var import_protocol = __toESM(require_protocol());
   var import_view_model = __toESM(require_view_model());
   var import_copy_text = __toESM(require_copy_text());
 
@@ -2783,15 +2739,15 @@
       if (json) h2[protocol.HEADER.CONTENT_TYPE] = protocol.JSON_CONTENT_TYPE;
       return h2;
     }
-    function call(route, body) {
+    function call(route2, body) {
       var init = {
-        method: route.method,
-        headers: headers(route.method !== "GET"),
+        method: route2.method,
+        headers: headers(route2.method !== "GET"),
         credentials: "same-origin",
         cache: "no-store"
       };
-      if (route.method !== "GET") init.body = JSON.stringify(body || {});
-      return fetch(route.path, init).then(
+      if (route2.method !== "GET") init.body = JSON.stringify(body || {});
+      return fetch(route2.path, init).then(
         function(res) {
           return res.text().then(function(text) {
             var parsed = null;
@@ -3014,12 +2970,12 @@
     function button(label, attrs) {
       return h("button", Object.assign({ type: "button", class: "lib-btn", text: label }, attrs || {}));
     }
-    function actionButton(row, key, primary) {
-      var b = row.buttons[key];
+    function actionButton(row2, key, primary) {
+      var b = row2.buttons[key];
       return button(b.label, {
         "data-act": key,
-        "data-review": row.id,
-        "data-key": row.id + ":" + key,
+        "data-review": row2.id,
+        "data-key": row2.id + ":" + key,
         "data-primary": primary ? "true" : null,
         "aria-busy": b.busy ? "true" : null,
         title: b.reason || null,
@@ -3029,22 +2985,22 @@
     function waitingMark(text) {
       return h("span", { class: "lib-waiting" }, [h("span", { class: "lib-dot", "aria-hidden": "true" }), text]);
     }
-    function renderRow(row, extra) {
+    function renderRow(row2, extra) {
       var nameLine;
-      if (row.rename.editing) {
-        var typed = renameDraft.id === row.id ? renameDraft.value : row.rename.value;
+      if (row2.rename.editing) {
+        var typed = renameDraft.id === row2.id ? renameDraft.value : row2.rename.value;
         nameLine = h("p", { class: "lib-name lib-rename" }, [
           h("input", {
             type: "text",
             class: "lib-rename-input",
-            "data-rename": row.id,
-            "data-key": row.id + ":rename-input",
-            "data-current": row.rename.value,
-            "data-original": row.rename.original,
+            "data-rename": row2.id,
+            "data-key": row2.id + ":rename-input",
+            "data-current": row2.rename.value,
+            "data-original": row2.rename.original,
             value: typed,
             maxlength: "80",
-            "aria-label": row.rename.label + ": " + row.rename.original,
-            placeholder: row.rename.original
+            "aria-label": row2.rename.label + ": " + row2.rename.original,
+            placeholder: row2.rename.original
           })
         ]);
       } else {
@@ -3053,93 +3009,93 @@
             type: "button",
             class: "lib-name",
             "data-act": "rename",
-            "data-review": row.id,
-            "data-key": row.id + ":rename",
-            "aria-label": row.rename.label + ": " + row.name,
-            title: row.rename.label,
-            text: row.name
+            "data-review": row2.id,
+            "data-key": row2.id + ":rename",
+            "aria-label": row2.rename.label + ": " + row2.name,
+            title: row2.rename.label,
+            text: row2.name
           })
         ]);
       }
       var main = h("div", { class: "lib-row-main" }, [
         nameLine,
-        row.originalName ? h("p", { class: "lib-original", text: row.originalName }) : null,
-        row.path ? h("p", { class: "lib-where", title: row.pathTitle || null }, slashBreaks(row.path)) : null,
-        row.address ? h("p", { class: "lib-address" }, [
+        row2.originalName ? h("p", { class: "lib-original", text: row2.originalName }) : null,
+        row2.path ? h("p", { class: "lib-where", title: row2.pathTitle || null }, slashBreaks(row2.path)) : null,
+        row2.address ? h("p", { class: "lib-address" }, [
           h("a", {
-            href: row.address.href,
+            href: row2.address.href,
             target: "_blank",
             rel: "noopener noreferrer",
             "data-act-link": "address",
-            "data-review": row.id,
-            text: row.address.text
+            "data-review": row2.id,
+            text: row2.address.text
           })
         ]) : null
       ]);
-      var facts = [h("span", { text: row.lastText })];
+      var facts = [h("span", { text: row2.lastText })];
       if (extra) facts.push(h("span", { text: extra }));
-      if (row.counts.waiting) facts.push(waitingMark(row.counts.waiting));
-      facts.push(h("span", { text: row.counts.comments }));
-      if (row.counts.asOf) facts.push(h("span", { text: row.counts.asOf }));
-      row.badges.forEach(function(b) {
+      if (row2.counts.waiting) facts.push(waitingMark(row2.counts.waiting));
+      facts.push(h("span", { text: row2.counts.comments }));
+      if (row2.counts.asOf) facts.push(h("span", { text: row2.counts.asOf }));
+      row2.badges.forEach(function(b) {
         var kind = b.indexOf("agent listening") === 0 || b.indexOf("agent working") === 0 ? "watching" : b === "being served now" ? "served" : "ended";
         facts.push(h("span", { class: "lib-badge", "data-badge": kind, text: b }));
       });
-      if (row.folded) facts.push(h("span", { text: row.folded }));
+      if (row2.folded) facts.push(h("span", { text: row2.folded }));
       main.appendChild(h("div", { class: "lib-facts" }, facts));
-      if (row.pagesToggle) {
+      if (row2.pagesToggle) {
         main.appendChild(
           h("p", { class: "lib-line" }, [
-            button(row.pagesToggle.text, {
+            button(row2.pagesToggle.text, {
               "data-act": "pages",
-              "data-review": row.id,
-              "data-key": row.id + ":pages",
+              "data-review": row2.id,
+              "data-key": row2.id + ":pages",
               "data-quiet": "true",
               "data-disclosure": "true",
-              "aria-expanded": row.pagesToggle.expanded ? "true" : "false"
+              "aria-expanded": row2.pagesToggle.expanded ? "true" : "false"
             })
           ])
         );
       }
-      if (row.pages.length) {
+      if (row2.pages.length) {
         main.appendChild(
           h(
             "ul",
             { class: "lib-pages", "aria-label": "Pages" },
-            row.pages.map(function(p) {
+            row2.pages.map(function(p) {
               return h("li", null, [h("span", { text: p.title }), p.title !== p.path ? h("span", { class: "lib-path", text: p.path }) : null]);
             })
           )
         );
       }
-      row.notices.forEach(function(n) {
+      row2.notices.forEach(function(n) {
         main.appendChild(h("p", { class: "lib-line", "data-tone": n.tone, text: n.text }));
       });
-      if (row.note) {
-        var noteKids = [h("span", { class: "lib-mark", "aria-hidden": "true" }), h("span", { class: "lib-note-text", text: row.note.text })];
-        if (row.note.copyHandoff) {
+      if (row2.note) {
+        var noteKids = [h("span", { class: "lib-mark", "aria-hidden": "true" }), h("span", { class: "lib-note-text", text: row2.note.text })];
+        if (row2.note.copyHandoff) {
           noteKids.push(
-            button(row.handoffLabel, {
+            button(row2.handoffLabel, {
               "data-act": "handoff",
               "data-reason": "refused",
-              "data-review": row.id,
-              "data-key": row.id + ":handoff",
+              "data-review": row2.id,
+              "data-key": row2.id + ":handoff",
               "data-quiet": "true"
             })
           );
         }
         main.appendChild(
-          h("p", { class: "lib-note", "data-tone": row.note.tone, "data-busy": row.note.busy ? "true" : "false" }, noteKids)
+          h("p", { class: "lib-note", "data-tone": row2.note.tone, "data-busy": row2.note.busy ? "true" : "false" }, noteKids)
         );
       }
-      if (row.offerHandoff) {
+      if (row2.offerHandoff) {
         main.appendChild(
           h("p", { class: "lib-line" }, [
-            button(row.handoffLabel, {
+            button(row2.handoffLabel, {
               "data-act": "handoff",
               "data-reason": "no_agent",
-              "data-review": row.id,
-              "data-key": row.id + ":handoff",
+              "data-review": row2.id,
+              "data-key": row2.id + ":handoff",
               "data-quiet": "true"
             })
           ])
@@ -3149,24 +3105,24 @@
         type: "button",
         class: "lib-star",
         "data-act": "star",
-        "data-review": row.id,
-        "data-key": row.id + ":star",
-        "aria-pressed": row.star.on ? "true" : "false",
-        "aria-label": row.star.label,
-        title: row.star.label,
-        "aria-busy": row.star.pending ? "true" : null,
-        disabled: !row.star.enabled || row.star.pending,
-        text: row.star.on ? "\u2605" : "\u2606"
+        "data-review": row2.id,
+        "data-key": row2.id + ":star",
+        "aria-pressed": row2.star.on ? "true" : "false",
+        "aria-label": row2.star.label,
+        title: row2.star.label,
+        "aria-busy": row2.star.pending ? "true" : null,
+        disabled: !row2.star.enabled || row2.star.pending,
+        text: row2.star.on ? "\u2605" : "\u2606"
       });
-      var actKids = [actionButton(row, "open", true)];
-      var hand = row.buttons.handTo;
+      var actKids = [actionButton(row2, "open", true)];
+      var hand = row2.buttons.handTo;
       if (!hand.hidden) {
-        var menuId = "lib-menu-" + row.id;
+        var menuId = "lib-menu-" + row2.id;
         var menuWrap = h("div", { class: "lib-menu" }, [
           button(hand.label, {
             "data-act": "menu",
-            "data-review": row.id,
-            "data-key": row.id + ":menu",
+            "data-review": row2.id,
+            "data-key": row2.id + ":menu",
             "aria-haspopup": "true",
             "aria-expanded": hand.expanded ? "true" : "false",
             "aria-controls": hand.expanded ? menuId : null,
@@ -3178,8 +3134,8 @@
         if (hand.expanded) {
           menuWrap.appendChild(
             h("div", { class: "lib-menu-list", id: menuId, role: "group", "aria-label": hand.label }, [
-              actionButton(row, "pickup", false),
-              actionButton(row, "launch", false)
+              actionButton(row2, "pickup", false),
+              actionButton(row2, "launch", false)
             ])
           );
         }
@@ -3187,26 +3143,26 @@
       }
       var acts = h("div", { class: "lib-acts" }, actKids);
       var kids = [starBtn, main, acts];
-      if (row.panel) {
+      if (row2.panel) {
         kids.push(
-          h("div", { class: "lib-panel", role: "region", "aria-label": row.handoffLabel }, [
-            h("p", { text: row.panel.intro }),
-            row.panel.message ? h("pre", { text: row.panel.message }) : null,
+          h("div", { class: "lib-panel", role: "region", "aria-label": row2.handoffLabel }, [
+            h("p", { text: row2.panel.intro }),
+            row2.panel.message ? h("pre", { text: row2.panel.message }) : null,
             h("div", { class: "lib-panel-acts" }, [
-              row.panel.message ? button(row.panel.copyLabel, {
+              row2.panel.message ? button(row2.panel.copyLabel, {
                 "data-act": "copy",
-                "data-review": row.id,
-                "data-key": row.id + ":copy",
-                "data-message": row.panel.message,
+                "data-review": row2.id,
+                "data-key": row2.id + ":copy",
+                "data-message": row2.panel.message,
                 "data-primary": "true"
               }) : null,
-              button(row.panel.closeLabel, { "data-act": "close-panel", "data-review": row.id, "data-key": row.id + ":close" }),
-              row.panel.copyStatus ? h("span", { class: "lib-copy-status", role: "status", text: row.panel.copyStatus }) : null
+              button(row2.panel.closeLabel, { "data-act": "close-panel", "data-review": row2.id, "data-key": row2.id + ":close" }),
+              row2.panel.copyStatus ? h("span", { class: "lib-copy-status", role: "status", text: row2.panel.copyStatus }) : null
             ])
           ])
         );
       }
-      return h("li", { "data-review": row.id }, [h("div", { class: "lib-row" }, kids)]);
+      return h("li", { "data-review": row2.id }, [h("div", { class: "lib-row" }, kids)]);
     }
     function cardTitle(card) {
       if (card.rename && card.rename.editing) {
