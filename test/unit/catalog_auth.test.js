@@ -39,6 +39,8 @@ const OTHER_LOOPBACK = "http://127.0.0.1:5555";
 
 const PAGE = protocol.route("catalog.page");
 const ASSET = protocol.route("catalog.asset");
+// The Library page's one script: the file npm run build:layer writes.
+const LIBRARY_SCRIPT = "lahe-library.js";
 const API_ROUTES = ["catalog.list", "catalog.open", "catalog.star", "catalog.rename", "catalog.request"].map(protocol.route);
 const POST_ROUTES = API_ROUTES.filter((r) => r.method === "POST");
 
@@ -202,7 +204,7 @@ function hasCorsHeader(headers) {
 test("catalog.page and catalog.asset accept Sec-Fetch-Site none or same-origin with no custom header", async () => {
   const helper = await startHelper();
   try {
-    for (const p of [PAGE.path, ASSET.path + "page.js"]) {
+    for (const p of [PAGE.path, ASSET.path + LIBRARY_SCRIPT]) {
       for (const site of ["none", "same-origin"]) {
         const res = await raw(helper.port, { path: p, headers: pageHeaders(helper.port, { "sec-fetch-site": site }) });
         assert.equal(res.status, 200, p + " with Sec-Fetch-Site " + site);
@@ -217,7 +219,7 @@ test("catalog.page and catalog.asset refuse same-site, cross-site, a missing Sec
   const helper = await startHelper();
   const port = helper.port;
   try {
-    for (const p of [PAGE.path, ASSET.path + "page.js"]) {
+    for (const p of [PAGE.path, ASSET.path + LIBRARY_SCRIPT]) {
       // The page opens for any top-level navigation and for a request with no
       // Sec-Fetch headers at all (library_link_navigation.test.js); here the
       // headers say it is not a navigation, or say nothing about the mode.
@@ -344,7 +346,7 @@ test("OPTIONS on every catalog route gets no approval headers, even from an orig
   const helper = await startHelper();
   const port = helper.port;
   try {
-    const paths = [PAGE.path, ASSET.path + "page.js"].concat(API_ROUTES.map((r) => r.path));
+    const paths = [PAGE.path, ASSET.path + LIBRARY_SCRIPT].concat(API_ROUTES.map((r) => r.path));
     for (const p of paths) {
       for (const origin of [OTHER_LOOPBACK, "http://" + hostOf(port)]) {
         const res = await raw(port, {
@@ -454,12 +456,10 @@ test("the page has no CORS header, carries the script, frame, referrer and no-st
     assert.ok(scripts.length > 0, "the page loads its script");
     scripts.forEach((tag) => assert.match(tag, /\bsrc="/));
     assert.equal(res.text.split(token).length - 1, 1, "the token appears once, in the meta tag");
-    assert.ok(res.text.indexOf(ASSET.path + "page.js") !== -1, "the page loads page.js from catalog.asset");
-    assert.ok(res.text.indexOf(ASSET.path + "protocol.js") !== -1, "the page loads protocol.js from catalog.asset");
-    assert.ok(
-      res.text.indexOf(ASSET.path + "copy_text.js") !== -1 &&
-        res.text.indexOf(ASSET.path + "copy_text.js") < res.text.indexOf(ASSET.path + "page.js"),
-      "the shared copy function loads before the page script that calls it"
+    assert.deepEqual(
+      scripts,
+      ['<script src="' + ASSET.path + LIBRARY_SCRIPT + '" defer>'],
+      "the page loads one script, its built file, from catalog.asset"
     );
   } finally {
     await helper.close();
@@ -475,15 +475,12 @@ test("catalog.asset serves each allowlisted file with its content type, and noth
     // The allowlist is the architecture's, exactly.
     assert.deepEqual(
       names.slice().sort(),
-      ["page.js", "protocol.js", "view_model.js", "copy_text.js", markdown.DOC_STYLE_ASSET]
+      [LIBRARY_SCRIPT, markdown.DOC_STYLE_ASSET]
         .concat(markdown.FONT_ASSETS.map((f) => markdown.FONT_ASSET_DIR + "/" + f))
         .sort()
     );
     const expectType = {
-      "protocol.js": /^application\/javascript/,
-      "page.js": /^application\/javascript/,
-      "view_model.js": /^application\/javascript/,
-      "copy_text.js": /^application\/javascript/,
+      [LIBRARY_SCRIPT]: /^application\/javascript/,
       [markdown.DOC_STYLE_ASSET]: /^text\/css/
     };
     markdown.FONT_ASSETS.forEach((f) => (expectType[markdown.FONT_ASSET_DIR + "/" + f] = /^font\/woff2$/));
@@ -491,19 +488,18 @@ test("catalog.asset serves each allowlisted file with its content type, and noth
     for (const name of names) {
       const res = await raw(port, { path: ASSET.path + name, headers: pageHeaders(port, { "sec-fetch-site": "same-origin" }) });
       const source = catalogPage.ASSETS[name].file;
-      if (source && !fs.existsSync(source)) {
-        // view_model.js is Task 2.2's file. Until it lands the name is allowed
-        // and simply absent: a 404, never another file's bytes.
-        assert.equal(name, "view_model.js", name + " must exist");
-        assert.equal(res.status, 404);
-        continue;
-      }
+      assert.ok(!source || fs.existsSync(source), name + " must exist (npm run build:layer writes the Library page's script)");
       assert.equal(res.status, 200, name);
       assert.match(String(res.headers["content-type"]), expectType[name], name);
       assert.equal(hasCorsHeader(res.headers), false, name);
       assert.equal(res.headers["x-content-type-options"], "nosniff", name);
       const expected = source ? fs.readFileSync(source) : Buffer.from(markdown.styleSheet(), "utf8");
       assert.ok(res.buf.equals(expected), name + " bytes are the source file's");
+    }
+    // The four scripts the page loaded before it had a built file are gone.
+    for (const name of ["protocol.js", "view_model.js", "copy_text.js", "page.js"]) {
+      const res = await raw(port, { path: ASSET.path + name, headers: pageHeaders(port, { "sec-fetch-site": "same-origin" }) });
+      assert.equal(res.status, 404, name);
     }
   } finally {
     await helper.close();
