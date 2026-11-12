@@ -29,14 +29,14 @@
     "node": ">=24.12.0"
   },
   "scripts": {
-    "lint": "node scripts/lint.js",
+    "lint": "node scripts/lint.js && tsc -b && eslint",
     "install-cli": "node scripts/install-cli.js",
     "install-skills": "node scripts/install-skills.js",
     "build:layer": "node scripts/build-layer.js",
     "docs:tests": "node scripts/test_index.js",
     "check:layer": "node scripts/build-layer.js --check",
     "check:menubar": "node scripts/check_menubar.js",
-    "test:unit": "LAHE_DIRECT_LAUNCH=off LAHE_MARKDOWN_ENGINE=marked node scripts/no_stray_helpers.js --limit-minutes 30 node --test \"test/unit/*.test.js\"",
+    "test:unit": "LAHE_DIRECT_LAUNCH=off LAHE_MARKDOWN_ENGINE=marked node scripts/no_stray_helpers.js --limit-minutes 30 node --test \"test/unit/*.test.js\" \"test/unit/**/*.test.ts\"",
     "test:browser": "LAHE_DIRECT_LAUNCH=off playwright test",
     "test:browser:all": "LAHE_ALL_BROWSERS=1 playwright test",
     "gate": "npm run lint && npm run check:layer && npm run check:menubar && npm run test:unit && npm run test:browser",

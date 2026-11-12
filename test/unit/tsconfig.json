@@ -1,0 +1,36 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": [
+      "es2024"
+    ],
+    "types": [
+      "node"
+    ],
+    "outDir": "../../.tsbuild/test/unit"
+  },
+  "files": [],
+  "include": [
+    "**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../../src/contract"
+    },
+    {
+      "path": "../../src/domain"
+    },
+    {
+      "path": "../../src/server"
+    },
+    {
+      "path": "../../src/cli"
+    },
+    {
+      "path": "../../src/browser/review-layer"
+    },
+    {
+      "path": "../../src/browser/library-page"
+    }
+  ]
+}

@@ -23,7 +23,18 @@
 //   3. MANIFEST COMPLETENESS. Every file under src/, of any kind, appears exactly once across
 //      the lists src/shared/manifest.js exposes. A file with two owners is a
 //      merge conflict every time both touch it; a file with none is a thing
-//      nobody built.
+//      nobody built. During the TypeScript migration three kinds of file are
+//      left out: .ts files (their folder is their owner, and the compiler's
+//      project references say what they may import), and the package.json and
+//      tsconfig.json files that make a folder an ES module TypeScript project.
+//      The one-line forwarders left at old paths are listed in FORWARDERS.
+//   4. KEBAB-CASE .ts NAMES. Every .ts file under src/ is named in kebab-case,
+//      the standard the migration renames everything to.
+//
+// tsc -b and ESLint run after this script in `npm run lint`; see
+// docs/ongoing/code/README.md. The walk skips docs/ and .claude/worktrees/:
+// the first holds one-off measurement scripts, the second holds whole copies of
+// the repo that each worktree lints for itself.
 //
 // THE THREE MANIFEST RULES, per the orchestrator's ruling on the seam:
 //
@@ -45,7 +56,8 @@ const path = require("node:path");
 const fs = require("node:fs");
 
 const root = path.join(__dirname, "..");
-const skipDirs = new Set(["node_modules", ".git", "test-results", "playwright-report"]);
+const skipDirs = new Set(["node_modules", ".git", ".tsbuild", "test-results", "playwright-report"]);
+const skipPaths = new Set(["docs", ".claude/worktrees"]);
 
 // ---------------------------------------------------------------------------
 // Shared file walking
@@ -56,6 +68,7 @@ function collectFiles(dir, out, filter) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (skipDirs.has(entry.name)) continue;
     const full = path.join(dir, entry.name);
+    if (skipPaths.has(relative(full))) continue;
     if (entry.isDirectory()) {
       collectFiles(full, out, filter);
     } else if (entry.isFile() && filter(entry.name)) {
@@ -67,6 +80,10 @@ function collectFiles(dir, out, filter) {
 
 function isJs(name) {
   return name.endsWith(".js");
+}
+
+function isTs(name) {
+  return name.endsWith(".ts");
 }
 
 function relative(file) {
@@ -178,7 +195,9 @@ const JSDOM_SPECIFIER = new RegExp(
 
 function jsdomImports() {
   const hits = [];
-  collectFiles(path.join(root, "test"), [], isJs).forEach(function (file) {
+  collectFiles(path.join(root, "test"), [], function (name) {
+    return isJs(name) || isTs(name);
+  }).forEach(function (file) {
     const source = fs.readFileSync(file, "utf8");
     source.split("\n").forEach(function (line, index) {
       JSDOM_SPECIFIER.lastIndex = 0;
@@ -209,6 +228,7 @@ if (jsdomHits.length > 0) {
 // ---------------------------------------------------------------------------
 
 const MANIFEST_PATH = "src/shared/manifest.js";
+const TS_PROJECT_FILES = new Set(["package.json", "tsconfig.json"]);
 const PATH_FIELDS = ["path", "file", "src", "source"];
 
 function pathOf(entry) {
@@ -273,9 +293,15 @@ function checkManifest() {
 
   // Every file, not only .js: the pandoc filter is Lua, and a file of any kind
   // under src/ ships and needs an owner. Not what a machine or an editor
-  // leaves beside them: dotfiles (.DS_Store, swap files) and backups.
+  // leaves beside them: dotfiles (.DS_Store, swap files) and backups. Not the
+  // migration's .ts files and project files either (see the header).
   const onDisk = collectFiles(path.join(root, "src"), [], function (name) {
-    return name.charAt(0) !== "." && !/(~|\.orig|\.bak|\.swp|\.rej)$/.test(name);
+    return (
+      name.charAt(0) !== "." &&
+      !/(~|\.orig|\.bak|\.swp|\.rej)$/.test(name) &&
+      !isTs(name) &&
+      !TS_PROJECT_FILES.has(name)
+    );
   }).map(relative).sort();
   const missing = onDisk.filter(function (file) {
     return !counts.has(file);
@@ -334,6 +360,27 @@ function checkManifest() {
 checkManifest();
 
 // ---------------------------------------------------------------------------
+// 4. Kebab-case .ts names
+// ---------------------------------------------------------------------------
+
+const KEBAB_TS = /^[a-z0-9]+(?:-[a-z0-9]+)*\.ts$/;
+const badNames = collectFiles(path.join(root, "src"), [], isTs)
+  .filter(function (file) {
+    return !KEBAB_TS.test(path.basename(file));
+  })
+  .map(relative)
+  .sort();
+
+if (badNames.length > 0) {
+  fail("kebab-case", [
+    "Every .ts file under src/ is named in kebab-case: lowercase words joined by hyphens, then .ts.",
+    ""
+  ].concat(badNames.map(function (file) {
+    return "  " + file;
+  })));
+}
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 
@@ -363,5 +410,5 @@ console.log(
     luaSummary +
     ", no " +
     JSDOM_NAME +
-    ", manifest complete)"
+    ", manifest complete, kebab-case .ts names)"
 );
