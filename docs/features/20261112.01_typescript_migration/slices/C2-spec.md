@@ -696,7 +696,7 @@ A readable, filesystem-safe fragment of a review's file name. It is never a path
 
 1. **One name from several modules:** accepted. S0c builds this into the generated registration and the forwarder: a manifest entry may list several `.ts` paths for one namespace name, and both sides hand callers one plain, writable object. Converted modules export functions and constants only, never a reassigned `let`. C2 does not extend the generator.
 2. **C1's signatures:** the orchestrator compares this spec with the C1 spec and tells the C2 builder about any mismatch before it starts.
-3. **`export_stub.js`:** C1 owns it, because C1 breaks it first. C1 moves it onto S0c's bundle helper.
+3. **`export_stub.js`:** it is dead (nothing calls it), so it goes on the cleanup list and neither slice changes it. See the C1 spec's decisions.
 4. **`targetSlug`:** stays in `src/domain/target-slug.ts` for now. SV2 moves it into the server and removes the domain file.
 5. **D8 and D9 stay in C2,** each with its own test. They go on the progress page as departures that agents and reviewers will notice.
 6. **Docs that name `normalize`:** as decided in the spec. The orchestrator resolves line conflicts with C4.
