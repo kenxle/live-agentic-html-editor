@@ -165,7 +165,10 @@ test("with no agent, Pick this up and Launch show the hand-off panel instead of 
       r.panel.intro,
       "No agent is attached. This is the same hand-off message the chat bar already copies. Paste it into any agent:"
     );
-    assert.equal(r.panel.message, protocol.AGENT_LIVENESS.handoffMessage("s_coach", "coach activity", false, { library: true, stateDir: null }));
+    assert.equal(
+      r.panel.message,
+      protocol.handoffMessage({ from: "library", sessionId: "s_coach", name: "coach activity", stateDir: null, request: null })
+    );
     assert.equal(r.panel.copyLabel, "Copy");
   });
 });

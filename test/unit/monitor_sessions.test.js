@@ -226,7 +226,3 @@ test("a live monitor on either session refuses a second one", async () => {
   assert.match(stderr.join(""), /s_b already has a live monitor/);
 });
 
-test("protocol.monitorCommand spells a relaunch for several sessions", () => {
-  assert.equal(protocol.monitorCommand(["s_a", "s_b"], null), "lahe monitor --session s_a --session s_b");
-  assert.equal(protocol.monitorCommand("s_a", null), "lahe monitor --session s_a");
-});

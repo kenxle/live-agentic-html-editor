@@ -34,11 +34,11 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { routeRow } = require("../helpers/contract_doc.js");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const protocol = require("../../src/shared/protocol.js");
 const record = require("../../src/shared/record.js");
 const storeModule = require("../../src/layer/store.js");
 const syncModule = require("../../src/layer/sync.js");
@@ -896,10 +896,10 @@ test("the window.claim route passes quiet through as a boolean and nothing else"
   );
 });
 
-test("protocol describes quiet on the window.claim route", () => {
-  const route = protocol.route("window.claim");
-  assert.match(route.request, /quiet\?/);
-  assert.match(route.response, /quiet_heartbeat_seconds/);
+test("the folder doc's route table describes quiet on the window.claim route", () => {
+  const row = routeRow("window.claim");
+  assert.match(row, /quiet\?/);
+  assert.match(row, /quiet_heartbeat_seconds/);
 });
 
 // The helper's first answer on whether anything holds the session's feed can

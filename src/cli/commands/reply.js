@@ -287,8 +287,8 @@ function validateBody(args) {
   var blank = function (value) {
     return typeof value !== "string" || !value.trim();
   };
-  // TEXT ALONE, because that is what the fold requires (protocol.REPLY_REQUIRED
-  // .question). Accepting a reason in its place wrote a line this command exits
+  // TEXT ALONE, because that is what the fold requires (the question rule in
+  // src/contract/replies.ts). Accepting a reason in its place wrote a line this command exits
   // 0 on and parseReplyLine then rejects: the agent believes it asked, and the
   // reviewer gets a malformed-line chip instead of a question.
   if (args.status === protocol.REPLY_STATUS.QUESTION && blank(args.text)) {

@@ -1468,7 +1468,7 @@ The one read path, and the one keep-up loop. Before it, every agent hand-rolled 
   - `request`, `action`, `review`, `session`, `kind`, `origin`, `moves_with`, `at` and `note` are ids and
     helper values. `note` is set on a `legacy` entry only: "It belongs to no session. Serving it
     takes review <review> into your session, with its old comments; drain it for any still waiting."
-    (`protocol.CATALOG_LEGACY_NOTE`). `moves_with` is the other reviews the document's session owns. `origin` is a
+    (`protocol.legacyPickupNote`). `moves_with` is the other reviews the document's session owns. `origin` is a
     `dev-server` row's origin, else null.
   - **`kind`:** `legacy` for a review with no session; `dev-server` only when the review has a
     registered origin no old page server record of its session serves, on a target LAHE would not serve
@@ -1494,7 +1494,7 @@ The one read path, and the one keep-up loop. Before it, every agent hand-rolled 
     one. `lahe library serve` serves a legacy row's document only when it holds this review's own
     script line.
     `handoff` is the rail's hand-off message in its Library form,
-    `AGENT_LIVENESS.handoffMessage(session, name, false, {library: true, stateDir: state_dir})`.
+    `handoffMessage({from: "library", sessionId, name, stateDir: state_dir, request})`.
     It is the rail's text with one sentence changed: it asks the new agent to take the session over
     and blames nobody (the session may be closed, or the reviewer wants a new agent). It also writes
     the real `--state-dir` into the command when it is not the default, where the rail asks for it.
@@ -1633,13 +1633,13 @@ carries only the fields above.
   name --from-review`, recorded as `name_source: "page"` in `session.json`). The rail still shows the
   name, but its hand-off message leaves it out.
 
-**Overdue is one rule**, `protocol.AGENT_LIVENESS.overdue(state, waitedMs)`: `no_agent` past
+**Overdue is one rule**, `protocol.livenessOverdue(state, waitedMs)`: `no_agent` past
 `NO_AGENT_LOUD_MS`, `waiting` past `STALE_MS`, `working` and `none` never. `no_agent` SPEAKS at
 `QUIET_MS` like the others; it just does not go loud until two minutes, because an agent thinking
 through a hard comment leaves no footprint and reads the same as an empty chair. The footer line goes loud on it.
 The banner at the top of the rail shows exactly while the footer is loud, and its one button copies
-`AGENT_LIVENESS.handoffMessage(session_id, session_name, state_dir_flag_needed)` for a new agent (the
-same builder the Library calls with `{library: true}`; with
+`handoffMessage({from: "rail", sessionId, name, stateDirFlagNeeded})` for a new agent (the
+same builder the Library calls with `from: "library"`; with
 `session_name` null when `session_name_from_page` is true): the
 takeover command for that id, and a sentence saying `--state-dir` is needed when it is. A ready card
 with no reply turns amber when its own wait passes the same rule. With the rail collapsed, the pill

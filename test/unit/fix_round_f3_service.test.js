@@ -49,15 +49,6 @@ function line(suggestions) {
   return JSON.stringify({ item: "c_1", rev: 1, status: "question", agent: "a", text: "Fixes?", proofread: true, suggestions: suggestions });
 }
 
-test("a reply line with too many suggestions is refused", () => {
-  const many = [];
-  for (let i = 0; i <= protocol.SUGGESTIONS_MAX; i += 1) many.push({ block: 0, from: "a" + i, to: "b" });
-  const got = protocol.parseReplyLine(line(many));
-  assert.equal(got.ok, false);
-  assert.ok(/suggestions/.test(got.reason), got.reason);
-  assert.equal(protocol.parseReplyLine(line(many.slice(0, protocol.SUGGESTIONS_MAX))).ok, true);
-});
-
 test("a reply line whose from or to is over the run's byte ceiling is refused", () => {
   const big = "x".repeat(record.NEW_BLOCKS_MAX_BYTES + 1);
   assert.equal(protocol.parseReplyLine(line([{ block: 0, from: big, to: "y" }])).ok, false);

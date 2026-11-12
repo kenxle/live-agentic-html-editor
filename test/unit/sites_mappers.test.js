@@ -501,12 +501,3 @@ test("V70: a record's odd root or port never becomes an alias", async (t) => {
   assert.deepEqual(pageRoutes.aliasesFor(w.dir, site).sort(), ["http://127.0.0.1:51001", "http://localhost:51001"]);
 });
 
-test("V70: the script tag carries the aliases as escaped JSON, and only when there are some", () => {
-  const tag = protocol.scriptTag({ src: "/x.js", review: "r1", token: "t", aliases: ["http://127.0.0.1:51001", "http://localhost:51001"] });
-  assert.match(tag, /data-lahe-aliases="\[&quot;http:\/\/127\.0\.0\.1:51001&quot;,&quot;http:\/\/localhost:51001&quot;\]"/);
-  assert.doesNotMatch(protocol.scriptTag({ src: "/x.js", review: "r1", token: "t" }), /data-lahe-aliases/);
-  assert.throws(() => protocol.scriptTag({ src: "/x.js", review: "r1", token: "t", aliases: ["http://evil.example:1"] }), /alias/);
-  const many = [];
-  for (let p = 1; p <= 17; p += 1) many.push("http://127.0.0.1:" + p);
-  assert.throws(() => protocol.scriptTag({ src: "/x.js", review: "r1", token: "t", aliases: many }), /16/);
-});

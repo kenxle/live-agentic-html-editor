@@ -215,20 +215,9 @@ test("question with nothing in it fails too", async () => {
   assert.equal(fs.existsSync(path.join(dir, "reviews", REVIEW, "replies.jsonl")), false);
 });
 
-test("a hand-appended refusal with a blank reason is rejected by the fold, not shown as an empty refusal", () => {
-  const line = JSON.stringify({ item: "itm_one", rev: 3, status: "not_handled", agent: "claude", reason: "   " });
-  const parsed = protocol.parseReplyLine(line, { filenameAgent: "claude" });
-  assert.equal(parsed.ok, false, "whitespace is not a reason");
-  assert.equal(parsed.code, "REPLY_LINE_MALFORMED");
-  assert.match(parsed.reason, /reason/);
-
-  const good = JSON.stringify({ item: "itm_one", rev: 3, status: "not_handled", reason: "checked the page" });
-  assert.equal(protocol.parseReplyLine(good, { filenameAgent: null }).ok, true);
-});
-
 test("question with only a --reason is refused, because the fold needs text", async () => {
-  // The fold's own rule (protocol.REPLY_REQUIRED.question) is item, rev, status,
-  // text. A command that accepted a reason instead would exit 0 on a line the
+  // The fold's own rule (the question case of parseReplyLine, in
+  // src/contract/replies.ts) is item, rev, status, text. A command that accepted a reason instead would exit 0 on a line the
   // fold then rejects: the agent believes it asked a question, and the reviewer
   // gets a malformed-line chip and no question.
   const dir = aStateDir();

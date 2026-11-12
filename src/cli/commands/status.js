@@ -969,7 +969,7 @@ function catalogEntries(dir, sessionId, nowMs, describe, keep) {
       folder: fields.folder,
       handoff: fields.handoff,
       // A helper sentence, not page text: what serving a legacy row does.
-      note: fields.kind === "legacy" ? protocol.CATALOG_LEGACY_NOTE(request.review) : null,
+      note: fields.kind === "legacy" ? protocol.legacyPickupNote(request.review) : null,
       // Not printed: which agent answers it. The human output names it in the
       // answer command.
       _for: request.for

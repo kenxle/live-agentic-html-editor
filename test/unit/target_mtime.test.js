@@ -14,6 +14,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { routeRow } = require("../helpers/contract_doc.js");
 
 const fs = require("node:fs");
 const os = require("node:os");
@@ -22,7 +23,6 @@ const path = require("node:path");
 const logModule = require("../../src/service/log.js");
 const reviewsModule = require("../../src/service/reviews.js");
 const routes = require("../../src/service/routes.js");
-const protocol = require("../../src/shared/protocol.js");
 const syncModule = require("../../src/layer/sync.js");
 const { pollUntil } = require("../helpers/poll.js");
 
@@ -252,10 +252,10 @@ test("a folder review never writes a script line into one of its pages", () => {
   assert.equal(fs.readdirSync(f.site).sort().join(","), "index.html,plan.html", "and no bundle was copied beside it");
 });
 
-test("the route table documents target_mtime, so nobody has to read the handler to find it", () => {
-  const route = protocol.route("replies.poll");
-  assert.match(route.response, /target_mtime/);
-  assert.match(route.request, /page_path/);
+test("the folder doc's route table documents target_mtime, so nobody has to read the handler to find it", () => {
+  const row = routeRow("replies.poll");
+  assert.match(row, /target_mtime/);
+  assert.match(row, /page_path/);
 });
 
 // ---------------------------------------------------------------------------

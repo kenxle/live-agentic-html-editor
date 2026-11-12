@@ -303,7 +303,7 @@ test.describe("the Library page", () => {
     await expect(page.locator("#lahe-catalog-agent")).toHaveText(
       "No agent attached. Open still works; hand-overs give you a message to paste."
     );
-    const message = protocol.AGENT_LIVENESS.handoffMessage("s_coach", "coach activity", false, { library: true, stateDir: null });
+    const message = protocol.handoffMessage({ from: "library", sessionId: "s_coach", name: "coach activity", stateDir: null, request: null });
     for (const action of ["pickup", "launch"]) {
       await handTo(page, "r_mounted", action);
       const panel = rowLocator(page, "r_mounted").locator(".lib-panel");

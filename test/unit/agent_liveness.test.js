@@ -4,6 +4,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { routeRow } = require("../helpers/contract_doc.js");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -972,10 +973,10 @@ test("a state the rail has never heard of says nothing rather than inventing a s
   rail.unmount();
 });
 
-test("the route table documents agent_liveness, so nobody has to read the handler to find it", () => {
-  const route = protocol.route("replies.poll");
-  assert.match(route.response, /agent_liveness/);
-  assert.match(route.response, /oldest_unanswered_at/);
+test("the folder doc's route table documents agent_liveness, so nobody has to read the handler to find it", () => {
+  const row = routeRow("replies.poll");
+  assert.match(row, /agent_liveness/);
+  assert.match(row, /oldest_unanswered_at/);
 });
 
 test("a review with no agent session is told the truth, and never accused of nobody", () => {
@@ -1030,6 +1031,3 @@ test("presence: a killed monitor's fresh heartbeat is not listening", () => {
   assert.equal(presenceAt({ monitor: { pid: 1, handoff_rev: 0, at: agoMs(1000) }, pidAlive: deadPid }), LIVENESS.PRESENCE.AWAY);
 });
 
-test("the working window is two minutes, spelled once in CATALOG", () => {
-  assert.equal(protocol.CATALOG.WORKING_MS, 2 * 60 * 1000);
-});

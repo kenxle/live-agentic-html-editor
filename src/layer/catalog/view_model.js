@@ -481,9 +481,12 @@
     // The rail's hand-off message in its Library form, with the state dir the
     // list names (null for the default one).
     var dirPath = list && typeof list.state_dir === "string" && list.state_dir ? list.state_dir : null;
-    return protocol.AGENT_LIVENESS.handoffMessage(legacy ? null : session.id, name, false, {
-      library: true,
-      stateDir: dirPath
+    return protocol.handoffMessage({
+      from: "library",
+      sessionId: legacy ? null : session.id,
+      name: name,
+      stateDir: dirPath,
+      request: null
     });
   }
 

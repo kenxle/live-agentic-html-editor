@@ -25,46 +25,7 @@ const { sitesWorld, writeFile, raw, tempRoot } = require("../helpers/sites_world
 
 const PAGE = "<!doctype html><html><head><title>t</title></head><body><p>hello</p></body></html>";
 
-// --- the Host check -------------------------------------------------------------
-
-test("a .lahe Host is a page only once the .lahe check has passed", () => {
-  const off = { pagesPort: 1483, laheNames: false };
-  const on = { pagesPort: 1483, laheNames: true };
-  assert.equal(protocol.classifyHost("a.b.lahe", off).family, "bad");
-  assert.equal(protocol.classifyHost("a.b.lahe:1483", off).family, "bad");
-  assert.deepEqual(protocol.classifyHost("a.b.lahe", on), { family: "page", name: "a.b" });
-  assert.deepEqual(protocol.classifyHost("a.b.lahe:1483", on), { family: "page", name: "a.b" });
-  assert.equal(protocol.classifyHost("a.b.lahe:7817", on).family, "bad", "a wrong port is still refused");
-  assert.equal(protocol.classifyHost("A.b.lahe", on).family, "bad", "uppercase is still refused");
-  assert.equal(protocol.classifyHost("a.b.lahe.", on).family, "bad", "a trailing dot is still refused");
-});
-
-test("library.lahe is never accepted, checked or not", () => {
-  for (const laheNames of [false, true]) {
-    for (const host of ["library.lahe", "library.lahe:1483"]) {
-      assert.equal(protocol.classifyHost(host, { pagesPort: 1483, laheNames }).family, "bad", host);
-    }
-  }
-  assert.equal(protocol.classifyHost("library.lahe.localhost:1483", { pagesPort: 1483 }).family, "library");
-});
-
 // --- the Origin check ------------------------------------------------------------
-
-test("a port-free .lahe.localhost origin is the forward, and always names its site", () => {
-  assert.equal(protocol.siteNameFromOrigin("http://a.b.lahe.localhost", 1483, false), "a.b");
-  assert.equal(protocol.siteNameFromOrigin("http://a.b.lahe.localhost:1483", 1483, false), "a.b");
-  assert.equal(protocol.siteNameFromOrigin("http://a.b.lahe.localhost:9999", 1483, false), null);
-});
-
-test("a .lahe origin names its site only once the .lahe check has passed", () => {
-  for (const origin of ["http://a.b.lahe", "http://a.b.lahe:1483"]) {
-    assert.equal(protocol.siteNameFromOrigin(origin, 1483, false), null, origin);
-    assert.equal(protocol.siteNameFromOrigin(origin, 1483, true), "a.b", origin);
-  }
-  assert.equal(protocol.siteNameFromOrigin("http://a.b.lahe:9999", 1483, true), null);
-  assert.equal(protocol.siteNameFromOrigin("http://library.lahe", 1483, true), null);
-  assert.equal(protocol.siteNameFromOrigin("https://a.b.lahe", 1483, true), null);
-});
 
 test("fileForPage follows the same rule for a .lahe origin", (t) => {
   const root = tempRoot("lahe-names-file-");

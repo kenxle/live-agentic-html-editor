@@ -410,7 +410,7 @@ async function runServe(args, opts, out, err) {
   });
   if (code === EXIT.OK) {
     agentSessions.createStore({ dir: dir }).touchActivity(args.session);
-    if (chosen.adopt) out(protocol.CATALOG_LEGACY_NOTE(request.review) + "\n");
+    if (chosen.adopt) out(protocol.legacyPickupNote(request.review) + "\n");
   }
   return code;
 }
