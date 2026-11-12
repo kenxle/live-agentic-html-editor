@@ -28,6 +28,8 @@
 //      project references say what they may import), and the package.json and
 //      tsconfig.json files that make a folder an ES module TypeScript project.
 //      The one-line forwarders left at old paths are listed in FORWARDERS.
+//      A converted browser module is listed too, by its .ts path, because
+//      LAYER_FILES holds the bundle's order; a listed .ts path must exist.
 //   4. KEBAB-CASE .ts NAMES. Every .ts file under src/ is named in kebab-case,
 //      the standard the migration renames everything to.
 //
@@ -316,10 +318,14 @@ function checkManifest() {
   // An entry with no file. `planned: true` says a later task creates it, which
   // is the whole reason those entries are written before the file exists.
   // Anything else with no file on disk is a manifest that has drifted from the
-  // tree, and the gate should say so.
+  // tree, and the gate should say so. A .ts path is not in onDisk (see the
+  // header), but LAYER_FILES lists a converted browser module by its .ts path
+  // to keep its place in the bundle order, so that path only has to exist.
   const phantom = Array.from(counts.keys())
     .filter(function (file) {
-      return onDisk.indexOf(file) === -1 && !planned.has(file);
+      if (planned.has(file)) return false;
+      if (isTs(file)) return !fs.existsSync(path.join(root, file));
+      return onDisk.indexOf(file) === -1;
     })
     .sort();
 
