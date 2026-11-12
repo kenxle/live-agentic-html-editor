@@ -4,7 +4,16 @@ read-when: Checking where the TypeScript migration stands, what it waits on, or 
 
 # Progress: TypeScript migration
 
-Wave 0 is done and merged: the Node 24.12 floor (PR #104), the TypeScript toolchain and strict gate (PR #105), and the esbuild bundles (PR #106). Checkpoint 0 passed. All five Wave 1 specs are written. C1 (constants, PR #107), C2 (normalizer, PR #108) and C4 (protocol, PR #109) are merged. C3 (the record) is building; C5 (item states and the review format) follows, then checkpoint 1.
+**Paused by Ken on 2026-11-12 at 17:03**, to spend tokens on another build. Nothing is running. 6 of 37 slices are merged: Wave 0 (S0a, S0b, S0c) and C1, C2 and C4 of Wave 1. Checkpoint 0 passed.
+
+**To resume:**
+
+1. **C3 (the record) is half built** on branch `ts/c3-record` (pushed), in worktree `.claude/worktrees/ts-c3-record`.
+   - Its red tests are committed, and so are the record modules that make them pass.
+   - The last commit is a WIP: the switch of old callers to the new modules, unfinished, with the gate not run.
+   - Start a builder from `slices/C3-spec.md` and the builder template. It finishes the caller switch, reads the size principles (see the plan's "How each slice is built", Principles), and does a refactor pass.
+2. **Then C5**, from `slices/C5-spec.md`, then checkpoint 1.
+3. **Specs already written for Wave 2:** SV1 (`slices/SV1-spec.md`, which includes the `lahe install` launchd fix) and B1 (`slices/B1-spec.md`).
 
 ## Attention needed
 
@@ -30,7 +39,7 @@ None. Ken's login item runs the server on Node 24.22.3, and the menu bar icon is
 | C1 Constants | Sonnet builder | merged | PR #107; gate:unit 3408 tests, 0 failed; 19 browser specs 211 passed; comment lines 706 to 15; 83 old cases carried, 1 dropped | none |
 | C2 Normalizer | Sonnet builder | merged | PR #108; gate:unit 3486 tests, 0 failed; 27 browser specs 332 passed; 103 old cases carried, 10 dropped; fuzz and 81-mutation runs | none |
 | C4 Protocol | Sonnet builder | merged | PR #109; gate:unit 3595 tests, 0 failed, with C1 and C2; 16 browser specs 78 passed; 94,481-input old-against-new run | none |
-| C3 Record | Sonnet builder | building | worktree `ts-c3-record` | review and merge, then C5 |
+| C3 Record | Sonnet builder | paused | branch `ts/c3-record`: red tests and record modules committed; the caller switch is a WIP commit, gate not run | resume the build |
 
 ## Decisions and events
 
@@ -59,3 +68,4 @@ None. Ken's login item runs the server on Node 24.22.3, and the menu bar icon is
 - **2026-11-12 16:28.** C2 merged as PR #108. Departures agents and reviewers will notice: links with a query string stop reaching agents as `&amp;amp;` (D8), and words stop running together in blocks taken from wrapped source (D9).
 - **2026-11-12 16:34.** C4 merged as PR #109. Departures agents will notice: a reply whose required reason is not a string becomes a malformed-line chip (D6), and the chip names a missing field once (D7). C3 build started.
 - **2026-11-12 17:04.** Ken: a refactor done well should be smaller, through the principles, not a separate goal. Builder contracts had not named the principles about size (Laziness Protocol, Subtract Before You Add, Minimize Reader Load, Migrate Callers Then Delete Legacy APIs), and code lines in C1, C2 and C4 grew about 6 percent (4,283 to 4,549, comments excluded; total lines fell 29 percent because comments moved to docs). Every spec and builder contract now names them, and the C3 builder was told mid-build.
+- **2026-11-12 17:03.** Ken paused the build to spend tokens on another one. The C3 builder was stopped; its work is saved on `ts/c3-record` with the unfinished caller switch as a labelled WIP commit.
