@@ -104,8 +104,9 @@ var LAYER_FILES = [
     why: "D3's gesture vocabulary. Depends on nothing"
   },
   {
-    path: "src/shared/epoch.js",
-    owner: "0A-kernel",
+    path: "src/browser/review-layer/editing/write-epoch.ts",
+    owner: "TypeScript C1",
+    registers: ["epoch"],
     why: "the write-epoch rule that stops replay retriggering replay. Depends on nothing"
   },
   {
@@ -425,6 +426,11 @@ var FORWARDERS = [
     path: "src/shared/style_rules.js",
     owner: "TypeScript C1",
     why: "forwards to src/contract/style-rules.ts for the service's styles and contracts"
+  },
+  {
+    path: "src/shared/epoch.js",
+    owner: "TypeScript C1",
+    why: "forwards to src/browser/review-layer/editing/write-epoch.ts for replay's Node branch and contracts"
   }
 ];
 

@@ -56,7 +56,7 @@ test("finding 9: a repaint that owed a pass during replay's own write actually g
 
     // The observer saw a repaint it could not attribute to the tool and only
     // remembered that a pass is owed. Nothing in src consumes this today.
-    epoch.shared.noteExternalMutation();
+    epoch.noteExternalMutation();
 
     // A pass runs; its end must notice the owed flag and schedule the follow-up.
     replay.runPass(replay.REASON.BOOT);
@@ -70,7 +70,7 @@ test("finding 9: a repaint that owed a pass during replay's own write actually g
       "the owed pass ran, as a MUTATION pass"
     );
     assert.equal(
-      epoch.shared.takePendingExternal(),
+      epoch.takePendingExternal(),
       false,
       "and the owed flag was consumed, not left set forever"
     );
@@ -202,7 +202,7 @@ test("a repaint refused during someone else's write epoch still gets its pass", 
   const ranReasons = [];
   try {
     replay.resetCounters();
-    epoch.shared.takePendingExternal();
+    epoch.takePendingExternal();
     replay.configure({
       root: null,
       items: [],
@@ -218,7 +218,7 @@ test("a repaint refused during someone else's write epoch still gets its pass", 
     // editing.enter, or a format command, or protect putting a snapshot back.
     // Nothing here is replay, and replay must not have to be the one that
     // notices.
-    epoch.shared.write("editing.enter", function () {
+    epoch.write("editing.enter", function () {
       // The page repainted in the same batch. This is what the page observer
       // does: it asks for a pass and is told the tool is mid-write.
       assert.equal(
@@ -235,7 +235,7 @@ test("a repaint refused during someone else's write epoch still gets its pass", 
       "the pass the repaint was owed ran once the epoch closed"
     );
     assert.equal(
-      epoch.shared.takePendingExternal(),
+      epoch.takePendingExternal(),
       false,
       "and the owed flag was consumed, not left set forever"
     );

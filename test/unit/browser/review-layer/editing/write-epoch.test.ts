@@ -218,10 +218,11 @@ test("write demands a reason, because the first question every replay bug asks i
   const e = createEpoch();
   let ran = false;
   assert.throws(
-    () =>
+    () => {
       e.write("", () => {
         ran = true;
-      }),
+      });
+    },
     (err: unknown) => err instanceof TypeError && /reason must be/.test(err.message)
   );
   assert.equal(ran, false, "the function never ran");
