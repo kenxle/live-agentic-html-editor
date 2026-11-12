@@ -99,8 +99,9 @@ var LAYER_FILES = [
     why: "D9's predicate, no tunable number. Needs normalize"
   },
   {
-    path: "src/shared/gestures.js",
-    owner: "0A-kernel",
+    path: "src/domain/gestures.ts",
+    owner: "TypeScript C1",
+    registers: ["gestures"],
     why: "D3's gesture vocabulary. Depends on nothing"
   },
   {
@@ -431,6 +432,11 @@ var FORWARDERS = [
     path: "src/shared/epoch.js",
     owner: "TypeScript C1",
     why: "forwards to src/browser/review-layer/editing/write-epoch.ts for replay's Node branch and contracts"
+  },
+  {
+    path: "src/shared/gestures.js",
+    owner: "TypeScript C1",
+    why: "forwards to src/domain/gestures.ts for review_format and contracts"
   }
 ];
 

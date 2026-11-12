@@ -539,8 +539,9 @@ test("the on-card hint is Ken's copy, word for word, and follows the send key", 
 
 test("the hint for edit state with no block open is pinned, and its row names when it applies", () => {
   const row = TABLE.find((one) => one.gesture === GESTURE.ENTER_EDIT_STATE);
-  assert.equal(row?.keys, "Cmd-Shift-E");
-  assert.equal(row?.when, "the cursor is in no block");
+  assert.ok(row !== undefined);
+  assert.equal(row.keys, "Cmd-Shift-E");
+  assert.equal(row.when, "the cursor is in no block");
 });
 
 test("Enter is a paragraph break and Shift-Enter is a line break, in every engine", () => {
@@ -638,7 +639,7 @@ test("the other system's modifier is not a chord, and neither is a bare Cmd-2", 
 test("no chord collides with Cmd-Shift-E, C, X, 1 or the macOS screenshot keys", () => {
   const macChords = BLOCK_TYPES.map((row) => row.chords.mac);
   for (const taken of ["Cmd-Shift-E", "Cmd-Shift-C", "Cmd-Shift-X", "Cmd-Shift-1", "Cmd-Shift-3", "Cmd-Shift-4", "Cmd-Shift-5"]) {
-    assert.equal(macChords.includes(taken), false, taken);
+    assert.equal(macChords.some((chord) => chord === taken), false, taken);
   }
   for (const code of ["KeyE", "KeyC", "KeyX", "Digit1", "Digit3", "Digit4", "Digit5"]) {
     assert.equal(chord(code, { ...MAC, shiftKey: true }), null, "Cmd-Shift " + code);
