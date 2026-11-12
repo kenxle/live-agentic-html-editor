@@ -258,3 +258,17 @@ This decides how fast the log grows and how much of a sentence a crash can cost.
 - **The unload post uses `fetch` with `keepalive: true`, never `sendBeacon`.** `sendBeacon` cannot set the custom header or the JSON content type, so it would either drop the header or be refused during unload, when nothing is watching. Keepalive carries headers at the cost of a body limit of about 64KB across all in-flight keepalive requests. A body too large for it is already safe in browser storage and goes on the next load: the cap costs latency, never work.
 
 `fitsKeepalive` counts UTF-8 bytes by code point, as `TextEncoder` would; this folder has neither `TextEncoder` nor `Buffer`. A lone surrogate counts 3 bytes, as the browser's encoder writes it as U+FFFD.
+
+## `replies.ts`: the reply line
+
+The reply line is the tool's public API to every agent: one appended JSON line per reply, in `replies.jsonl`, or `replies-<agent>.jsonl` when several agents work at once. The agent segment is a path component, held to the safe-id rule; a file whose segment fails is ignored and reported.
+
+`parseReplyLine` never throws. A helper that exits on one agent's typo takes the reviewer's session with it, which is worse than the failure it reports. A bad line is skipped, a `reply.rejected` event names the file, the line and the reason, and the rail shows a dismissible chip. A required `reason` or `text` that is blank counts as missing, so a hand-appended refusal with nothing in it becomes that chip rather than an empty refusal on the reviewer's card.
+
+When the filename's agent and the line's `agent` disagree, the line wins, because the line is what the reviewer sees on the card.
+
+`user_needs_to_see_reply` is how an agent says an answer deserves the reviewer's attention: an answer to them, a caveat, a judgment call, a change made differently than asked. It is what the unread badge counts. Optional fields are lenient: only the boolean `true` sets it, and anything else drops to `false` rather than costing the line, because losing a badge is smaller than losing the answer. `question` and `not_handled` replies reach the reviewer with or without it.
+
+A proofread is a question on a long hand-written run: the agent placed the words as written and lists fixes as `{block, from, to}`, where `block` indexes `new_blocks`. A hand-written line skips `lahe reply`'s checks and the rail applies the list on every paint, so the count is capped at one fix per block at the run's block ceiling and each string at the run's size ceiling. Those two numbers restate `record`'s `NEW_BLOCKS_MAX` and `NEW_BLOCKS_MAX_BYTES`, because `record` converts after this module; `fix_round_f3_service.test.js` holds them equal. The text cap counts characters, not bytes.
+
+**The reply poll.** The helper polls each `replies*.jsonl` every 5 seconds as a safety scan for idle reviews; active pages, CLI reads and event appends trigger the same fold at once. It tracks a byte offset per file. A file shorter than its offset was rewritten, not appended to, so the offset resets to zero and the file is folded again, which is safe because folding is idempotent. A final line with no newline is held until it completes, so a torn write is never half-parsed. The layer's own cursor is a `seq`: two events in one millisecond are ordinary, and a clock that steps backwards would silently skip work.
