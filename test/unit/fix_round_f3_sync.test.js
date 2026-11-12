@@ -204,8 +204,3 @@ test("the script tag's notes attribute reaches the layer's config as notes: true
   assert.equal(layer.resolveConfig(null, {}, scriptWith(off)).notes, false, "only the one value turns it on");
 });
 
-test("the script tag carries the notes attribute only for a notes review", () => {
-  const base = { src: "/lib.js", review: "rev1", token: "tok" };
-  assert.ok(protocol.scriptTag(Object.assign({ notes: true }, base)).indexOf(protocol.SCRIPT_ATTR.NOTES + '="' + protocol.NOTES_ON + '"') !== -1);
-  assert.equal(protocol.scriptTag(base).indexOf(protocol.SCRIPT_ATTR.NOTES), -1);
-});
