@@ -100,7 +100,7 @@ test("the loud words are exactly these, and none of them is tool jargon or holds
   assert.equal(words.length, 12);
   for (const word of words) {
     assert.equal(/monitor|heartbeat|wake|liveness|token|session/i.test(word), false, word);
-    assert.equal(word.includes("—"), false, word);
+    assert.equal(word.includes("\u2014"), false, word);
   }
 });
 
