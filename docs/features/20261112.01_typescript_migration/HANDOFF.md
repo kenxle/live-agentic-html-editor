@@ -59,6 +59,30 @@ Converting the syntax is not enough on its own.
   release schedule and pick the lowest line that meets both conditions. Ken's
   Mac runs 20.19 today (`.nvmrc` says 20.19.0), so the `.nvmrc` and his machine
   both move up.
+- This is a restructure as well as a change of language. Ken: "refactor this
+  into proper best practice for code structure. use correct names."
+  - **Structure.** Propose the folder and module layout an experienced
+    TypeScript team would choose for a local server, a browser client, a CLI and
+    the contract between them. The current folders are not a constraint. The
+    new layout replaces `docs/diagrams/module_map.md`, and the compiler enforces
+    it.
+  - **Names.** Call things what they are in standard terms. Ken: "if it's a
+    server, don't call it a helper." That covers folders, files, modules, types
+    and functions. User-facing wording follows
+    [docs/ongoing/BRAND.md](../../ongoing/BRAND.md), which uses "helper" today.
+    Whether that wording changes too is Ken's call, so list it as a question
+    on the plan page and keep working.
+  - **No comments in code.** Ken: "refuse comments. move them into
+    documentation." What a comment explains today (the why, the history, the
+    traps) moves into the docs under `docs/ongoing/` and `docs/diagrams/`. Types
+    and names carry the rest. The gate should reject new comments. One known
+    conflict to settle on the plan page: Ken's global rules ask every source file
+    to start with a short `read-when` header comment. Propose an answer, such as
+    keeping only that header or moving the routing into a doc index.
+  - **The comment-sicko reviewer** (the `pstack:comment-sicko` agent) reviews
+    every slice for comments that slipped through and for code that works around
+    a problem instead of fixing it. Give it its own review slot in each
+    checkpoint.
 
 **Recommended in the chat, not yet ruled on by Ken.** Confirm these or argue
 against them in the plan:
