@@ -57,8 +57,13 @@ against them in the plan:
   flag from Node 22.18. **Verify that before planning around it**, along with its
   limits: only syntax that can be erased (no `enum`, no `namespace`), and imports
   that name the `.ts` extension.
-- Raise the Node minimum from 18.2 to whatever type stripping needs. Node 18 and
-  20 are past end of life. Ken's Mac runs 20.19 today (`.nvmrc` says 20.19.0).
+- **Decided by Ken:** raise the Node minimum from 18.2 to a Node release line
+  that is not past end of life and also runs `.ts` files directly. Node 18
+  and 20 are already past end of life. Node 22 is believed to reach end of life
+  in April 2027, which would make 24 the lowest safe choice. Check both against
+  the official Node release schedule and pick the lowest line that meets both
+  conditions. Ken's Mac runs 20.19 today (`.nvmrc` says 20.19.0), so the
+  `.nvmrc` and his machine both move up.
 - Order: `src/shared` first, then the helper, then the browser layer.
 
 ## The codebase you are planning for
