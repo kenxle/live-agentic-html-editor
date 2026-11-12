@@ -36,6 +36,7 @@ var fs = require("node:fs");
 var os = require("node:os");
 var path = require("node:path");
 var installSkills = require("./install-skills.js");
+var floor = require("../bin/node_floor.js");
 
 var MARKER = "# lahe wrapper written by scripts/install-cli.js";
 var REPO_ROOT = path.join(__dirname, "..");
@@ -87,8 +88,8 @@ function onPath(dir, pathEnv) {
 }
 
 /**
- * @param {{home?: string, node?: string, entry?: string, pathEnv?: string,
- *          stdout?: function, stderr?: function}} [options]
+ * @param {{home?: string, node?: string, nodeVersion?: string, entry?: string,
+ *          pathEnv?: string, stdout?: function, stderr?: function}} [options]
  * @returns {number} the exit code
  */
 function install(options) {
@@ -103,6 +104,20 @@ function install(options) {
   var err = opts.stderr || function (text) {
     process.stderr.write(text);
   };
+
+  // Refuse before writing anything: a wrapper naming a Node below the floor
+  // would be a lahe command that only ever prints the old-Node message.
+  var found = opts.nodeVersion || process.versions.node;
+  if (!floor.meetsFloor(found)) {
+    err(
+      "lahe install-cli: " +
+        floor.describe(found) +
+        " Install Node 24 (for example `nvm install 24`), then run `npm run install-cli` again from " +
+        REPO_ROOT +
+        " with that Node.\n"
+    );
+    return 1;
+  }
 
   var binDir = path.join(home, ".local", "bin");
   var target = path.join(binDir, "lahe");
