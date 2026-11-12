@@ -449,7 +449,7 @@ function plannedFiles() {
 
 // The entries the build script bundles into the Library page's file:
 // CATALOG_PAGE, with each `sameAsLayer` replaced by the LAYER_FILES entry that
-// registers that name.
+// registers that name, and without the planned entries, as builtFiles() does.
 function libraryFiles() {
   return CATALOG_PAGE.map(function (entry) {
     if (typeof entry.sameAsLayer !== "string") return entry;
@@ -460,6 +460,8 @@ function libraryFiles() {
       throw new Error("CATALOG_PAGE names the layer entry registering " + entry.sameAsLayer + ", and LAYER_FILES has " + found.length);
     }
     return found[0];
+  }).filter(function (entry) {
+    return entry.planned !== true;
   });
 }
 
