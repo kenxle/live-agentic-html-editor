@@ -128,6 +128,19 @@ export default defineConfig(
       "lahe/no-js-imports": "error"
     }
   },
+  {
+    files: ["test/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-floating-promises": [
+        "error",
+        {
+          allowForKnownSafeCalls: [
+            { from: "package", package: "node:test", name: ["test", "it", "describe", "suite", "before", "after", "beforeEach", "afterEach"] }
+          ]
+        }
+      ]
+    }
+  },
   ...BOUNDARIES.map((boundary) => ({
     files: boundary.files,
     rules: { "no-restricted-imports": ["error", { patterns: boundary.patterns }] }

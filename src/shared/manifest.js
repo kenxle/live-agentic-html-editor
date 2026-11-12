@@ -239,11 +239,6 @@ var LAYER_FILES = [
 var NON_BUNDLE_FILES = [
   { path: "src/shared/contracts.js", owner: "0A-kernel", why: "Node-side barrel re-export. Nothing is defined in it" },
   { path: "src/shared/manifest.js", owner: "0A-kernel, FROZEN at CP0", why: "Node only. This file" },
-  {
-    path: "src/shared/script_line.js",
-    owner: "3B",
-    why: "Node only. Finding, placing, replacing and removing the script line in an HTML file. `add` writes it and the helper's heal writes it back, and one definition serves both"
-  },
 
   { path: "src/service/index.js", owner: "1A", why: "serve" },
   { path: "src/service/routes.js", owner: "1A", why: "the router, pinned to protocol.js" },
@@ -372,11 +367,23 @@ var CATALOG_PAGE = [
   }
 ];
 
+// The TypeScript migration's one-line forwarders. Each stays at an old path
+// that unconverted callers still require, and holds only
+// `module.exports = require("<new path>.ts")`. The .ts file it points at is
+// owned by its folder, not by this manifest. Removed in the finishing slice.
+var FORWARDERS = [
+  {
+    path: "src/shared/script_line.js",
+    owner: "TypeScript S0b",
+    why: "forwards to src/server/sites/script-line.ts for add, heal, page_routes and catalog_reader"
+  }
+];
+
 var BUNDLE_OUTPUT = "dist/lahe-layer.js";
 var GLOBAL_NAMESPACE = "LAHE";
 
 function allFiles() {
-  return LAYER_FILES.concat(NON_BUNDLE_FILES, CATALOG_PAGE);
+  return LAYER_FILES.concat(NON_BUNDLE_FILES, CATALOG_PAGE, FORWARDERS);
 }
 
 function entryFor(path) {
@@ -419,6 +426,7 @@ module.exports = {
   LAYER_FILES: LAYER_FILES,
   NON_BUNDLE_FILES: NON_BUNDLE_FILES,
   CATALOG_PAGE: CATALOG_PAGE,
+  FORWARDERS: FORWARDERS,
   BUNDLE_OUTPUT: BUNDLE_OUTPUT,
   GLOBAL_NAMESPACE: GLOBAL_NAMESPACE,
   allFiles: allFiles,
