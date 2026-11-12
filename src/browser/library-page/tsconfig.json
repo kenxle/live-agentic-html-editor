@@ -1,0 +1,23 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": [
+      "es2024",
+      "dom"
+    ],
+    "types": [],
+    "outDir": "../../../.tsbuild/src/browser/library-page"
+  },
+  "files": [],
+  "include": [
+    "**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../../contract"
+    },
+    {
+      "path": "../../domain"
+    }
+  ]
+}

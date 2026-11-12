@@ -1,0 +1,18 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": [
+      "es2024"
+    ],
+    "types": [
+      "node"
+    ],
+    "outDir": "../.tsbuild/scripts"
+  },
+  "files": [],
+  "include": [
+    "*.mts",
+    "eslint-rules/**/*.ts"
+  ],
+  "references": []
+}

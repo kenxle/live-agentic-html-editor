@@ -78,7 +78,7 @@ The code and the older docs call the server "the helper". It lives in `src/servi
 - `NON_BUNDLE_FILES`: everything that runs in Node. That is the server, the CLI, and the Node-only shared files such as `manifest.js` and `script_line.js`.
 - `CATALOG_PAGE`: the Library page's own scripts. The server sends them raw from `src/`, so they never touch `dist/`.
 
-[The module map](../diagrams/module_map.md) draws the manifest as a picture. The groups below follow the manifest.
+The groups below follow the manifest, which describes the code as it is until the TypeScript migration finishes. [The module map](../diagrams/module_map.md) draws the target layout the migration moves toward.
 
 | Area | Files | Job |
 | --- | --- | --- |

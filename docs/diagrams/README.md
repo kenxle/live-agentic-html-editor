@@ -15,7 +15,7 @@ when behavior changes, change both.
 | File | What it shows | Lives with |
 | --- | --- | --- |
 | `system_overview.md` | What exists and what talks to what: the browser running the library, the helper serving each page at its stable address, the store on disk, the Library page with its request queue, and the agent | `README.md`, `skills/lahe/SKILL.md` |
-| `module_map.md` | The four folders under `src/`, which way dependencies point, and why `layer/` is an ordered list rather than a cloud, and the Library page's own `CATALOG_PAGE` list | `CLAUDE.md`, Directory layout; `docs/ongoing/FREE_WRITING.md` (where its files live) |
+| `module_map.md` | The target folders under `src/` during the TypeScript migration, what each may import, and how the compiler enforces it | `CLAUDE.md`, Directory layout; `docs/ongoing/FREE_WRITING.md` (where its files live) |
 | `item_lifecycle.md` | The four states an item can be in, with the actor on every transition, including a press that is draft and ready at once | `docs/CONTRACTS.md`; `docs/ongoing/CHOICE_BUTTONS.md` |
 | `review_round_trip.md` | One comment end to end: a shared spine, then a labeled fan for the agent's half | `skills/lahe/SKILL.md`, How to use it |
 | `session_ownership.md` | What an agent session owns, the immutable-owner rule, what takeover does, the hand-over from the Library through its request queue, and when the helper stops (plus the reopened-session sweep) | `skills/lahe/SKILL.md`, Sessions; `docs/ongoing/SESSION_OWNERSHIP.md` |

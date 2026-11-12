@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": [
+      "es2024"
+    ],
+    "types": [],
+    "outDir": "../../.tsbuild/src/contract"
+  },
+  "files": [],
+  "include": [
+    "**/*.ts"
+  ],
+  "references": []
+}

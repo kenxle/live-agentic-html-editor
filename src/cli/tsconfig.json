@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": [
+      "es2024"
+    ],
+    "types": [
+      "node"
+    ],
+    "outDir": "../../.tsbuild/src/cli"
+  },
+  "files": [],
+  "include": [
+    "**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../contract"
+    },
+    {
+      "path": "../domain"
+    },
+    {
+      "path": "../server"
+    }
+  ]
+}

@@ -21,3 +21,6 @@ docs/reports/seneschal/
 .claude-pr-body*
 # Fonts a spec build copies beside its pages; the helper serves them itself.
 .lahe-fonts/
+
+# TypeScript build output: declaration files and build info that project references need. Never committed.
+.tsbuild/

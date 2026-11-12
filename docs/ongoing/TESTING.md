@@ -50,7 +50,7 @@ Each gate is a chain of the layers below it.
 
 | Layer | Command | What it checks |
 | --- | --- | --- |
-| Lint | `npm run lint` | Syntax of every tracked `.js` file, no jsdom anywhere, and every file under `src/` listed once in `src/shared/manifest.js`. |
+| Lint | `npm run lint` | `tsc -b` over every TypeScript project, ESLint over every `.ts` file (the strict rules in [code/README.md](code/README.md)), syntax of every `.js` file, no jsdom anywhere, kebab-case `.ts` names, and every `.js` file under `src/` listed once in `src/shared/manifest.js`. Needs `npm install` once per checkout. |
 | Bundle | `npm run check:layer` | The committed `dist/lahe-layer.js` matches a fresh build. |
 | Menu bar app | `npm run check:menubar` | Builds the Mac menu bar app, runs its self-test and its tests against a fake helper. Skips with one line off macOS. |
 | Unit | `npm run test:unit` | `node --test "test/unit/*.test.js"`, wrapped to fail if a helper is left running. |
