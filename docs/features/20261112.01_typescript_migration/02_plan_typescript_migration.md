@@ -4,15 +4,15 @@ read-when: Building, reviewing or orchestrating a slice of the TypeScript migrat
 
 # Plan: move Lahe to strict TypeScript in slices that each leave main working
 
-This page lists every slice of the migration: what each one changes, what it waits on, and how it proves it is done. Three questions at the top need your answer. Work starts without them: the first slices do not depend on any of the three, and each question shows the default the builders will follow until you choose. The reasoning behind each slice is in [the architecture](01_architecture_typescript_migration.md). Where every file goes is in [the target layout](parts/target_layout.md). [The progress page](03_progress_typescript_migration.md) tracks the build.
+This page lists every slice of the migration: what each one changes, what it waits on, and how it proves it is done. Two questions at the top still need your answer; the first is settled. Work starts without them: the first slices depend on neither, and each question shows the default the builders will follow until you choose. The reasoning behind each slice is in [the architecture](01_architecture_typescript_migration.md). Where every file goes is in [the target layout](parts/target_layout.md). [The progress page](03_progress_typescript_migration.md) tracks the build.
 
 ## Needs your answer
 
-**1. Should "helper" change to "server" in what people read?** The code will say "server" whatever you choose, as you asked. The open question is the CLI output, the docs and the skill. [BRAND.md](../../ongoing/BRAND.md) already says "the Lahe program" for most people and "the Lahe server" for developers, and never "helper". The CLI and many docs still say "helper". Recommendation: rename it, following BRAND, in a slice of its own after the CLI converts (slice W1 below), so wording changes never mix with conversions. If you keep "helper", W1 is dropped.
+**1. Should "helper" change to "server" in what people read?** The code will say "server" whatever you choose, as you asked. The open question is the CLI output, the docs and the skill. [BRAND.md](../../ongoing/BRAND.md) already says "the Lahe program" for most people and "the Lahe server" for developers, and never "helper". The CLI and many docs still say "helper". **Decided: rename.** Slice W1 changes it, following BRAND, after the CLI converts, so wording changes never mix with conversions.
 
 <div class="choice" data-choice="helper-wording">
 <p class="choice-q">Rename "helper" in CLI output, docs and the skill?</p>
-<button type="button" value="rename" data-recommended>Rename, following BRAND</button>
+<button type="button" value="rename" data-recommended data-chosen>Rename, following BRAND</button>
 <button type="button" value="keep">Keep "helper" in user-facing text</button>
 </div>
 
@@ -116,7 +116,7 @@ These run in parallel: B1, B2 and B13; then B5, B6 and B10; then B7, B8 and B9.
 | **SP1** Split browser files | Splits the browser files over the size limit into modules in the same folders (`overlay`, `editing`, `replay`, `sync`, `comments`, `tab_done`, `main`). Turns `max-lines` on for `src/browser/`. Refactor only | B12 | Opus |
 | **SP2** Split server files | The same for the server (`page_routes`, `catalog_reader`, `reviews`, `main` and any other file over the limit). Turns `max-lines` on for `src/server/` and `src/cli/` | CLI | Opus |
 | **F1** Finish | A script rewrites every import and `require` to the new paths. Then F1 removes the forwarders, the manifest and the nested `package.json` files, sets `"type": "module"` at the root, and renames exported "helper" identifiers to "server" with their callers. Turns on the lint rule that no `.js` remains under `src/`. Updates `CLAUDE.md` (layout, manifest rules, gate table), [ARCHITECTURE.md](../../ongoing/ARCHITECTURE.md), [CONTRACTS.md](../../CONTRACTS.md) (the shared-module loading section) and the module map | SP1, SP2 | Opus |
-| **W1** Wording | Changes "helper" in CLI output, docs and the skill, following BRAND. Only if Ken picks "rename" in question 1 | F1 | Sonnet |
+| **W1** Wording | Changes "helper" in CLI output, docs and the skill, following BRAND (Ken chose this on the plan page) | F1 | Sonnet |
 
 **Checkpoint 4** follows F1.
 
@@ -267,7 +267,7 @@ Ken has said the planner and builders go ahead without waiting for his approval.
 
 Returning to Ken is needed only for:
 
-- the three questions above;
+- the open questions above;
 - a type that cannot be written without an escape hatch;
 - a parser that would refuse input Lahe accepts today;
 - any change to a rule in this plan.
