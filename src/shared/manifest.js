@@ -51,8 +51,9 @@
 var LAYER_FILES = [
   // --- the shared kernel ---------------------------------------------------
   {
-    path: "src/shared/markers.js",
-    owner: "0A-kernel",
+    path: "src/contract/markers.ts",
+    owner: "TypeScript C1",
+    registers: ["markers"],
     why: "the one spelling of 'this node is ours'. Nothing above it; it depends on nothing"
   },
   {
@@ -407,6 +408,11 @@ var FORWARDERS = [
     path: "src/shared/elapsed.js",
     owner: "TypeScript S0c",
     why: "forwards to src/domain/elapsed.ts for reviews, store's Node branch and contracts"
+  },
+  {
+    path: "src/shared/markers.js",
+    owner: "TypeScript C1",
+    why: "forwards to src/contract/markers.ts for normalize, regions, the service's Markdown render and contracts"
   }
 ];
 
