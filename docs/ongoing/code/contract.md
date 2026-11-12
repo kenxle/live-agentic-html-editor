@@ -155,6 +155,8 @@ Every page response carries `Cross-Origin-Resource-Policy: same-origin` (`PAGES.
 
 Four lists, on purpose. `ROUTES` is the per-review wire: the router binds a handler to every entry at load and matches paths exactly, so a route with no handler fails at start rather than in front of a reviewer. The Library's routes have their own credential and their own check table, and `catalog.asset` is a path prefix, so the helper binds them itself. Site routes take the CLI secret and refuse any request with an Origin header, so a page holding a review token can neither name a file nor move a rail. Summary routes take the CLI proof, refuse any Sec-Fetch header (a browser sends one on every loopback request; the menu bar app sends none), and never answer on the Library's host.
 
+Each entry spells its path and auth mode as a literal, because the compiler cannot infer a constant built from another one (`BASE` or `AUTH.NONE`); `test/unit/contract/routes.test.ts` pins that every API path sits under `BASE`. The route names are unions derived from the four lists, and each list is checked against its own entry shape where the name union is built, so an entry with the wrong auth mode for its list does not compile.
+
 Two routes need no credential, visibly, through `AUTH.NONE`: `health`, which carries liveness and version only, and `library.get`, which serves the tool's own public bytes, the same file that ships in the repo.
 
 **The Library's check table** (`checks` on each Library route): Host is always checked. `sec_fetch_site` lists the values allowed, and a missing header is refused. `token` means the `catalog` client header plus the Library token. `json_body` means the JSON content type. `origin: "exact"` means Origin must equal `http://` plus the request's Host. No Library route sends a CORS header, and preflight never approves one.
@@ -215,7 +217,7 @@ Loopback is not a boundary, so a page proves itself on every request. The checks
 | sec_fetch | Summary routes only: any Sec-Fetch header means a page is asking |
 | proof | Summary routes only: signed with the CLI secret, inside the window, with an unseen nonce, compared in constant time. The raw secret header is refused |
 
-`checkRequest` runs the first six, for review routes. The Library, site and summary checks live in the server (`auth.js`), which dispatches on the route's `auth` before calling it.
+`checkRequest` runs the first six, for review routes, in that order, one `if` after another, so the order is the order of the lines. A refusal names the first check that failed. The Library, site and summary checks live in the server (`auth.js`), which dispatches on the route's `auth` before calling it.
 
 The token comparison is constant time in plain code, because this folder cannot use `node:crypto` and the same code runs in the browser. Length is not hidden: tokens are fixed-length mints.
 
@@ -225,7 +227,7 @@ A page opened from a file sends Origin `null`, or none; both count as `"null"`, 
 
 ## `error-body.ts`: status codes and the error shape
 
-Every non-2xx answer has one shape, `{error: {code, message, remedy, detail, check, request_id}}`, so the layer has one parser and the rail can list any of them without a special case. Messages and remedies live in the failure table (`failures.ts`); the Library page shows the remedy. A code with no status is a 500. `AUTH_REFUSED` and `SUMMARY_VERSION` have statuses here but are not failure-table codes, because their answers are signed by the server.
+Every non-2xx answer has one shape, `{error: {code, message, remedy, detail, check, request_id}}`, so the layer has one parser and the rail can list any of them without a special case. Messages and remedies live in the failure table (`failures.ts`); the Library page shows the remedy. A code with no status is a 500, except that every `PROTO_*` failure code must have a status here: the table is keyed by them, so a new `PROTO_*` code with no status does not compile. `AUTH_REFUSED` and `SUMMARY_VERSION` have statuses here but are not failure-table codes, because their answers are signed by the server.
 
 ## `events.ts`: the event log line
 
@@ -350,4 +352,4 @@ A legacy pick-up has no session, so it is served as a fresh review and its comme
 
 ## `protocol.ts`: the bridge
 
-Re-exports every module in this list under one namespace, for two readers only: the forwarder at `src/shared/protocol.js`, which unconverted JavaScript requires, and the browser registration that puts `LAHE.protocol` on the page for unconverted layer and Library files. New TypeScript imports the module it needs. The finishing slice removes this file.
+Re-exports every module in this list under one namespace, for two readers only: the forwarder at `src/shared/protocol.js`, which unconverted JavaScript requires, and the browser registration that puts `LAHE.protocol` on the page for unconverted layer and Library files. New TypeScript imports the module it needs. The forwarder hands back an ordinary object (a copy of the exports), not the module namespace, because old code and tests replace functions on it. Two modules may not export the same name: `export *` of both fails to compile. The finishing slice removes this file.
