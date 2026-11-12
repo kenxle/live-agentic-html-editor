@@ -171,8 +171,8 @@ test("text is decoded, cleaned, and escaped again on output", () => {
   assert.equal(accepted("p", "&lt;script&gt;alert(1)&lt;/script&gt;"), "&lt;script&gt;alert(1)&lt;/script&gt;");
   assert.equal(accepted("p", "Two&nbsp;words  and\n a space&nbsp;"), "Two words and a space");
   assert.equal(accepted("p", "a &bogus; b"), "a &amp;bogus; b");
-  assert.equal(accepted("p", "café a​b\u0007c"), "café abc");
-  assert.equal(accepted("p", "a b　c d"), "a b c d");
+  assert.equal(accepted("p", "cafe\u0301 a\u200Bb\u0007c"), "caf\u00E9 abc");
+  assert.equal(accepted("p", "a\u2009b\u3000c\u2028d"), "a b c d");
 });
 
 test("tidying drops edge space, leading and trailing breaks and empty elements, and keeps a middle break", () => {
@@ -232,10 +232,10 @@ test("a run of leading breaks costs linear time too", () => {
 });
 
 test("blockWords folds typography and resolves references, so a typed dash and a rendered one read alike", () => {
-  assert.equal(blockWords("It’s “done” — now"), "It's \"done\" - now");
+  assert.equal(blockWords("It\u2019s \u201Cdone\u201D \u2014 now"), "It's \"done\" - now");
   assert.equal(blockWords("Fish &amp; chips &quot;x&quot;"), "Fish & chips \"x\"");
   assert.equal(blockWords("She said no -- then left"), blockWords("She said no &#8212; then left"));
-  assert.equal(blockWords("<p>a — b</p>"), "a - b");
+  assert.equal(blockWords("<p>a \u2014 b</p>"), "a - b");
   assert.equal(blockWords("<p>A <b>x</b></p><p>y</p>"), "A x y");
 });
 

@@ -16,7 +16,7 @@ test("the slug is the readable last segment of the target, and review file names
   assert.equal(targetSlug("http://localhost:3000/a/b?x=1"), "b");
   assert.equal(targetSlug("/"), "target");
   assert.equal(targetSlug(""), "target");
-  assert.equal(targetSlug("/É.html"), "html");
+  assert.equal(targetSlug("/\u00C9.html"), "html");
   assert.equal(targetSlug("/docs/Trailing/"), "trailing");
   assert.equal(targetSlug("?only=query"), "target");
 });

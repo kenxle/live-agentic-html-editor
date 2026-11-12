@@ -107,9 +107,7 @@ test("a list is one block whose lines are its items", () => {
 
 test("a leaf keeps its inner markup, cleaned", () => {
   const got = leavesOf('<p class="x">A <b>bold</b> word</p>');
-  assert.equal(got[0]?.html, "A <strong>bold</strong> word");
-  assert.equal(got[0]?.words, "A bold word");
-  assert.equal(got[0]?.tag, "p");
+  assert.deepEqual(got, [{ tag: "p", html: "A <strong>bold</strong> word", words: "A bold word" }]);
 });
 
 test("the reader follows the browser's repair of malformed markup", () => {
@@ -151,7 +149,7 @@ test("the file-name title is skipped, but a hero holding only the title is still
 });
 
 test("a leaf's words are folded for typography", () => {
-  assert.deepEqual(shape(leavesOf("<p>It’s “done” — now</p>")), ["p: It's \"done\" - now"]);
+  assert.deepEqual(shape(leavesOf("<p>It\u2019s \u201Cdone\u201D \u2014 now</p>")), ["p: It's \"done\" - now"]);
 });
 
 test("a block found as a whole leaf is whole", () => {
@@ -222,8 +220,7 @@ test("leading leaves that match nothing are skipped before the first match", () 
 
 test("a short block inside a later unrelated block is missing", () => {
   const got = matchRun([block("Notes")], leavesOf("<p>These Notes are about something else entirely</p>"));
-  assert.equal(got[0]?.status, "missing");
-  assert.deepEqual(got[0]?.leaves, []);
+  assert.deepEqual(got, [{ index: 0, status: "missing", leaves: [] }]);
 });
 
 test("blocks out of run order: the one out of order is missing", () => {
@@ -278,7 +275,7 @@ test("a block with no words is always missing", () => {
 });
 
 test("the matcher reads a typed double hyphen and a rendered dash as the same block", () => {
-  const got = matchRun([block("She said no -- then left")], leavesOf("<p>She said no — then left</p>"));
+  const got = matchRun([block("She said no -- then left")], leavesOf("<p>She said no \u2014 then left</p>"));
   assert.deepEqual(got, [{ index: 0, status: "whole", leaves: [0] }]);
 });
 
@@ -336,8 +333,8 @@ test("words must be whole words: a block's words inside a longer word are not a 
   const run = [block("Alpha words here"), block("Beta")];
   assert.equal(runClash(run, leavesOf("<p>Alpha words here</p><p>Betamax tapes</p>")), null);
   const accented = [block("Alpha words here"), block("Beta")];
-  assert.equal(runClash(accented, leavesOf("<p>Alpha words here</p><p>Betaé tapes</p>")), null);
-  assert.equal(runClash(accented, leavesOf("<p>Alpha words here</p><p>Betaб tapes</p>")), null);
+  assert.equal(runClash(accented, leavesOf("<p>Alpha words here</p><p>Beta\u00E9 tapes</p>")), null);
+  assert.equal(runClash(accented, leavesOf("<p>Alpha words here</p><p>Beta\u0431 tapes</p>")), null);
 });
 
 test("with nothing matched, only the first leaf after the anchor can clash", () => {

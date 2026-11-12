@@ -8,6 +8,7 @@ import { test } from "node:test";
 import {
   BLOCK_TAGS,
   DROP_SUBTREE_TAGS,
+  breakOfTag,
   decodeEntities,
   escapeAttrValue,
   isBlockTag,
@@ -22,9 +23,7 @@ import {
 import type { TagToken } from "../../../src/domain/html-syntax.ts";
 
 function startTag(token: TagToken | null): Extract<TagToken, { readonly kind: "start" }> {
-  assert.ok(token);
-  assert.equal(token.kind, "start");
-  if (token.kind !== "start") throw new Error("not a start tag");
+  assert.ok(token !== null && token.kind === "start");
   return token;
 }
 
@@ -36,7 +35,7 @@ test("a tag starts with a less-than sign and an ASCII letter, and anything else 
   assert.equal(readTag("</ p>", 0), null);
   assert.equal(readTag("</2>", 0), null);
   assert.equal(readTag("<", 0), null);
-  assert.equal(readTag("<é>", 0), null);
+  assert.equal(readTag("<\u00E9>", 0), null);
   assert.equal(readTag("a <b> c", 2)?.kind, "start");
   assert.equal(readTag("</p>", 0)?.kind, "end");
 });
@@ -109,7 +108,7 @@ test("an end tag reports its name and end only, and anything before its bracket 
 test("decodeEntities resolves the named and numeric references it knows and leaves the rest as written", () => {
   assert.equal(
     decodeEntities("&amp;&LT;&nbsp;&#65;&#x41;&#0;&#x110000;&bogus;&apos;&quot;&gt;&AMP;"),
-    "&< AA&#0;&#x110000;&bogus;'\">&"
+    "&<\u00A0AA&#0;&#x110000;&bogus;'\">&"
   );
   assert.equal(decodeEntities("&#X41;&#x1F600;"), "A\u{1F600}");
 });
@@ -184,4 +183,10 @@ test("skipDeclaration returns the index after a comment, declaration or instruct
 test("nbspToSpace turns every spelling of a no-break space into a plain space", () => {
   assert.equal(nbspToSpace("a&nbsp;b&NBSP;c&#160;d&#xa0;e&#xA0;f&#XA0;g"), "a b c d e f g");
   assert.equal(nbspToSpace("&amp;nbsp; &nbsp &#16;"), "&amp;nbsp; &nbsp &#16;");
+});
+
+test("breakOfTag gives a line break for br, a blank line for a block element and nothing for the rest", () => {
+  assert.equal(breakOfTag("br"), "\n");
+  for (const name of BLOCK_TAGS) assert.equal(breakOfTag(name), "\n\n", name);
+  for (const name of ["span", "strong", "img", "BR", "constructor", ""]) assert.equal(breakOfTag(name), "", name);
 });
