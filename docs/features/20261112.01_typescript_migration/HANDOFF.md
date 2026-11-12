@@ -12,13 +12,11 @@ other agents can build from. You do not convert code yourself.
 1. A plan in this folder, built with the feature-forge route (`/feature-forge`).
    Treat this handoff as the brief. You decide whether the open questions below
    need an architecture document before the plan. Several of them probably do.
-2. The plan served to Ken as a Lahe page, so he can mark it up before any
-   builder starts. Load the lahe skill before running any `lahe` command.
+2. The plan served to Ken as a Lahe page. Do not wait for confirmation to
+   begin. Load the lahe skill before running any `lahe` command.
 3. A slice list builders can pick up. Each slice should be one pull request that
    leaves main working, with its owner files, its model, its gate, and the
    evidence that proves it is done.
-
-Builders do not start until Ken approves the plan on the page.
 
 ## Why we are doing this
 
