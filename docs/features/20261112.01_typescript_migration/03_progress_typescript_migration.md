@@ -4,7 +4,7 @@ read-when: Checking where the TypeScript migration stands, what it waits on, or 
 
 # Progress: TypeScript migration
 
-Wave 0 is done and merged: the Node 24.12 floor (PR #104), the TypeScript toolchain and strict gate (PR #105), and the esbuild bundles (PR #106). Checkpoint 0 passed. All five Wave 1 specs are written. Slice C1 (the constant modules) is building in `.claude/worktrees/ts-c1-constants`; C2 and C4 build after it, then C3, then C5.
+Wave 0 is done and merged: the Node 24.12 floor (PR #104), the TypeScript toolchain and strict gate (PR #105), and the esbuild bundles (PR #106). Checkpoint 0 passed. All five Wave 1 specs are written. C1 (the constant modules) is merged (PR #107). C2 (the normalizer) and C4 (the protocol) are building in parallel; C3 (the record) follows both, then C5.
 
 ## Attention needed
 
@@ -27,7 +27,9 @@ None. Ken's login item runs the server on Node 24.22.3, and the menu bar icon is
 | S0b Toolchain and pilot | Opus builder | merged | PR #105; gate:unit 3263 tests, 0 failed; 22 strictness fixtures each refused by their rule; lint 39.6s; CI pass | none |
 | S0c Bundling, with checkpoint 0 fix round | Opus builders | merged | PR #106; gate:all alone 2831 passed, 2 known-kind flakes passing alone; CI pass on Linux | none |
 | Specs C1 to C5 | Opus spec writers | written and committed | `slices/C1-spec.md` to `C5-spec.md`, each with orchestrator decisions | none |
-| C1 Constants | Sonnet builder | building | worktree `ts-c1-constants` | review and merge, then C2 and C4 |
+| C1 Constants | Sonnet builder | merged | PR #107; gate:unit 3408 tests, 0 failed; 19 browser specs 211 passed; comment lines 706 to 15; 83 old cases carried, 1 dropped | none |
+| C2 Normalizer | Sonnet builder | building | worktree `ts-c2-normalize` | review and merge |
+| C4 Protocol | Sonnet builder | building | worktree `ts-c4-protocol` | review and merge |
 
 ## Decisions and events
 
@@ -52,3 +54,4 @@ None. Ken's login item runs the server on Node 24.22.3, and the menu bar icon is
 - **2026-11-12 14:22.** Checkpoint 0 reviews: no blockers. Security: a lint check must stop a package import in old `.js` code, now that CI installs dev tools before lint; CI gets read-only permissions. Testing: 16 of 18 one-line weakenings of the rules left the strictness test green, so the test will pin each project's resolved compiler options and the resolved ESLint rules. Code: five minor items. One fix round is running on the S0c branch.
 - **2026-11-12 15:20.** Checkpoint 0 passed: `gate:all` alone gave 2831 passed and 2 failed. Both failures are flakes that pass alone 3 of 3 and are on the board: the known Firefox Library hang, and a new WebKit toast timing case. Chromium was fully clean. S0c merged as PR #106 after CI passed on Linux, which also proves the bundle builds the same bytes there. C1 build started.
 - **2026-11-12 15:28.** Ken's second `lahe install` installed the server's login item on Node 24.22.3. The menu bar item failed with the same launchd error 5; a plain reload succeeded right after, though launchd said nothing was loaded. The board row now records that the cause is not proven.
+- **2026-11-12 15:51.** C1 merged as PR #107. C2 and C4 builds started in parallel.
