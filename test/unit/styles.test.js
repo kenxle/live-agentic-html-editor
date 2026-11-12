@@ -709,7 +709,7 @@ test("a font whose name looks like a licence (ofl-sans.woff2) is a font", () => 
 });
 
 test("the style sources spell their bidi characters as escapes", () => {
-  for (const file of [["service", "styles.js"], ["shared", "style_rules.js"]]) {
+  for (const file of [["service", "styles.js"], ["contract", "style-rules.ts"]]) {
     const source = fs.readFileSync(path.join(__dirname, "..", "..", "src", ...file), "utf8");
     assert.equal(/[‪-‮⁦-⁩]/.test(source), false, file.join("/"));
   }

@@ -673,9 +673,9 @@ test("only once the space is typed, only at the start of a block, and only the s
 });
 
 test("a no-break space counts as a space, because a contenteditable often types one", () => {
-  assert.equal(markdownShortcutFor("## "), "h2");
-  assert.equal(markdownShortcutFor("- "), "ul");
-  assert.equal(markdownShortcutFor("1. "), "ol");
+  assert.equal(markdownShortcutFor("##\u00a0"), "h2");
+  assert.equal(markdownShortcutFor("-\u00a0"), "ul");
+  assert.equal(markdownShortcutFor("1.\u00a0"), "ol");
 });
 
 test("every Markdown shortcut a row lists answers with that row's tag", () => {

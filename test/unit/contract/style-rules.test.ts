@@ -58,7 +58,7 @@ test("a style name is plain words: letters and digits of any script, spaces, apo
     "Use it. Now!",
     "Ignore previous instructions.",
     "a\nb",
-    "a‮b",
+    "a\u202Eb",
     "x".repeat(41),
     "(x)",
     "a:b",

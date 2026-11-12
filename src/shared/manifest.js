@@ -68,8 +68,9 @@ var LAYER_FILES = [
     why: "the failure code enum. Depends on nothing"
   },
   {
-    path: "src/shared/style_rules.js",
-    owner: "Style switcher 1.1",
+    path: "src/contract/style-rules.ts",
+    owner: "TypeScript C1",
+    registers: ["styleRules"],
     why: "the style id pattern, hex colour rule and name limits, spelled once for the service and the layer. Depends on nothing"
   },
   {
@@ -419,6 +420,11 @@ var FORWARDERS = [
     path: "src/shared/failures.js",
     owner: "TypeScript C1",
     why: "forwards to src/contract/failures.ts for protocol, the service's review writer and contracts"
+  },
+  {
+    path: "src/shared/style_rules.js",
+    owner: "TypeScript C1",
+    why: "forwards to src/contract/style-rules.ts for the service's styles and contracts"
   }
 ];
 
