@@ -304,5 +304,9 @@ Returning to Ken is needed only for:
 
 ## Board rows to add
 
+- **A test reads a constant that does not exist.** `test/unit/addresses.test.js` passes `protocol.PAGES.SWITCH_ON`, which is always `undefined`. Found by the C4 spec.
+- **"The layer never calls `sendBeacon`" has no real test.** A `no-restricted-properties` rule in the browser projects would enforce it. Slice B9.
+- **One source for the size limits.** `record`'s run ceilings and the reply suggestion caps are spelled twice. Slice C3.
+- **Docs that name old paths.** `CONTRACTS.md`, `LIBRARY.md`, `FREE_WRITING.md`, `CHOICE_BUTTONS.md`, `OUTBOX_COALESCING.md` and `DIAGRAMS_PLAN.md` name `src/shared/protocol.js` and similar paths. They stay true while the forwarders exist; F1 sweeps them with its import rewrite.
 - **TypeScript 7.** Move from 6.0 to 7 once typescript-eslint supports it. It waits on the typescript-eslint issues about the TypeScript 7 API.
 - **Old measurement and spike scripts.** Several `measure_*` and `spike_*` files in `scripts/` were one-off tools. T3 converts them as they are; whether to keep each one is Ken's call at cleanup.
