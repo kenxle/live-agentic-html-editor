@@ -240,3 +240,35 @@ test("markup that adds bold does not clean to the same string as markup without 
   assert.notEqual(cleanMarkup("<p>the word</p>"), cleanMarkup("<p>the <strong>word</strong></p>"));
   assert.notEqual(cleanMarkup("<p>the <strong>word</strong></p>"), cleanMarkup("<p>the <em>word</em></p>"));
 });
+
+test("D8: an attribute value is decoded when read and escaped once when written, so a link keeps its ampersands", () => {
+  cleans('<a href="/a?x=1&amp;y=2">t</a>', '<a href="/a?x=1&amp;y=2">t</a>');
+  cleans('<a title="a&quot;b">t</a>', '<a title="a&quot;b">t</a>');
+  cleans('<a title="a&lt;b&gt;c">t</a>', '<a title="a&lt;b&gt;c">t</a>');
+  cleans("<a title='a\"b'>t</a>", '<a title="a&quot;b">t</a>');
+  cleans('<a title="&#65;&bogus;">t</a>', '<a title="A&amp;bogus;">t</a>');
+});
+
+test("D8: cleaning is a fixed point on attribute values that hold an ampersand, a quote or an angle bracket", () => {
+  for (const input of [
+    '<a href="/a?x=1&amp;y=2">t</a>',
+    '<a title="a&quot;b">t</a>',
+    '<a title="x &lt; y &gt; z &amp; w">t</a>',
+    "<a title='say \"hi\" & go'>t</a>"
+  ]) {
+    const once = cleanMarkup(input);
+    assert.equal(cleanMarkup(once), once, JSON.stringify(input));
+  }
+});
+
+test("D8: a record stored with a doubled escape keeps its bytes, so old records still equal their own cleaned form", () => {
+  const stored = '<a href="/a?x=1&amp;amp;y=2" title="a&amp;quot;b">t</a>';
+  cleans(stored, stored);
+});
+
+test("D8: the scheme check runs on the decoded value and decodes again, so it is no weaker", () => {
+  cleans('<a href="java&amp;#09;script:alert(1)">t</a>', "<a>t</a>");
+  cleans('<a href="&amp;#106;avascript:x">t</a>', "<a>t</a>");
+  cleans('<a href="javascript&amp;colon;x">t</a>', "<a>t</a>");
+  cleans('<a href="https://e.com/?a=1&amp;b=2">t</a>', '<a href="https://e.com/?a=1&amp;b=2">t</a>');
+});

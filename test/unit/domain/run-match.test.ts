@@ -341,3 +341,12 @@ test("with nothing matched, only the first leaf after the anchor can clash", () 
   const run = [block("Notes")];
   assert.equal(runClash(run, leavesOf("<p>Unrelated first</p><p>These Notes are about something else</p>")), null);
 });
+
+test("D8: a leaf's attribute values are not escaped twice", () => {
+  assert.deepEqual(leavesOf('<p><a href="/x" title="a&quot;b">l</a></p>'), [
+    { tag: "p", html: '<a href="/x" title="a&quot;b">l</a>', words: "l" }
+  ]);
+  assert.deepEqual(leavesOf('<p>see <a href="/a?x=1&amp;y=2">this</a></p>'), [
+    { tag: "p", html: 'see <a href="/a?x=1&amp;y=2">this</a>', words: "see this" }
+  ]);
+});

@@ -94,6 +94,14 @@ test("a quoted value missing its closing quote runs to the end of the input", ()
   assert.equal(tag.end, 13);
 });
 
+test("character references in a value are resolved once when the tag is read", () => {
+  const tag = startTag(readTag("<a href=\"/a?x=1&amp;y=2\" title=\"a&quot;b&lt;&#65;&bogus;\">", 0));
+  assert.deepEqual(tag.attributes, [
+    { name: "href", value: "/a?x=1&y=2" },
+    { name: "title", value: "a\"b<A&bogus;" }
+  ]);
+});
+
 test("a start tag ending in a slash reports selfClosing", () => {
   assert.equal(startTag(readTag("<br/>", 0)).selfClosing, true);
   assert.equal(startTag(readTag("<br />", 0)).selfClosing, true);

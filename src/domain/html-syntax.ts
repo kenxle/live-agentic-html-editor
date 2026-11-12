@@ -219,7 +219,7 @@ export function readTag(html: string, at: number): TagToken | null {
     } else {
       i = afterName;
     }
-    attributes.push({ name: attributeName, value });
+    attributes.push({ name: attributeName, value: decodeEntities(value) });
   }
   return { kind: "start", name, attributes, selfClosing, end: Math.min(i, html.length) };
 }
