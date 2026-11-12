@@ -151,6 +151,100 @@ Every page response carries `Cross-Origin-Resource-Policy: same-origin` (`PAGES.
 - The menu bar app proves it can read that secret without sending it. The signed string is these lines joined by single newlines, with no trailing newline. A request: `lahe-proof-v1`, the method, the path with its query exactly as sent, the timestamp in Unix milliseconds, the nonce, and the hex SHA-256 of the body. The answer: `lahe-proof-reply-v1`, the request's nonce, the status code, and the hex SHA-256 of the response body. A timestamp more than 30 seconds from the helper's clock either way is refused. The nonce is 16 random bytes as lowercase hex, and the MAC is a lowercase hex HMAC-SHA256 keyed by the CLI secret. A program squatting on the port learns one used proof and nothing else.
 - `summary.read` answers in version `SUMMARY_VERSION`. The app sends the version it was built for, and any other gets a signed 409.
 
+## `routes.ts`: the route tables
+
+Four lists, on purpose. `ROUTES` is the per-review wire: the router binds a handler to every entry at load and matches paths exactly, so a route with no handler fails at start rather than in front of a reviewer. The Library's routes have their own credential and their own check table, and `catalog.asset` is a path prefix, so the helper binds them itself. Site routes take the CLI secret and refuse any request with an Origin header, so a page holding a review token can neither name a file nor move a rail. Summary routes take the CLI proof, refuse any Sec-Fetch header (a browser sends one on every loopback request; the menu bar app sends none), and never answer on the Library's host.
+
+Two routes need no credential, visibly, through `AUTH.NONE`: `health`, which carries liveness and version only, and `library.get`, which serves the tool's own public bytes, the same file that ships in the repo.
+
+**The Library's check table** (`checks` on each Library route): Host is always checked. `sec_fetch_site` lists the values allowed, and a missing header is refused. `token` means the `catalog` client header plus the Library token. `json_body` means the JSON content type. `origin: "exact"` means Origin must equal `http://` plus the request's Host. No Library route sends a CORS header, and preflight never approves one.
+
+`catalog.page` opens on any top-level navigation, from any site (a link in a document or an email, a bookmark, a typed address), and on a request with no Sec-Fetch headers at all. A cross-site navigation cannot read the page it loads, and the page sends `X-Frame-Options: DENY`, `frame-ancestors 'none'` and a same-origin opener policy, so it can be neither framed nor scripted by its opener. A fetch or an iframe asking for it is still refused. The page carries the Library token in a `<meta name="lahe-catalog-token">` tag, because its CSP (`script-src 'self'`) forbids an inline script. The Library token is minted in memory at each helper start and can list, open (restart recorded servers only), star, rename and queue a request. It cannot post to a review, read comment text or name a file to serve.
+
+**Requests and answers**, which the route entries used to carry as strings:
+
+| Route | Request | Answer |
+| --- | --- | --- |
+| `health` | | `{ok, version, api, service_contract, started_at, catalog_seen_at}` |
+| `events.append` | `{review, events: [event...]}` | `{accepted: [event_id...], seq}` |
+| `library.get` | | the built library, as `application/javascript` |
+| `review.write` | `{review, origins: [origin...], target_path?, source_path?, source_hint?, page_path?, only_recorded_pages?: true, notes?: true}` | `{origins, recorded_source, recorded_paths, only_recorded_pages, seq}` |
+| `review.read` | `?review=<id>` | the `review.json` projection, plus `{seq}` |
+| `records.read` | `?review=<id>&page_path=<location.pathname>` | `{records: [record...], seq}` |
+| `replies.poll` | `?review=<id>&since=<seq>&page_path=<location.pathname>` | `{events: [event...], seq, target_mtime, stamp_carriable, agent_liveness}` |
+| `window.claim` | `{review, window_id, session_secret?, takeover?, quiet?}` | grant `{granted: true, since, heartbeat_seconds, quiet_heartbeat_seconds, took_over, session_secret}`; refusal `{granted: false, since, heartbeat_seconds, quiet_heartbeat_seconds, reason, deposed}` |
+| `window.release` | `{review, session_secret}` | `{released}` |
+| `review.end` | `{review}` | `{ended_at, outstanding_kept}` |
+| `catalog.page` | | `text/html` |
+| `catalog.asset` | an allowlisted name after the path | the file |
+| `catalog.list` | | `{attached, sessions: [...]}` |
+| `catalog.open` | `{review, handoff, confirmed}` | `{url, request_id, not_asked}` |
+| `catalog.star` | `{review, starred}` | `{review, starred}` |
+| `catalog.rename` | `{review, name}` | `{review, name}` |
+| `catalog.request` | `{review, action, confirmed}` | `{request_id}` |
+| `site.bind` | `{review, root, mode: "folder" or "page-only", entry, mounts?: {prefix: dir}, linked?: [file]}` | `{name, origin, url, printed_ending}` |
+| `review.retire` | `{review, session}` | `{review, retired_at}` |
+| `summary.read` | `?v=<summary_version>` | the summary table in `docs/CONTRACTS.md`; `test/fixtures/menubar/summary.json` |
+| `summary.open` | `{review, summary_version}` | `{url}`, or `{url: null}` for a row only an agent can serve |
+
+Notes on single routes:
+
+- `replies.poll`'s cursor is a `seq`, never a timestamp or an offset. `target_mtime` is the requesting page's file time (ISO), or `null` when the file is missing; a changed value means the agent rebuilt the page, and the layer reloads it. `stamp_carriable` is `false` for a Markdown or plain-text source, which cannot hold a `data-lahe-id`, so the page check never asks an agent for one. `agent_liveness` is read off the review's own replies and the owning session's files, never taken from anything the agent said.
+- `window.claim`'s refusal names no holder and no secret. `quiet: true` says nobody is looking at that window, so it beats less often and the helper holds it longer. `deposed` is true only for the window an explicit "Review here instead" threw out, which the page acts on at once; every other refusal it waits out, because a helper being replaced looks the same.
+- `window.release` needs the session secret, as a heartbeat does; otherwise any window that can name a review could evict the real holder.
+- `review.end` archives, never truncates. `outstanding_kept` counts items still ready, through the projection. It once counted log lines, which made a ten-comment review report hundreds.
+- `records.read` returns only this review's records for the asking page (its own address, its site's old origins, and for an old Markdown review the rendered file's old path), never a draft. A page whose Origin is not a site address gets an empty list.
+- `review.retire` may be called only by the owning session. A retired review answers on no page, fails the Origin check and takes no events.
+- `catalog.request` takes ids only; extra body fields are dropped. `catalog.rename`'s name is display text for the Library and never reaches an agent.
+
+`HEALTH_FIELD.CATALOG_SEEN_AT` is the time of the last authenticated `catalog.list`. `lahe session close` reads it to decide whether the Library keeps the helper up.
+
+## `request-checks.ts`: the per-request checks
+
+Loopback is not a boundary, so a page proves itself on every request. The checks run in a fixed order, each with a name and a failure code, and the helper logs the name of the one that failed, so "outside cannot get in" can be checked from the log rather than claimed:
+
+| Check | Why |
+| --- | --- |
+| host | The Host must name the helper, or a rebound DNS name reaches a handler with the browser's help |
+| custom_header | A form post or an image tag cannot set a custom header, so requiring one refuses every CORS-simple write |
+| content_type | Mutating routes take JSON only, which a simple request cannot send |
+| review_known | An unknown review id has no token to check against, so it is refused rather than defaulted |
+| token | Compared in full. Absent configuration fails closed |
+| origin | Read from the request's own header, never its body, and it must be one the add step registered |
+| sec_fetch_site | Library routes only: a document on another loopback port sends `same-site` and is the page most likely to run a script the reviewer did not write, so the Library's API takes exactly `same-origin` |
+| sec_fetch | Summary routes only: any Sec-Fetch header means a page is asking |
+| proof | Summary routes only: signed with the CLI secret, inside the window, with an unseen nonce, compared in constant time. The raw secret header is refused |
+
+`checkRequest` runs the first six, for review routes. The Library, site and summary checks live in the server (`auth.js`), which dispatches on the route's `auth` before calling it.
+
+The token comparison is constant time in plain code, because this folder cannot use `node:crypto` and the same code runs in the browser. Length is not hidden: tokens are fixed-length mints.
+
+A page opened from a file sends Origin `null`, or none; both count as `"null"`, which passes only when the add step registered it for that review. That is D11's stated residual risk.
+
+`sec_fetch` and `proof` fail with `AUTH_REFUSED`, which is not in the failure table. The server builds and signs those answers itself; never pass that code to `errorBody`.
+
+## `error-body.ts`: status codes and the error shape
+
+Every non-2xx answer has one shape, `{error: {code, message, remedy, detail, check, request_id}}`, so the layer has one parser and the rail can list any of them without a special case. Messages and remedies live in the failure table (`failures.ts`); the Library page shows the remedy. A code with no status is a 500. `AUTH_REFUSED` and `SUMMARY_VERSION` have statuses here but are not failure-table codes, because their answers are signed by the server.
+
+## `events.ts`: the event log line
+
+One JSON object per line of `events.jsonl`, so an interrupted write corrupts at most the last line, never history. `JSON.stringify` escapes every newline and control character inside a string, which keeps one event on one line whatever the page's text is.
+
+**Idempotence is by `event_id`, never by `(item, rev)`.** Drafts do not bump `rev`, and drafts go to the helper, so the log holds many events sharing an item and a revision with different content. Keying on `(item, rev)` would drop the later draft or make a reconnect's re-post ambiguous. `(item, rev)` belongs to the lifecycle.
+
+The client mints `event_id` and `ts`. The helper assigns `seq`, monotonic per review, which is the cursor every reader uses. The helper also stamps `received_at` with its own clock at append and overwrites anything a client sent under that name. It is the one time on an event a page cannot choose. `ts` is when the browser made the event, which for a held comment can be most of an hour before anyone could see it, so the rail's waiting clock starts at `received_at` and releasing Hold never trips the overdue alert at once.
+
+The vocabulary is closed: the projector, the merge rule and reply folding all switch on it. Event meanings beyond their names:
+
+- `origin.removed` `{origin}`: a restarted static server's earlier loopback origins, and only those, are removed. Recovery applies it in order with `origin.registered`, so a removed origin stays removed after a restart.
+- `item.content` is every content change, including every draft keystroke batch; it is the event the flush policy governs.
+- `item.closed` `{item, rev}`: the reviewer chose "Mark as done". An act at one revision, not a state claim: it carries no record, and the projection applies it only when the item is still outstanding at exactly that revision.
+- `reply.seen` `{item, stamp}`: the rail marked an agent reply read, naming it by its reply stamp. Not a lifecycle move; no agent acts on it.
+- `review.adopted` `{agent_session_id}`: a review from before sessions was taken into a session, once, by a Library pick-up. A review with a real session is never adopted.
+
+`parseEventLine` checks only `event` and `event_id`. Every other field comes back as written, typed `unknown`; narrow what you read.
+
 ## `flush.ts`: the draft flush policy
 
 This decides how fast the log grows and how much of a sentence a crash can cost.

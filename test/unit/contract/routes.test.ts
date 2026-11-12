@@ -105,6 +105,15 @@ test("the site routes and the summary routes are exactly these, with their own c
   assert.deepEqual(refusing.map((entry) => entry.name), ["summary.open"]);
 });
 
+test("every route under the API sits below the base path, and the Library's asset route below its page", () => {
+  for (const entry of [...ROUTES, ...CATALOG_ROUTES, ...SITE_ROUTES, ...SUMMARY_ROUTES]) {
+    if (entry.name === "library.get" || entry.name === "catalog.page" || entry.name === "catalog.asset") continue;
+    assert.equal(entry.path.startsWith(BASE + "/"), true, entry.name);
+  }
+  assert.equal(route("catalog.asset").path.startsWith(CATALOG_PAGE_PATH + "/"), true);
+  assert.equal(route("catalog.page").path, CATALOG_PAGE_PATH);
+});
+
 test("route names are unique across the four lists", () => {
   const names = [...ROUTES, ...CATALOG_ROUTES, ...SITE_ROUTES, ...SUMMARY_ROUTES].map((entry) => entry.name);
   assert.equal(new Set(names).size, names.length);
