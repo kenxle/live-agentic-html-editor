@@ -85,7 +85,7 @@ function escapeText(text: string): string {
 }
 
 function cleanText(raw: string): string {
-  return collapseSpaces(cleanCharacters(decodeEntities(raw)).replace(/[\t\n\r]/g, ""));
+  return collapseSpaces(cleanCharacters(decodeEntities(raw)));
 }
 
 function hasWords(node: BlockNode): boolean {

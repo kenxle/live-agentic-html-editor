@@ -262,3 +262,23 @@ test("runWords counts nothing for no run", () => {
   assert.equal(runWords(undefined), 0);
   assert.equal(runWords([]), 0);
 });
+
+test("D9: a tab, a line feed or a carriage return in a block's text is a space, so words do not run together", () => {
+  assert.equal(accepted("p", "x\ny"), "x y");
+  assert.equal(accepted("p", "x\ty"), "x y");
+  assert.equal(accepted("p", "x\r\ny"), "x y");
+  assert.equal(accepted("p", "a\n\n  b"), "a b");
+  assert.equal(accepted("ul", "<li>one\ntwo</li>\n<li>three\tfour</li>"), "<li>one two</li><li>three four</li>");
+});
+
+test("D9: a block taken from a wrapped source keeps the words the page's leaves have", () => {
+  const wrapped = "The trainer writes\nthe plan for\n   the week.";
+  assert.equal(blockWords(accepted("p", wrapped)), blockWords("The trainer writes the plan for the week."));
+  assert.equal(blockWords(accepted("p", wrapped)), blockWords(wrapped));
+});
+
+test("D9: a stored block never holds a tab or a newline, so it stays a fixed point", () => {
+  const once = accepted("p", "x\ny <em>a\tb</em>");
+  assert.equal(once, "x y <em>a b</em>");
+  assert.equal(accepted("p", once), once);
+});
