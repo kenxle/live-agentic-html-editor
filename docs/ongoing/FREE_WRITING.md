@@ -46,7 +46,7 @@ An edit record gains these fields. They are spelled in `src/shared/record.js`; t
 | `remove_blocks` | Take-back records only: blocks to remove, each with `tag` and `html`. A take-back never carries `new_blocks` |
 
 - `before`, `after`, and `after_html` still describe the whole sitting. `after_html` is the anchor's markup followed by each new block as its own tagged element, so an agent that only knows "apply after_html" still gets every block.
-- Every block passes `normalize.cleanBlock` three times: at capture in the layer, when the helper appends the event (`src/service/log.js`), and before replay writes it. The one tag list is `WRITABLE_BLOCK_TAGS` in `src/shared/normalize.js`. A forged block makes replay write nothing for the whole record.
+- Every block passes `normalize.cleanBlock` three times: at capture in the layer, when the helper appends the event (`src/service/log.js`), and before replay writes it. The one tag list is `WRITABLE_BLOCK_TAGS` in `src/domain/run-blocks.ts`. A forged block makes replay write nothing for the whole record.
 - Two sittings in the same place: a block that belongs to an outstanding record reopens that record at a new revision. Once the record is handled, its blocks are the page's own and a new sitting starts a new record.
 - A change of the anchor's type is `anchor_tag_after`. A tag-only change is `format_only`; a tag change with new words is `edit`.
 - Undo of a handled run raises a take-back with `remove_blocks`. Replay removes those blocks and never replays the original run.
@@ -83,7 +83,7 @@ There are two checks, and they do different jobs.
 
 ## Proofreading
 
-- The helper sets `proofread: true` on a run item whose `run_words` (the run's words without `from_anchor` blocks, counted by one function in `normalize.js`) is over `PROOFREAD_MIN_WORDS` (150, in `review_format.js`), unless the review is a notes review. The agent never counts.
+- The helper sets `proofread: true` on a run item whose `run_words` (the run's words without `from_anchor` blocks, counted by one function, `runWords` in `src/domain/run-blocks.ts`) is over `PROOFREAD_MIN_WORDS` (150, in `review_format.js`), unless the review is a notes review. The agent never counts.
 - The agent places the words as written, rebuilds, and replies `question` with `--proofread` and one `--suggest <block> <from> <to>` per fix. `lahe reply` refuses a `<from>` that is not in that block's words exactly once.
 - The card shows two buttons, only for a proofread reply. "Use the fixes" applies the suggestions as the reviewer's own reword of the same record at a new revision; replay then rewrites the placed blocks in place. "Keep mine" posts a thread reply, and the agent changes nothing. A plain placement question keeps today's question card.
 
@@ -118,7 +118,8 @@ There are two checks, and they do different jobs.
 | Protection of the anchor and run | `src/layer/protect.js` |
 | Placing a run, the page check's stamp round, the conflict card | `src/layer/replay.js` |
 | Empty-container rung, tag tie-breaker | `src/layer/anchor.js` |
-| `cleanBlock`, run matcher, `run_words` | `src/shared/normalize.js` |
+| `cleanBlock`, `run_words` | `src/domain/run-blocks.ts` |
+| run matcher, string block reader | `src/domain/run-match.ts` |
 | Run fields, validation, ceilings, take-back | `src/shared/record.js` |
 | Contract lines, projection, `PROOFREAD_MIN_WORDS` | `src/shared/review_format.js` |
 | Helper checks and the size ceiling | `src/service/log.js`, `src/service/handled_check.js` |

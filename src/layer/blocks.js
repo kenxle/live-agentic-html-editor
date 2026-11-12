@@ -34,7 +34,6 @@
   "use strict";
 
   var WRITABLE = normalize.WRITABLE_BLOCK_TAGS;
-  var BLOCK_TAGS = normalize.BLOCK_TAGS;
   var LIST_TAGS = { ul: 1, ol: 1 };
 
   // A host that cannot hold flow content, so a run is never offered there and
@@ -64,7 +63,7 @@
   // head, the library's own chrome, and the overlay root.
   function isNotContent(el) {
     var tag = tagOf(el);
-    if (hasOwn(normalize.DROP_SUBTREE_TAGS, tag) || tag === "head") return true;
+    if (normalize.isDroppedSubtreeTag(tag) || tag === "head") return true;
     if (markers.roleOf(el) === markers.ROLE_CHROME) return true;
     return el.id === markers.OVERLAY_ROOT_ID;
   }
@@ -76,14 +75,14 @@
   function hasBlockInside(el) {
     for (var child = el.firstElementChild; child; child = child.nextElementSibling) {
       if (isNotContent(child)) continue;
-      if (hasOwn(BLOCK_TAGS, tagOf(child)) || hasBlockInside(child)) return true;
+      if (normalize.isBlockTag(tagOf(child)) || hasBlockInside(child)) return true;
     }
     return false;
   }
 
   function isLeaf(el) {
     var tag = tagOf(el);
-    if (!hasOwn(BLOCK_TAGS, tag)) return false;
+    if (!normalize.isBlockTag(tag)) return false;
     return hasOwn(LIST_TAGS, tag) || !hasBlockInside(el);
   }
 
@@ -139,7 +138,7 @@
     if (node.nodeType === 8 || isWhitespaceText(node)) return "neutral";
     if (!isElement(node)) return "no";
     if (isNotContent(node)) return "chrome";
-    if (hasOwn(BLOCK_TAGS, tagOf(node)) || hasBlockInside(node)) return "no";
+    if (normalize.isBlockTag(tagOf(node)) || hasBlockInside(node)) return "no";
     return "chrome";
   }
 
@@ -178,7 +177,7 @@
     if (node.nodeType === 8 || isWhitespaceText(node)) return true;
     if (!isElement(node)) return false;
     if (isNotContent(node) || markers.isFileTitle(node)) return true;
-    if (!hasOwn(BLOCK_TAGS, tagOf(node))) return false;
+    if (!normalize.isBlockTag(tagOf(node))) return false;
     var sawTitle = false;
     for (var child = node.firstChild; child; child = child.nextSibling) {
       if (child.nodeType === 8 || isWhitespaceText(child)) continue;

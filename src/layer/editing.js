@@ -627,9 +627,9 @@
    * @returns {{changed: boolean, kind: (string|null)}}
    */
   function kindFor(before, after) {
-    var textSame = normalize.equalsInMode(normalize.MODE.TEXT, String(before.text || ""), String(after.text || ""));
+    var textSame = normalize.equalsInMode(normalize.COMPARISON_MODE.TEXT, String(before.text || ""), String(after.text || ""));
     var structureSame = normalize.equalsInMode(
-      normalize.MODE.STRUCTURE,
+      normalize.COMPARISON_MODE.STRUCTURE,
       String(before.html || ""),
       String(after.html || "")
     );
@@ -1232,11 +1232,11 @@
         }
         if (child.nodeType !== 1 || markers.isInsideOverlay(child)) continue;
         var tag = tagOf(child);
+        var inline = normalize.inlineTagFor(tag);
         if (tag === "br") out += "<br>";
         else if (tag === "li") out += "<li>" + inlineMarkup(child) + "</li>";
-        else if (Object.prototype.hasOwnProperty.call(normalize.INLINE_ALLOWED, tag)) {
-          out += "<" + normalize.INLINE_ALLOWED[tag] + ">" + inlineMarkup(child) + "</" + normalize.INLINE_ALLOWED[tag] + ">";
-        } else if (tag !== "script" && tag !== "style" && tag !== "template") out += inlineMarkup(child);
+        else if (inline) out += "<" + inline + ">" + inlineMarkup(child) + "</" + inline + ">";
+        else if (tag !== "script" && tag !== "style" && tag !== "template") out += inlineMarkup(child);
       }
       return out;
     }
@@ -1330,9 +1330,9 @@
     function runVerdict(fields, beforeArg) {
       var before = beforeArg || session.before || { text: "", html: "" };
       var anchorText = normalize.blockText(fields.anchor_after_html || "");
-      var textSame = normalize.equalsInMode(normalize.MODE.TEXT, String(before.text || ""), anchorText);
+      var textSame = normalize.equalsInMode(normalize.COMPARISON_MODE.TEXT, String(before.text || ""), anchorText);
       var structureSame = normalize.equalsInMode(
-        normalize.MODE.STRUCTURE,
+        normalize.COMPARISON_MODE.STRUCTURE,
         String(before.html || ""),
         String(fields.anchor_after_html || "")
       );
@@ -1457,7 +1457,7 @@
     }
 
     // Any block tag in normalize.BLOCK_TAGS, opening.
-    var OLD_SHAPE_TAG = new RegExp("<(" + Object.keys(normalize.BLOCK_TAGS).join("|") + ")[\\s>]", "i");
+    var OLD_SHAPE_TAG = new RegExp("<(" + normalize.BLOCK_TAGS.join("|") + ")[\\s>]", "i");
 
     // A record from before free writing: no run fields, and markup that
     // nests blocks inside the edited element. Reopening it keeps today's
@@ -3025,7 +3025,7 @@
       var el = node && node.nodeType === 1 ? node : node ? node.parentNode : null;
       while (el && el !== region) {
         var tag = typeof el.tagName === "string" ? el.tagName.toLowerCase() : "";
-        if (Object.prototype.hasOwnProperty.call(normalize.BLOCK_TAGS, tag)) return el;
+        if (normalize.isBlockTag(tag)) return el;
         el = el.parentNode;
       }
       return region;
