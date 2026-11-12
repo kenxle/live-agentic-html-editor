@@ -4,11 +4,11 @@ read-when: Checking where the TypeScript migration stands, what it waits on, or 
 
 # Progress: TypeScript migration
 
-The architecture and the plan are written and served to Ken, he answered all three questions on it, approved it, and reshaped it: every conversion slice is now a rebuild to a written spec, test first. Slices S0a (Node floor 24.12) and S0b (TypeScript, ESLint and the strict gate, with the Node pilot) are merged. Slice S0c (esbuild bundles, with the browser pilot) is built, and checkpoint 0 is running on its branch: the full browser suite, then the three-browser run, plus code, security and testing reviews.
+Wave 0 is done and merged: the Node 24.12 floor (PR #104), the TypeScript toolchain and strict gate (PR #105), and the esbuild bundles (PR #106). Checkpoint 0 passed. All five Wave 1 specs are written. Slice C1 (the constant modules) is building in `.claude/worktrees/ts-c1-constants`; C2 and C4 build after it, then C3, then C5.
 
 ## Attention needed
 
-Ken: run `lahe install` once more, in a Terminal window (a `!` command here has no terminal, so Lahe refuses it). The first try failed: launchd refused to load the new login item because the old one was still loaded, and the rollback stopped the server (board row LAHE-install-over-loaded-item). The server is running again, started on demand at 14:08, but until `lahe install` succeeds it will not come back after a reboot.
+None. Ken's login item runs the server on Node 24.22.3, and the menu bar icon is back.
 
 ## Documents
 
@@ -25,9 +25,9 @@ Ken: run `lahe install` once more, in a Terminal window (a `!` command here has 
 | Architecture and plan | planning agent | done | this folder; Ken answered all three questions | none |
 | S0a Node floor | Sonnet builder | merged | PR #104; gate:unit 3221 tests, 0 failed, on Node 24.22.3; CI pass; old-Node message checked on Node 18 and 20 | Ken runs `lahe install` |
 | S0b Toolchain and pilot | Opus builder | merged | PR #105; gate:unit 3263 tests, 0 failed; 22 strictness fixtures each refused by their rule; lint 39.6s; CI pass | none |
-| S0c Bundling | Opus builder | built; checkpoint 0 running | gate:unit 3284 tests, 0 failed; 24 Playwright files by name, 208 passed; rebuild byte-identical; rail screenshot 0 pixels changed; layer bundle 2.51 MB to 1.67 MB | checkpoint 0, then PR |
-| Specs C1, C2, C4 | Opus spec writers | written and committed | `slices/C1-spec.md`, `C2-spec.md`, `C4-spec.md`, each with orchestrator decisions | build after checkpoint 0 |
-| Spec C3 | Opus spec writer | writing | none | read it, then build after C2 |
+| S0c Bundling, with checkpoint 0 fix round | Opus builders | merged | PR #106; gate:all alone 2831 passed, 2 known-kind flakes passing alone; CI pass on Linux | none |
+| Specs C1 to C5 | Opus spec writers | written and committed | `slices/C1-spec.md` to `C5-spec.md`, each with orchestrator decisions | none |
+| C1 Constants | Sonnet builder | building | worktree `ts-c1-constants` | review and merge, then C2 and C4 |
 
 ## Decisions and events
 
@@ -50,3 +50,5 @@ Ken: run `lahe install` once more, in a Terminal window (a `!` command here has 
 - **2026-11-12 14:10.** S0c built. Both browser files now come from esbuild through one code path. One namespace name can be backed by several modules, and the forwarder hands out a writable copy. The Library page serves one built file. Checkpoint 0 started.
 - **2026-11-12 14:21.** Checkpoint 0, first full run (Chromium), on the S0c branch: unit 3284 tests, 0 failed; menu bar app 4 of 5, 1 skipped; browser 943 passed, 5 failed, 8 skipped. The five failures, in `free_writing_r14` and `free_writing_seams`, all timed out waiting for the page check after a reload. That run overlapped three reviewers and a spec writer running commands, and both files then passed alone (32 of 32). So this is the known flake (board row LAHE-list-edit-reload-page-check), not a break. The checkpoint still needs a clean run, alone, after the fix round.
 - **2026-11-12 14:22.** Checkpoint 0 reviews: no blockers. Security: a lint check must stop a package import in old `.js` code, now that CI installs dev tools before lint; CI gets read-only permissions. Testing: 16 of 18 one-line weakenings of the rules left the strictness test green, so the test will pin each project's resolved compiler options and the resolved ESLint rules. Code: five minor items. One fix round is running on the S0c branch.
+- **2026-11-12 15:20.** Checkpoint 0 passed: `gate:all` alone gave 2831 passed and 2 failed. Both failures are flakes that pass alone 3 of 3 and are on the board: the known Firefox Library hang, and a new WebKit toast timing case. Chromium was fully clean. S0c merged as PR #106 after CI passed on Linux, which also proves the bundle builds the same bytes there. C1 build started.
+- **2026-11-12 15:28.** Ken's second `lahe install` installed the server's login item on Node 24.22.3. The menu bar item failed with the same launchd error 5; a plain reload succeeded right after, though launchd said nothing was loaded. The board row now records that the cause is not proven.

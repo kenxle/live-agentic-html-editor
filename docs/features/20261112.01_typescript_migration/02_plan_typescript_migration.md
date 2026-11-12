@@ -270,20 +270,20 @@ This is the one verification table for the migration. A slice links to its rows 
 
 | Requirement | Acceptance or failure case | Command or observation | Owner | Evidence and status |
 | --- | --- | --- | --- | --- |
-| Real `.ts` in strict mode, every stricter flag | `tsconfig.base.json` has every flag in the architecture's list; turning one off fails a test | `node --test test/unit/strictness_gate.test.js` | S0b | not started |
-| No escape hatches | Fixtures with `any`, `@ts-ignore`, `@ts-expect-error`, an `as` cast and `x!` are each rejected | same test | S0b | not started |
-| Every switch on a state or kind handles every case | A fixture switch missing a union member fails | same test | S0b | not started |
-| Folder boundaries enforced by the compiler | A browser fixture importing server code fails with TS6307; `document` in a server fixture fails; `node:fs` in a browser fixture fails | same test | S0b | not started |
-| `tsc` runs in `gate:unit` | `npm run gate:unit` output shows `tsc -b` and ESLint | read the gate output | S0b | not started |
-| The gate rejects new comments, and allows only the header | A fixture with a comment fails `lahe/no-comments`; a header with a field other than `read-when` or `not-for`, or not first in the file, fails; a file with the correct header passes | same test | S0b | not started |
-| Node floor is 24.12 everywhere | `engines`, `.nvmrc`, CI and docs agree; `bin/lahe.js` on Node 20 prints the message and exits non-zero | unit test of the message; a manual run with `~/.nvm/versions/node/v20.19.0/bin/node bin/lahe.js status` | S0a | not started |
+| Real `.ts` in strict mode, every stricter flag | `tsconfig.base.json` has every flag in the architecture's list; turning one off fails a test | `node --test test/unit/strictness_gate.test.js` | S0b | passed: PR #105; the strictness test pins every project's resolved options (PR #106) |
+| No escape hatches | Fixtures with `any`, `@ts-ignore`, `@ts-expect-error`, an `as` cast and `x!` are each rejected | same test | S0b | passed: PR #105, #106 |
+| Every switch on a state or kind handles every case | A fixture switch missing a union member fails | same test | S0b | passed: PR #105, #106 |
+| Folder boundaries enforced by the compiler | A browser fixture importing server code fails with TS6307; `document` in a server fixture fails; `node:fs` in a browser fixture fails | same test | S0b | passed: TS6307, TS2584, TS2591 fixtures; each project's lib, types and references pinned (PR #106) |
+| `tsc` runs in `gate:unit` | `npm run gate:unit` output shows `tsc -b` and ESLint | read the gate output | S0b | passed: PR #105 |
+| The gate rejects new comments, and allows only the header | A fixture with a comment fails `lahe/no-comments`; a header with a field other than `read-when` or `not-for`, or not first in the file, fails; a file with the correct header passes | same test | S0b | passed: PR #105 |
+| Node floor is 24.12 everywhere | `engines`, `.nvmrc`, CI and docs agree; `bin/lahe.js` on Node 20 prints the message and exits non-zero | unit test of the message; a manual run with `~/.nvm/versions/node/v20.19.0/bin/node bin/lahe.js status` | S0a | passed: PR #104; real runs on Node 18.20.8, 20.19.0 and 24.11.1 |
 | The server runs `.ts` with no build step | `lahe review` on Ken's machine serves a page after SV7; no compiled server output exists | real use, and `git ls-files` shows no server build output | SV7 | not started |
-| Browser bundle built by esbuild, committed, reproducible | `check:layer` passes on Mac and in Linux CI on the same commit | CI run and local run | S0c | not started |
-| Bundle switch changes no behavior | Full Chromium and three-engine suites pass at checkpoint 0 | `npm run gate`, `npm run gate:all` | orchestrator | not started |
+| Browser bundle built by esbuild, committed, reproducible | `check:layer` passes on Mac and in Linux CI on the same commit | CI run and local run | S0c | passed: PR #106; rebuild byte-identical on the Mac, and CI's check:layer on Linux passed |
+| Bundle switch changes no behavior | Full Chromium and three-engine suites pass at checkpoint 0 | `npm run gate`, `npm run gate:all` | orchestrator | passed: checkpoint 0 gate:all alone, 2831 passed; 2 flakes passed alone 3 of 3 (board rows); rail screenshots 0 pixels differ |
 | Each rebuild keeps what people and agents observe | Each slice has a spec; the fixed behavior tests pass unchanged in what they assert; the new tests cover every behavior statement; every old test case is carried or listed as dropped with a reason; each deliberate difference has its own test | `npm run gate:unit` per slice; the orchestrator reads each spec before its build; the testing reviewer reads the old-test mapping at each checkpoint | spec writer, builder, testing reviewer | not started |
 | Behavior across the waves | Full suites pass at checkpoints 1 to 5 | `npm run gate`, `npm run gate:all` | orchestrator | not started |
 | Agent-facing text unchanged | The 8 skill-pinning tests, `review_format.test.js` and `export_text.test.js` pass unchanged | `gate:unit` | each builder | not started |
-| Zero runtime dependencies | `dependencies` is `{}`; new packages are under `devDependencies` with exact versions | read `package.json` | S0b | not started |
+| Zero runtime dependencies | `dependencies` is `{}`; new packages are under `devDependencies` with exact versions | read `package.json` | S0b | passed: PR #105; lint refuses a package import in src or bin .js (PR #106) |
 | Layout matches the target | Every row of [the target layout](parts/target_layout.md) is in place; [module_map.md](../../diagrams/module_map.md) shows the final layout | `scripts/import-layers.ts` and a review of the tree | F1 | not started |
 | Standard names | No folder, file or exported identifier says "helper"; files are kebab-case | `git grep -il helper -- src` is empty; lint's file-name check | F1 | not started |
 | No temporary bridges left | No forwarders, no generated registrations, no manifest, no nested `package.json`, no `.js` under `src/` | lint rule turned on in F1 | F1 | not started |
