@@ -4,7 +4,7 @@ read-when: Building, reviewing or orchestrating a slice of the TypeScript migrat
 
 # Plan: move Lahe to strict TypeScript in slices that each leave main working
 
-This page lists every slice of the migration: what each one changes, what it waits on, and how it proves it is done. You have answered all three questions at the top, and work can start. The reasoning behind each slice is in [the architecture](01_architecture_typescript_migration.md). Where every file goes is in [the target layout](parts/target_layout.md). [The progress page](03_progress_typescript_migration.md) tracks the build.
+This page lists every slice of the migration: what each one rebuilds, what it waits on, and how it proves it is done. Each slice rebuilds its part of the code to a written spec, test first; it does not translate the old code line by line. You have answered all three questions at the top, and work can start. The reasoning behind each slice is in [the architecture](01_architecture_typescript_migration.md). Where every file goes is in [the target layout](parts/target_layout.md). [The progress page](03_progress_typescript_migration.md) tracks the build.
 
 ## Your answers
 
@@ -41,7 +41,7 @@ These came from the handoff's open questions. The reasons are in the [architectu
 - **`src/shared` splits** into `src/contract/` (the shapes and constants the server and browser exchange), `src/domain/` (logic both run), and moves of files only one side uses.
 - **The order changes slightly from the chat's.** The contract goes first, as recommended. After that, the server and the browser layer convert in parallel rather than one after the other, because neither imports the other. The CLI goes last, because it imports the server.
 - **TypeScript 6.0.3, not 7.** The lint tools that ban `any` and casts cannot load TypeScript 7 yet. A board row tracks the move.
-- **Unit tests stay JavaScript while the source converts**, so the unchanged tests prove each conversion changed nothing. They convert afterwards, under the same rules.
+- **Each slice is a rebuild to a written spec, test first.** You ruled this during the build: the code got lazy and sloppy, so each slice writes out the functionality it aims for, then redoes TDD, rather than forcing old tests green. An Opus spec writer describes the behavior and the module design; a builder writes new tests from that spec and builds to them. Tests that pin what people and agents see stay fixed: the skill wording, the `review.json` and Copy and Export text, the CLI output, and the browser suite. Every old test case is carried into a new test or listed as dropped with its reason. See [how each slice is built](#how-each-slice-is-built).
 
 ## Slices
 
@@ -124,7 +124,7 @@ These run in parallel: B1, B2 and B13; then B5, B6 and B10; then B7, B8 and B9.
 
 | Slice | What it does | Waits on | Model |
 | --- | --- | --- | --- |
-| **T1** Unit tests | Converts `test/unit/` to `.ts` under the same rules. Up to four builders, split by area (contract and domain, server, browser, CLI) | F1 | Sonnet |
+| **T1** Unit tests | Converts the unit tests no earlier slice rewrote to `.ts` under the same rules. Up to four builders, split by area (contract and domain, server, browser, CLI) | F1 | Sonnet |
 | **T2** Browser tests | Converts `test/browser/`, `test/helpers/`, `test/support/` and `playwright.config` | F1 | Sonnet |
 | **T3** Scripts | Converts `scripts/` to `.ts`. Lint's `node --check` step then covers only `bin/lahe.js` | F1 | Sonnet |
 
@@ -157,38 +157,66 @@ All compiler flags and lint rules apply to every `.ts` file from S0b onward. The
 | `max-lines` | SP1 for the browser, SP2 for the server and CLI | Large files convert whole first, then split |
 | No `.js` under `src/` | F1 | Forwarders exist until F1 |
 | The root is `"type": "module"` | F1 | Unconverted CommonJS files still need the default |
-| The same rules in `test/` and `scripts/` | T1, T2, T3 | Tests stay JavaScript during the source waves |
+| The same rules in `test/` and `scripts/` | T1, T2, T3 | A test a slice rewrites becomes `.ts` in that slice; untouched tests wait for T1 |
 
 ## How each slice is built
 
+Each slice is a rebuild, not a translation. Ken, during the build: the code "got pretty lazy and sloppy", and each section should write out the functionality it is aiming for and then redo TDD, rather than force old tests to show green. So every conversion slice runs in two stages, with two agents.
+
+### Stage 1: the spec (Opus)
+
+A spec writer reads the old files, their callers, their unit tests, the docs that cover them and the comments, and writes `slices/<slice>-spec.md`. It describes:
+
+- **The functionality, as behavior.** Numbered statements of what the module does that a caller, a person or an agent can observe. For example: "a record with an unknown `kind` is refused with `RECORD_KIND_UNKNOWN`". These are what the new tests will check. Internals do not appear here.
+- **The module design.** The modules the slice will create, each with one job; the exported types and functions with their signatures; and which unions replace string checks. The design follows the target layout and the architecture, and is what an experienced TypeScript team would write. It does not have to resemble the old file.
+- **Old tests, accounted for.** Every test case in the old unit tests for these files is mapped to the behavior statement that covers it, or listed as dropped with the reason (for example, "pinned an internal helper that no longer exists"). Nothing is dropped silently.
+- **Deliberate differences.** Places where the old code is wrong or sloppy and the new code will behave differently. Each one is listed with a test. A difference a person or an agent would notice goes on the progress page as a departure; it does not wait for Ken.
+- **Fixed behavior tests.** Which of the tests that pin visible behavior touch this slice. These are the skill wording, the `review.json` and Copy and Export byte pins, the CLI output and the browser specs, and they must still pass unchanged in what they assert.
+
+The orchestrator reads the spec before the build starts. It checks two things: that the spec covers what the callers rely on, and that the design stays inside the slice's folders.
+
+### Stage 2: the build (Sonnet, or Opus where the slice table says so)
+
+The builder works test first from the spec, following the feature-forge build loop (`~/.claude/skills/feature-forge/references/build-loop.md`) and the `tdd` skill:
+
+1. Write the new `.ts` tests for each behavior statement, and see them fail for the right reason.
+2. Build the new modules to the design until they pass.
+3. Move each old unit test file with `git mv` to its `.ts` successor and rewrite it, so nothing is deleted. Retire the old file's cases according to the spec's mapping.
+4. Point old callers at the new modules. Callers in the slice's folders change directly; elsewhere, the old path's forwarder carries them, or the slice edits the call site when an export was renamed.
+5. Move the comments' knowledge into the folder doc, and give each file its `read-when` header.
+
 ### The builder's contract
 
-The orchestrator fills one contract per slice from the builder role template (`~/.claude/skills/feature-forge/references/roles/builder.md`). These two rules go at the very top of every builder prompt, above everything else, because builders broke them when they appeared only at the end:
+The orchestrator fills one contract per agent from the builder role template (`~/.claude/skills/feature-forge/references/roles/builder.md`). These two rules go at the very top of every prompt, above everything else, because builders broke them when they appeared only at the end:
 
-> **Never delete anything.** No `rm`, no `git clean`, no `git reset --hard`, not even your own temporary files. List anything you want removed under "To delete at cleanup" in your progress detail.
+> **Never delete anything.** No `rm`, no `git rm`, no `git clean`, no `git reset --hard`, not even your own temporary files. Move a file with `git mv` when it becomes another file. List anything else you want removed under "To delete at cleanup" in your progress detail.
 >
 > **Never stage `dist/`.** Rebuild it locally if a test needs it, then put it back with `git checkout -- dist/lahe-layer.js dist/lahe-library.js`.
 
 The rest of the contract:
 
-- **outcome:** the slice's row above.
-- **sources:** for a conversion slice:
-  - the architecture's [mixed period](01_architecture_typescript_migration.md#question-7-the-mixed-period) and [enforcement](01_architecture_typescript_migration.md#question-5-how-the-rules-are-enforced) sections;
+- **outcome:** the slice's row above, and for the builder, the spec.
+- **sources:**
+  - the slice's spec (builder only);
+  - the architecture's [mixed period](01_architecture_typescript_migration.md#question-7-the-mixed-period), [enforcement](01_architecture_typescript_migration.md#question-5-how-the-rules-are-enforced) and [tests](01_architecture_typescript_migration.md#question-6-tests) sections;
   - its rows in [the target layout](parts/target_layout.md);
   - [CONTRACTS.md](../../CONTRACTS.md) for any shape it types;
   - [CLAUDE.md](../../../CLAUDE.md) for the gate, the never-delete rule, the `dist/` rule and "tests leave nothing running".
   The brief points at these and does not restate them.
-- **owned_files:** the old files, their new paths, their forwarders, their folder doc, and any test listed for the slice in "Tests that read source text". Nothing else. Where a slice must touch a shared file (`package.json`, the manifest, a `tsconfig` reference), it edits only its own lines. The orchestrator resolves line conflicts when it merges.
+- **owned_files:** the old files, the new modules, the forwarders, the folder doc, the unit tests for those files, the call sites of any export the slice renames, and any test listed for the slice in "Tests that read source text". Nothing else. Where a slice must touch a shared file (`package.json`, the manifest, a `tsconfig` reference), it edits only its own lines. The orchestrator resolves line conflicts when it merges.
 - **authority:** work in a worktree under `.claude/worktrees/`, commit to its own branch, never push or merge.
 - **constraints:**
-  - no behavior change;
-  - exported names stay the same;
-  - the unchanged unit suite passes;
-  - each `.ts` file keeps a `read-when` header (and `not-for` only when it applies), rewritten to route, not summarize;
+  - build to the spec's behavior and design, test first. Never bend the new code to keep an old test green;
+  - the fixed behavior tests pass unchanged in what they assert;
+  - every old test case is either carried into a new test or listed as dropped in the spec, with the reason;
+  - a deliberate difference from the old behavior is in the spec with its own test;
+  - each `.ts` file has a `read-when` header (and `not-for` only when it applies) that routes and does not summarize;
   - every other comment moves to the folder doc or is dropped as history;
-  - a bug the types reveal is reported, and fixed only if the fix is a few lines, needed for the compiler and tested;
   - a `.ts` file imports only `.ts` files.
-- **uncertainty_rule:** read the code and its tests first. Raise the question with the orchestrator, rather than inventing a design, when a type would need a cast or an `any` to compile, when a parser would be stricter than today's check, or when a dependency is not yet converted.
+- **uncertainty_rule:** read the code, its callers and its tests first. Raise the question with the orchestrator, rather than guessing, when:
+  - a type would need a cast or an `any` to compile;
+  - the spec and a caller disagree;
+  - a dependency is not yet converted.
 - **quality_checks:**
   - `npm run gate:unit`, which includes `tsc -b` and ESLint;
   - the Playwright specs for the files touched, by name, for browser slices;
@@ -196,8 +224,10 @@ The rest of the contract:
 - **completion_evidence:**
   - the commit range;
   - gate output reading 0 failed;
-  - the counts before and after for lines, comment lines, and files left in the old folder;
+  - the counts before and after for lines, comment lines, and old tests carried or dropped;
   - the progress detail at `docs/features/20261112.01_typescript_migration/slices/<slice>.md`.
+
+**Models.** The spec is Opus for every slice, because it is where the design happens. The "Model" column in the slice tables names the builder.
 
 ### Each slice, from branch to main
 
@@ -218,7 +248,7 @@ At each checkpoint the orchestrator first runs `npm run gate` and then `npm run 
 | Comments that slipped through, and code that works around a problem instead of fixing it | `pstack:comment-sicko` | every checkpoint from 1 on |
 | Whether the slices did what their rows say, against the verification table below | completion reviewer (Opus) | every checkpoint |
 | Security: the Library page's asset list (checkpoint 0); boundary parsers and auth (checkpoints 1 to 3) | security reviewer | checkpoints 0 to 3 |
-| The test plan, and whether a strict rule is turned off anywhere | testing reviewer | checkpoint 0 and checkpoint 5 |
+| Each slice's old-test mapping and dropped tests (is every behavior still covered?), and whether a strict rule is turned off anywhere | testing reviewer | every checkpoint |
 
 There is one fix round. The reviewer names the test that proves each fix, and the builder writes it red, then green. A second review happens only when a fix is itself risky.
 
@@ -250,7 +280,7 @@ This is the one verification table for the migration. A slice links to its rows 
 | The server runs `.ts` with no build step | `lahe review` on Ken's machine serves a page after SV7; no compiled server output exists | real use, and `git ls-files` shows no server build output | SV7 | not started |
 | Browser bundle built by esbuild, committed, reproducible | `check:layer` passes on Mac and in Linux CI on the same commit | CI run and local run | S0c | not started |
 | Bundle switch changes no behavior | Full Chromium and three-engine suites pass at checkpoint 0 | `npm run gate`, `npm run gate:all` | orchestrator | not started |
-| Each conversion changes no behavior | Unchanged unit suite passes on every slice | `npm run gate:unit` per slice | each builder | not started |
+| Each rebuild keeps what people and agents observe | Each slice has a spec; the fixed behavior tests pass unchanged in what they assert; the new tests cover every behavior statement; every old test case is carried or listed as dropped with a reason; each deliberate difference has its own test | `npm run gate:unit` per slice; the orchestrator reads each spec before its build; the testing reviewer reads the old-test mapping at each checkpoint | spec writer, builder, testing reviewer | not started |
 | Behavior across the waves | Full suites pass at checkpoints 1 to 5 | `npm run gate`, `npm run gate:all` | orchestrator | not started |
 | Agent-facing text unchanged | The 8 skill-pinning tests, `review_format.test.js` and `export_text.test.js` pass unchanged | `gate:unit` | each builder | not started |
 | Zero runtime dependencies | `dependencies` is `{}`; new packages are under `devDependencies` with exact versions | read `package.json` | S0b | not started |

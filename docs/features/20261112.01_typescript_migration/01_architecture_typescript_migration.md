@@ -14,6 +14,7 @@ This document answers the eight questions in the [handoff](HANDOFF.md), which se
 - **`src/shared` splits by what each file is.** The wire contract becomes `src/contract/`. Logic both sides run becomes `src/domain/`. Files only the browser runs move into the browser folder, and the test fixtures move into `test/`.
 - **The folder layout is enforced by the compiler.** Each folder is its own TypeScript project, and a project can import only the projects it lists. The browser projects cannot see Node's types, and the server cannot see the DOM.
 - **The gate rejects escape hatches and comments.** TypeScript 6.0.3 runs with every strict flag. ESLint with typescript-eslint rejects `any`, `@ts-ignore`, `as` casts, `!` and switches that miss a case. A small rule in the repo rejects comments. Both run inside `npm run gate:unit`.
+- **Each slice is a rebuild, not a translation.** It writes out the behavior it aims for and a clean module design, then builds test first from that spec. What people and agents observe must not change, and the tests that pin it stay fixed.
 - **The migration is incremental, from the bottom up.** The contract converts first. Then the server and the browser layer convert side by side, each from the files with no dependencies upward. The CLI converts last, then the tests. Main works after every slice.
 
 ## Decisions
@@ -29,7 +30,7 @@ This document answers the eight questions in the [handoff](HANDOFF.md), which se
 | A7 | TypeScript 6.0.3 now, TypeScript 7 when typescript-eslint supports it | typescript-eslint refuses TypeScript 6.1 and later today. |
 | A8 | ESLint 10.14.0 and typescript-eslint 8.72.2 as dev dependencies, plus two local rules | tsc cannot ban `any`, casts, `!` or comments by itself. |
 | A9 | No comments in `.ts` files except the `read-when` header, which is metadata; the why moves to a doc per source folder | Ken's ruling on the plan page: frontmatter and metadata are not comments. |
-| A10 | Unit tests stay JavaScript while the source converts, then convert in their own wave | Unchanged tests passing is the proof that a conversion changed no behavior. |
+| A10 | Each slice is a rebuild: an Opus spec of the behavior and module design, then a test-first build from that spec | Ken, during the build: the code got lazy and sloppy; write out the functionality each section aims for and redo TDD rather than force old tests green. What people and agents observe still must not change. |
 | A11 | Two temporary bridges during the mixed period: a one-line forwarder at each old Node path, and a generated registration for each converted browser module | Lets each slice touch only its own files. Both are removed in the finishing slice. |
 
 ## The shape today
@@ -155,7 +156,10 @@ The two local rules live in `scripts/eslint-rules/`. Both are short: one reports
 
 ## Question 6: tests
 
-- **Unit tests stay `.js` during the source waves.** CommonJS can `require` a converted ES module on Node 24 with no warning (the research reproduced this). The tests that prove behavior today keep proving it, unchanged, while each file converts underneath them. A slice changes a test only where the test reads source text that the slice moves. The plan lists those tests slice by slice.
+- **Each slice rebuilds from a spec, test first.** Ken ruled this during the build. A spec writer describes the module's behavior as numbered, observable statements and designs the modules an experienced TypeScript team would write: split by job, clear types, standard names, narrow interfaces. The builder writes new `.ts` tests from those statements, sees them fail, and builds to them. Old unit tests are not forced green. Each old test file moves with `git mv` to its `.ts` successor, and each old test case is either carried into a new test or listed in the spec as dropped, with the reason (the Test Behavior, Not Implementation principle). The plan's [How each slice is built](02_plan_typescript_migration.md#how-each-slice-is-built) has the steps.
+- **Some tests stay fixed, because they are the behavior.** These are the skill-wording tests, the `review.json` and Copy and Export byte pins in `review_format.test.js` and `export_text.test.js`, the CLI output tests, and the browser suite. A slice may move or retype them, but not change what they assert. A failure there is a regression, not a test to update.
+- **No coverage is lost silently.** A builder that deletes a test, or narrows what it checks, lists each one in its progress detail: the behavior it covered, and the test that covers that behavior now. The testing reviewer reads that list at every checkpoint.
+- **Tests a slice does not touch stay `.js`** until wave T1. CommonJS can `require` a converted ES module on Node 24 with no warning (the research reproduced this).
 - **Unit tests convert in wave T1, by area,** once that area's source has finished. They follow the same rules as the source, with no relaxed config for tests. Fake DOM objects are the hard case: code that needs a node will take a small interface listing what it reads, not a full `Element`, so a test's fake fits without a cast. If a case cannot be shaped that way, the builder raises it rather than adding an exception.
 - **Browser tests, helpers and `playwright.config` convert in wave T2.** Playwright runs `.ts` specs natively.
 - **The 13 browser specs and 2 support files that build the layer from source paths** stop doing that in S0c. They get the bundle from one helper that builds it in memory with esbuild, so they always test the current source.
@@ -171,16 +175,16 @@ While some files are `.ts` and some are `.js`, four rules keep main green.
 
 Both bridges are temporary. Slice F1 rewrites every import to the new paths with a script, then removes the forwarders, the registrations, the manifest and the nested `package.json` files, and sets `"type": "module"` at the root. The Outcome-Oriented Execution principle argues against compatibility code. It is accepted here because without it each slice would edit a hundred files that other slices also edit, and parallel builders would collide on every merge.
 
-**Exported names do not change during conversion.** Forwarders and registrations hand old callers the same names. Renaming exported things, such as "helper" to "server", happens in each area's finishing step, together with its callers.
+**Exported names may change during conversion,** when a better name or a better module boundary calls for it. The slice updates every caller in the same pull request, so the forwarders and registrations hand callers whatever the new module exports. Calls into a converted module from files that are still `.js` get updated in place. Callers that a parallel slice also owns are left to the orchestrator, who resolves line conflicts when it merges. The forwarders stay only as long as it takes to save each slice from editing every caller's import path.
 
 ## Question 8: slicing
 
 Slices follow the target layout, so each file has exactly one owning slice. The rules every slice follows:
 
-- **A conversion changes no behavior.** The unchanged unit suite is the proof.
+- **Nothing a person or an agent can observe changes.** The proof is in the fixed behavior tests listed under [tests](#question-6-tests), the slice's rewritten unit tests, and the browser suite at each checkpoint. Internal structure is free to change, and should.
 - **A bug the types reveal gets its own fix.** A tiny fix that is the only way to satisfy the compiler may stay in the slice, if the builder lists it under "Deviations" with a test. Anything else goes on the board as its own row.
 - **Comments move to docs in the same slice.** Each target folder gets one doc, `docs/ongoing/code/<folder>.md`, owned by the slice that creates the folder. It holds the why, the traps and the history worth keeping; each file's own `read-when` header does the routing. History with no future use (old task owners, decision numbers that no longer resolve) is dropped. Existing subsystem docs, such as `FINGERPRINTING.md`, only gain a link, so parallel slices never edit the same doc.
-- **Splitting very large files is its own refactor slice.** `overlay.js` (8,878 lines), `editing.js` (6,066) and four more files over 3,000 lines first convert as single files. Then a split slice for each area breaks them up and turns `max-lines` on for that folder.
+- **Large files split as they convert.** `overlay.js` (8,878 lines), `editing.js` (6,066) and four more files over 3,000 lines should come out of their conversion as several modules, each with one job. A split slice for each area finishes anything left over and turns `max-lines` on for that folder.
 
 The slice list, the order, the owners and the evidence are in [the plan](02_plan_typescript_migration.md).
 
@@ -188,7 +192,8 @@ The slice list, the order, the owners and the evidence are in [the plan](02_plan
 
 | What goes wrong | How it shows up | Where it is caught |
 | --- | --- | --- |
-| A converted file changes behavior | an unchanged unit test fails | `gate:unit` in the slice |
+| A converted file changes behavior | a fixed behavior test fails, or a browser spec fails at the checkpoint | `gate:unit` in the slice, `gate` at the checkpoint |
+| A rewritten unit test stops covering something the old one caught | the builder's list of deleted and narrowed tests | the testing reviewer at every checkpoint |
 | The esbuild bundle behaves differently from the concatenated one | a browser spec fails | full `gate` and `gate:all` at checkpoint 0, before any conversion |
 | esbuild output differs between Mac and Linux | `check:layer` fails in CI | S0c proves both; if they differ, CI rebuilds and compares meaning, not bytes, and the plan is revised |
 | A slice imports an unconverted `.js` | lint error `lahe/no-js-imports` | `gate:unit` |

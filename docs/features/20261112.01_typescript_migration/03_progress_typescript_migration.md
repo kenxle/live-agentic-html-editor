@@ -31,3 +31,6 @@ None. An orchestrator can start slice S0a.
 - **2026-11-12 11:34.** Ken chose to rename "helper" in user-facing text, following BRAND. Slice W1 does it after the CLI converts.
 - **2026-11-12 11:35.** Ken ruled that the `read-when` header is metadata, not a comment. It stays as the one comment lint allows, with its shape checked. The why behind the code still moves to a doc per source folder.
 - **2026-11-12 11:36.** Ken confirmed Node 24.12 as the minimum. Every question on the plan is answered.
+- **2026-11-12 11:42.** Ken: prefer better structure and best practice over forcing old unit tests to stay green. The plan now lets each slice restructure its files and rewrite the unit tests that pinned internals. Tests that pin what people and agents see stay fixed, and every deleted or narrowed test is listed for the testing reviewer, now at every checkpoint.
+- **2026-11-12 11:41.** Ken approved the plan and cleared the build to start. Node 24.22.3 installed on Ken's Mac for the builders.
+- **2026-11-12 11:43.** Ken: the code got lazy and sloppy and needs a real refactor; each section should write out the functionality it aims for and redo TDD. Every conversion slice is now a two-stage rebuild: an Opus spec of behavior and module design, then a test-first build. Old test cases are carried into new tests or listed as dropped with a reason.
