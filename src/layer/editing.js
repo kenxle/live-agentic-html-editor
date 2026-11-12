@@ -4907,7 +4907,7 @@
         chord.textContent = gestures.chordLabelFor(t.tag, platform());
         var md = doc.createElement("span");
         md.className = "lahe-edit-bar__rowmd";
-        md.textContent = t.markdown ? t.markdown.trim() : "";
+        md.textContent = t.shortcuts.length > 0 ? t.shortcuts[0].trim() : "";
         row.appendChild(name);
         row.appendChild(chord);
         row.appendChild(md);
