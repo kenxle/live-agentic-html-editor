@@ -8,7 +8,7 @@ Wave 0 is done and merged: the Node 24.12 floor (PR #104), the TypeScript toolch
 
 ## Attention needed
 
-Ken: run `lahe install` once more, in a Terminal window (a `!` command here has no terminal, so Lahe refuses it). The first try failed: launchd refused to load the new login item because the old one was still loaded, and the rollback stopped the server (board row LAHE-install-over-loaded-item). The server is running again, started on demand at 14:08, but until `lahe install` succeeds it will not come back after a reboot.
+None. Ken's login item runs the server on Node 24.22.3, and the menu bar icon is back.
 
 ## Documents
 
@@ -51,3 +51,4 @@ Ken: run `lahe install` once more, in a Terminal window (a `!` command here has 
 - **2026-11-12 14:21.** Checkpoint 0, first full run (Chromium), on the S0c branch: unit 3284 tests, 0 failed; menu bar app 4 of 5, 1 skipped; browser 943 passed, 5 failed, 8 skipped. The five failures, in `free_writing_r14` and `free_writing_seams`, all timed out waiting for the page check after a reload. That run overlapped three reviewers and a spec writer running commands, and both files then passed alone (32 of 32). So this is the known flake (board row LAHE-list-edit-reload-page-check), not a break. The checkpoint still needs a clean run, alone, after the fix round.
 - **2026-11-12 14:22.** Checkpoint 0 reviews: no blockers. Security: a lint check must stop a package import in old `.js` code, now that CI installs dev tools before lint; CI gets read-only permissions. Testing: 16 of 18 one-line weakenings of the rules left the strictness test green, so the test will pin each project's resolved compiler options and the resolved ESLint rules. Code: five minor items. One fix round is running on the S0c branch.
 - **2026-11-12 15:20.** Checkpoint 0 passed: `gate:all` alone gave 2831 passed and 2 failed. Both failures are flakes that pass alone 3 of 3 and are on the board: the known Firefox Library hang, and a new WebKit toast timing case. Chromium was fully clean. S0c merged as PR #106 after CI passed on Linux, which also proves the bundle builds the same bytes there. C1 build started.
+- **2026-11-12 15:28.** Ken's second `lahe install` installed the server's login item on Node 24.22.3. The menu bar item failed with the same launchd error 5; a plain reload succeeded right after, though launchd said nothing was loaded. The board row now records that the cause is not proven.
