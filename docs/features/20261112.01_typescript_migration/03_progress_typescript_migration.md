@@ -4,7 +4,7 @@ read-when: Checking where the TypeScript migration stands, what it waits on, or 
 
 # Progress: TypeScript migration
 
-The architecture and the plan are written and served to Ken, he answered all three questions on it, approved it, and reshaped it: every conversion slice is now a rebuild to a written spec, test first. Slice S0a (Node floor 24.12) is merged. Slice S0b (TypeScript and lint setup, with the Node pilot) is being built in `.claude/worktrees/ts-s0b`.
+The architecture and the plan are written and served to Ken, he answered all three questions on it, approved it, and reshaped it: every conversion slice is now a rebuild to a written spec, test first. Slices S0a (Node floor 24.12) and S0b (TypeScript, ESLint and the strict gate, with the Node pilot) are merged. Slice S0c (esbuild bundles, with the browser pilot) is being built in `.claude/worktrees/ts-s0c`.
 
 ## Attention needed
 
@@ -24,8 +24,8 @@ Ken: run `! lahe install` once. Your login item still starts the server with Nod
 | --- | --- | --- | --- | --- |
 | Architecture and plan | planning agent | done | this folder; Ken answered all three questions | none |
 | S0a Node floor | Sonnet builder | merged | PR #104; gate:unit 3221 tests, 0 failed, on Node 24.22.3; CI pass; old-Node message checked on Node 18 and 20 | Ken runs `lahe install` |
-| S0b Toolchain and pilot | Opus builder | building | worktree `ts-s0b`, branch `ts/s0b-toolchain` | review and merge |
-| S0c Bundling | orchestrator | waiting on S0b | none | start after S0b merges |
+| S0b Toolchain and pilot | Opus builder | merged | PR #105; gate:unit 3263 tests, 0 failed; 22 strictness fixtures each refused by their rule; lint 39.6s; CI pass | none |
+| S0c Bundling | Opus builder | building | worktree `ts-s0c`, branch `ts/s0c-bundling` | review, then checkpoint 0 |
 
 ## Decisions and events
 
@@ -38,3 +38,9 @@ Ken: run `! lahe install` once. Your login item still starts the server with Nod
 - **2026-11-12 11:43.** Ken: the code got lazy and sloppy and needs a real refactor; each section should write out the functionality it aims for and redo TDD. Every conversion slice is now a two-stage rebuild: an Opus spec of behavior and module design, then a test-first build. Old test cases are carried into new tests or listed as dropped with a reason.
 - **2026-11-12 12:50.** The pilots swap. `elapsed.js` is in the browser bundle, which cannot load `.ts` until S0c, so S0b pilots the Node-only `script_line.js` and S0c pilots `elapsed` through the new bundle.
 - **2026-11-12 12:48.** S0a merged as PR #104. Node 22 and later refuse a directory as a `node --test` path, so `test:unit` now passes a glob. Wrapper and Stop hook reinstalled on Node 24.22.3. `lahe install` refuses to run from an agent, so the login item waits on Ken.
+- **2026-11-12 13:31.** S0b merged as PR #105. Departures, all reasonable: `tsc` cannot use `noEmit` across project references, so projects write declarations into the ignored `.tsbuild/`; the graph script is `scripts/import-layers.mts`, because `scripts/` is still CommonJS; `max-lines` is set to 400 and stays off until the split slices. CI now proves a bare clone runs before it installs the dev tools. Every checkout needs `npm install` once. The graph script found two more import cycles, both in the CLI, and the plan converts each pair together. Folder docs get one section per source file, so slices sharing a folder do not collide.
+- **2026-11-12 13:58.** Specs written for C1 (constants), C2 (normalizer) and C4 (protocol), and checked against each other. Departures that agents or reviewers will notice, each with its own test: C2's D8 (links with a query string no longer reach agents as `&amp;amp;`) and D9 (words no longer run together in blocks taken from source with line breaks); C4's D6 (a reply whose required reason is not a string becomes a malformed-line chip) and D7 (the chip names a missing field once).
+
+## To delete at cleanup
+
+- `test/browser/support/export_stub.js`: dead; nothing calls `installExportStub` (found by the C1 spec).

@@ -112,7 +112,7 @@ These run in parallel: B1, B2 and B13; then B5, B6 and B10; then B7, B8 and B9.
 
 | Slice | What it does | Waits on | Model |
 | --- | --- | --- | --- |
-| **CLI** Commands | Converts all of `src/cli/` in one pull request and adds its `package.json`. Up to three builders may each take a group of commands on one integration branch. Points `bin/lahe.js` at `src/cli/main.ts` | SV7 | Sonnet |
+| **CLI** Commands | Converts all of `src/cli/` in one pull request and adds its `package.json`. Two import cycles live here (`codex_monitor` with `monitor`, and `review` with `write`), so each pair converts together. Up to three builders may each take a group of commands on one integration branch. Points `bin/lahe.js` at `src/cli/main.ts` | SV7 | Sonnet |
 | **SP1** Split browser files | Splits the browser files over the size limit into modules in the same folders (`overlay`, `editing`, `replay`, `sync`, `comments`, `tab_done`, `main`). Turns `max-lines` on for `src/browser/`. Refactor only | B12 | Opus |
 | **SP2** Split server files | The same for the server (`page_routes`, `catalog_reader`, `reviews`, `main` and any other file over the limit). Turns `max-lines` on for `src/server/` and `src/cli/` | CLI | Opus |
 | **F1** Finish | A script rewrites every import and `require` to the new paths. Then F1 removes the forwarders, the manifest and the nested `package.json` files, sets `"type": "module"` at the root, and renames exported "helper" identifiers to "server" with their callers. Turns on the lint rule that no `.js` remains under `src/`. Updates `CLAUDE.md` (layout, manifest rules, gate table), [ARCHITECTURE.md](../../ongoing/ARCHITECTURE.md), [CONTRACTS.md](../../CONTRACTS.md) (the shared-module loading section) and the module map | SP1, SP2 | Opus |
@@ -261,7 +261,7 @@ There is one fix round. The reviewer names the test that proves each fix, and th
   - inside the server chain, SV4 and SV5a;
   - after F1, T1, T2 and T3.
   At most about five builders run at once, and Ken's machine runs one browser suite at a time.
-- **Shared writable state:** `package.json`, `src/shared/manifest.js`, the `tsconfig` references and `dist/`. Builders edit only their own lines in the first three and never stage `dist/`. The orchestrator owns merges and `dist/`. Folder docs have one owning slice each, so no two slices write the same doc.
+- **Shared writable state:** `package.json`, `src/shared/manifest.js`, the `tsconfig` references and `dist/`. Builders edit only their own lines in the first three and never stage `dist/`. The orchestrator owns merges and `dist/`. Folder docs have one section per source file, and a slice writes only its own sections.
 - **Smallest safe decomposition:** one slice per step in the import graph. The import cycle (SV4) and the two-way pair (B5) are single slices. The CLI is one pull request fed by several builders, because its folder holds both kinds of module until it flips.
 
 ## Verification
@@ -304,5 +304,9 @@ Returning to Ken is needed only for:
 
 ## Board rows to add
 
+- **A test reads a constant that does not exist.** `test/unit/addresses.test.js` passes `protocol.PAGES.SWITCH_ON`, which is always `undefined`. Found by the C4 spec.
+- **"The layer never calls `sendBeacon`" has no real test.** A `no-restricted-properties` rule in the browser projects would enforce it. Slice B9.
+- **One source for the size limits.** `record`'s run ceilings and the reply suggestion caps are spelled twice. Slice C3.
+- **Docs that name old paths.** `CONTRACTS.md`, `LIBRARY.md`, `FREE_WRITING.md`, `CHOICE_BUTTONS.md`, `OUTBOX_COALESCING.md` and `DIAGRAMS_PLAN.md` name `src/shared/protocol.js` and similar paths. They stay true while the forwarders exist; F1 sweeps them with its import rewrite.
 - **TypeScript 7.** Move from 6.0 to 7 once typescript-eslint supports it. It waits on the typescript-eslint issues about the TypeScript 7 API.
 - **Old measurement and spike scripts.** Several `measure_*` and `spike_*` files in `scripts/` were one-off tools. T3 converts them as they are; whether to keep each one is Ken's call at cleanup.
