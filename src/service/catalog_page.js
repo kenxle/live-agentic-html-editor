@@ -6,9 +6,9 @@
 // response headers every catalog route sends.
 //
 // Owner: Library 1.2 (routes, allowlist, headers). Library 2.2 owns the
-// template BODY in renderPage, the page's inline <style> (PAGE_STYLE), and the
-// view_model.js script tag. The meta tag, the stylesheet and script tags, and
-// the headers are what the route checks rely on.
+// template BODY in renderPage and the page's inline <style> (PAGE_STYLE). The
+// meta tag, the stylesheet and script tags, and the headers are what the route
+// checks rely on.
 //
 // Architecture: docs/features/20260922.02_lahe_library/02_architecture_lahe_library.md,
 // Security & Privacy Notes.
@@ -32,22 +32,22 @@ var fs = require("node:fs");
 var path = require("node:path");
 
 var protocol = require("../shared/protocol.js");
+var manifest = require("../shared/manifest.js");
 var tabIcon = require("./tab_icon.js");
 var markdown = require("./markdown.js");
 
-var SRC = path.join(__dirname, "..");
+var REPO_ROOT = path.join(__dirname, "..", "..");
 var JS = "application/javascript; charset=utf-8";
+// The page's one script: protocol.js, view_model.js, copy_text.js and page.js,
+// built into one file by npm run build:layer (manifest.libraryFiles()).
+var LIBRARY_SCRIPT = path.basename(manifest.LIBRARY_OUTPUT);
 
 // name after catalog.asset's path -> {file, contentType}. A null `file` is the
 // style bundle, which markdown.js builds from the three vendored CSS files.
 // The style is served under its usual name so its own relative font URLs
 // (./.lahe-fonts/<file>.woff2) resolve to the font entries below.
 var ASSETS = {};
-ASSETS["protocol.js"] = { file: path.join(SRC, "shared", "protocol.js"), contentType: JS };
-ASSETS["page.js"] = { file: path.join(SRC, "layer", "catalog", "page.js"), contentType: JS };
-ASSETS["view_model.js"] = { file: path.join(SRC, "layer", "catalog", "view_model.js"), contentType: JS };
-// The shared copy function (clipboard API, with a hidden-field fallback).
-ASSETS["copy_text.js"] = { file: path.join(SRC, "layer", "copy_text.js"), contentType: JS };
+ASSETS[LIBRARY_SCRIPT] = { file: path.join(REPO_ROOT, manifest.LIBRARY_OUTPUT), contentType: JS };
 ASSETS[markdown.DOC_STYLE_ASSET] = { file: null, contentType: "text/css; charset=utf-8" };
 markdown.FONT_ASSETS.forEach(function (font) {
   ASSETS[markdown.FONT_ASSET_DIR + "/" + font] = {
@@ -413,10 +413,7 @@ function renderPage(token) {
     tabIcon.LIBRARY_LINK,
     '<link rel="stylesheet" href="' + assetUrl(markdown.DOC_STYLE_ASSET) + '">',
     "<style>" + PAGE_STYLE + "</style>",
-    '<script src="' + assetUrl("protocol.js") + '" defer></script>',
-    '<script src="' + assetUrl("view_model.js") + '" defer></script>',
-    '<script src="' + assetUrl("copy_text.js") + '" defer></script>',
-    '<script src="' + assetUrl("page.js") + '" defer></script>',
+    '<script src="' + assetUrl(LIBRARY_SCRIPT) + '" defer></script>',
     "</head><body>",
     // The brandmark is the tab icon's own image, decorative: the heading is
     // read as its words alone.

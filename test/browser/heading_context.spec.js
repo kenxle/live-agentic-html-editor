@@ -21,22 +21,12 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { test, expect } = require("../helpers");
 const { startStaticServer } = require("../helpers/servers");
-const manifest = require("../../src/shared/manifest.js");
+const { layerBundle } = require("./support/bundles");
 
-const REPO_ROOT = path.join(__dirname, "..", "..");
 const FIXTURE = "treatments.html";
 
-// The bundle from source, in the manifest's order. Builders never commit dist/,
-// so reading dist/ here would test whoever last ran the build script.
-const BUNDLE = manifest
-  .builtFiles()
-  .map(function (entry) {
-    return "/* ---- " + entry.path + " ---- */\n" + fs.readFileSync(path.join(REPO_ROOT, entry.path), "utf8");
-  })
-  .join("\n");
-
 async function bootLayer(page) {
-  await page.addScriptTag({ content: BUNDLE });
+  await page.addScriptTag({ content: await layerBundle() });
   await page.evaluate(function () {
     var LAHE = window.LAHE;
     var pageFields = LAHE.record.pageFrom({

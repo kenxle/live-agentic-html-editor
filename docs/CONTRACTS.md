@@ -1243,16 +1243,16 @@ with no `Access-Control-*` header. The Library page is same-origin and never pre
 
 **The token on the page** sits in `<meta name="lahe-catalog-token" content="...">`
 (`protocol.CATALOG_TOKEN_META`), since `script-src 'self'` forbids an inline script. Header names,
-route paths and constants reach the page script through `protocol.js`, which `catalog.asset` serves.
+route paths and constants reach the page script through the protocol module, which is built into the page's script.
 
-**`catalog.asset` serves a fixed allowlist and nothing else**, raw from `src/` with no build step, so
-the Library's files never touch `dist/`:
+**`catalog.asset` serves a fixed allowlist and nothing else.** The page's script is one built file,
+`dist/lahe-library.js`, which `npm run build:layer` makes from the manifest's `CATALOG_PAGE` list (the
+protocol module, `view_model.js`, `copy_text.js` and `page.js`, in that order) and `npm run check:layer`
+keeps current:
 
 | Name | File |
 | --- | --- |
-| `protocol.js` | `src/shared/protocol.js` |
-| `page.js` | `src/layer/catalog/page.js` |
-| `view_model.js` | `src/layer/catalog/view_model.js` |
+| `lahe-library.js` | `dist/lahe-library.js` |
 | `.lahe-doc-style.css` | the St. Clair document style bundle (`markdown.styleSheet()`) |
 | `.lahe-fonts/<file>.woff2` | the three vendored fonts, so the style's own relative font URLs resolve |
 

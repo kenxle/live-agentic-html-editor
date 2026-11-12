@@ -11,6 +11,8 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
+const espree = require("espree");
+
 const floor = require("../../bin/node_floor.js");
 const installCli = require("../../scripts/install-cli.js");
 
@@ -65,6 +67,12 @@ test("the old-Node message names the version found, the version needed and the f
   assert.match(message, /\/some\/clone/, "the clone's path, so the user knows where to run them");
 });
 
+test("a Node 24 below 24.12 is told to install 24.12 or newer, not just Node 24", () => {
+  const message = floor.problem("24.11.1", "/some/clone");
+  assert.match(message, /this is Node 24\.11\.1/);
+  assert.match(message, /Install Node 24\.12 or newer/);
+});
+
 test("the message for an unreadable version quotes it", () => {
   const message = floor.problem("banana", "/some/clone");
   assert.match(message, /Node 24\.12 or newer/);
@@ -76,8 +84,43 @@ test("a Node that meets the floor has no problem", () => {
   assert.equal(floor.problem("24.22.3", "/some/clone"), null);
 });
 
-test("bin/lahe.js on an old Node prints the message to stderr and exits non-zero", () => {
-  const preload = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "lahe-floor-")), "pretend_old_node.js");
+/** A temp folder the test removes when it ends. */
+function tempDir(t, prefix) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  return dir;
+}
+
+/** Every string literal in an ES5 parse of the file; the parse throws on anything newer than ES5. */
+function es5Strings(file) {
+  const text = fs.readFileSync(file, "utf8").replace(/^#!.*/, "");
+  const ast = espree.parse(text, { ecmaVersion: 5, sourceType: "script" });
+  const strings = [];
+  const visit = (node) => {
+    if (!node || typeof node.type !== "string") return;
+    if (node.type === "Literal" && typeof node.value === "string") strings.push(node.value);
+    for (const child of Object.values(node)) {
+      if (Array.isArray(child)) child.forEach(visit);
+      else if (child && typeof child === "object") visit(child);
+    }
+  };
+  visit(ast);
+  return strings;
+}
+
+test("bin/lahe.js and bin/node_floor.js parse as ES5 and load no node: module, so a very old Node reaches the message", () => {
+  for (const name of ["lahe.js", "node_floor.js"]) {
+    const file = path.join(REPO_ROOT, "bin", name);
+    let strings;
+    assert.doesNotThrow(() => {
+      strings = es5Strings(file);
+    }, "bin/" + name + " parses as ES5");
+    assert.deepEqual(strings.filter((text) => text.startsWith("node:")), [], "bin/" + name + " names no node: module");
+  }
+});
+
+test("bin/lahe.js on an old Node prints the message to stderr and exits non-zero", (t) => {
+  const preload = path.join(tempDir(t, "lahe-floor-"), "pretend_old_node.js");
   fs.writeFileSync(
     preload,
     'Object.defineProperty(process, "versions", { value: Object.assign({}, process.versions, { node: "20.19.0" }) });\n'
@@ -98,8 +141,8 @@ test("bin/lahe.js still runs on this Node", () => {
   assert.doesNotMatch(ran.stderr, /Node 24\.12 or newer/);
 });
 
-test("install-cli refuses to install from a Node below the floor and writes nothing", () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-floor-home-"));
+test("install-cli refuses to install from a Node below the floor and writes nothing", (t) => {
+  const home = tempDir(t, "lahe-floor-home-");
   let stdout = "";
   let stderr = "";
   const code = installCli.install({
@@ -119,8 +162,22 @@ test("install-cli refuses to install from a Node below the floor and writes noth
   assert.equal(fs.existsSync(path.join(home, ".local")), false, "nothing was written");
 });
 
-test("install-cli goes ahead on a Node at the floor", () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-floor-home-"));
+test("install-cli on a Node 24 below 24.12 says to install 24.12 or newer", (t) => {
+  let stderr = "";
+  const code = installCli.install({
+    home: tempDir(t, "lahe-floor-home-"),
+    nodeVersion: "24.11.1",
+    stdout: () => {},
+    stderr: (text) => {
+      stderr += text;
+    }
+  });
+  assert.equal(code, 1);
+  assert.match(stderr, /Install Node 24\.12 or newer/);
+});
+
+test("install-cli goes ahead on a Node at the floor", (t) => {
+  const home = tempDir(t, "lahe-floor-home-");
   let stderr = "";
   const code = installCli.install({
     home: home,

@@ -39,34 +39,16 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { test, expect } = require("../helpers");
 const { startStaticServer } = require("../helpers/servers");
-const manifest = require("../../src/shared/manifest.js");
+const { layerBundle } = require("./support/bundles");
 
-const REPO_ROOT = path.join(__dirname, "..", "..");
 const FIXTURE = "hotkeys-page.html";
 const REVIEW = "rev_hotkeys";
-
-// The bundle, concatenated in the manifest's order, in memory. Builders never
-// commit dist/, so reading dist/ would test whoever last ran the build script
-// rather than the source in this worktree.
-function layerBundle() {
-  return manifest
-    .builtFiles()
-    .map(function (entry) {
-      return (
-        "/* ---- " + entry.path + " ---- */\n" +
-        fs.readFileSync(path.join(REPO_ROOT, entry.path), "utf8")
-      );
-    })
-    .join("\n");
-}
-
-const BUNDLE = layerBundle();
 
 // The REAL boot, rail and tabs included, with the sync client held back: the
 // helper is not part of this question and a poll loop against a closed port
 // would only add chips to the rail. Everything under test here is in the page.
 async function bootLayer(page) {
-  await page.addScriptTag({ content: BUNDLE });
+  await page.addScriptTag({ content: await layerBundle() });
   await page.evaluate(function (review) {
     window.__h = window.LAHE.layer.boot({
       review: review,

@@ -13,7 +13,7 @@ This folder also holds one doc per source folder (`server-sites.md` for `src/ser
 
 `npm run lint` runs three things, and `gate:unit` runs `lint` first:
 
-1. `node scripts/lint.js`: syntax of every `.js` file, duplicate declarations, Lua, no jsdom, manifest completeness, and kebab-case `.ts` names under `src/`.
+1. `node scripts/lint.js`: syntax of every `.js` file, duplicate declarations, Lua, no jsdom, manifest completeness, kebab-case `.ts` names under `src/`, and no package import in a `.js` file under `src/` or in `bin/` (only a relative path or a Node built-in; ESLint's package ban covers the `.ts` files).
 2. `tsc -b`: the compiler, over every project below.
 3. `eslint --max-warnings 0`: the rules below, over every `.ts` and `.mts` file. A warning fails it too.
 
@@ -36,7 +36,7 @@ Each folder is its own TypeScript project, and a project can import only the pro
 | `test/unit` | es2024 | node | every `src` project |
 | `scripts` | es2024 | node | nothing (its `.mts` files and `eslint-rules/`) |
 
-Every project's `tsconfig.json` extends `tsconfig.base.json` and sets only `lib`, `types` and `outDir`. The root `tsconfig.json` lists every project. `test/unit/strictness_gate.test.js` fails if a project sets anything else, because that could turn a strict flag off for one folder.
+Every project's `tsconfig.json` extends `tsconfig.base.json` and sets only `lib`, `types` and `outDir`. The root `tsconfig.json` lists every project. `test/unit/strictness_gate.test.js` holds this table too, with every flag of the base, and fails when what tsc resolves for any project differs from it, so a flag turned off for one folder, a `lib` or `types` added, or a reference added fails the gate. A deliberate change edits that test's table in the same commit.
 
 **Every project keeps `"files": []` beside its `include`. Never remove it.** A project whose `include` matches nothing is an error (TS18003), and several folders have no `.ts` file yet. An explicit `files` list stops that check, and `include` still picks up every `.ts` file the folder gains. So a slice that adds a folder's first file changes no config: the folder is already built, and its references are already in place.
 
@@ -65,7 +65,28 @@ When a `.js` file becomes a `.ts` file somewhere else, its old path keeps a one-
 module.exports = require("../server/sites/script-line.ts");
 ```
 
-The forwarder is listed in `FORWARDERS` in `src/shared/manifest.js`. The `.ts` file is not in the manifest: lint's completeness check skips `.ts` files and the `package.json` and `tsconfig.json` files, because the folder owns them. Forwarders are removed in the finishing slice.
+The forwarder is listed in `FORWARDERS` in `src/shared/manifest.js`. The `.ts` file is not in the manifest, unless the browser loads it (next section): lint's completeness check skips `.ts` files and the `package.json` and `tsconfig.json` files, because the folder owns them. Forwarders are removed in the finishing slice.
+
+A module the browser also loads gets an ordinary object at its old path instead, a copy of its exports, because old code and tests replace functions on these objects and an ES module namespace is read-only. When several modules replace one old file, the forwarder copies all of them:
+
+```js
+module.exports = Object.assign({}, require("../domain/elapsed.ts"));
+```
+
+**A converted module exports functions and constants only, never a `let` it reassigns later.** The forwarder and the bundle both hand callers a copy of the exports, taken once when the module loads. A reassigned export would change in the module and not in the copy. Lint refuses `export let` and `export var`; it cannot see a `let` exported by name later (`let x; export { x }`), so do not write that either.
+
+### Moving a browser file
+
+The review layer (`dist/lahe-layer.js`) and the Library page (`dist/lahe-library.js`) are built by `scripts/build-layer.js` from two lists in the manifest, `LAYER_FILES` and `CATALOG_PAGE`, in their order. Old files in those lists still read their dependencies off `window.LAHE` as they load, so a converted module has to be put there for them. The build does it from the manifest entry; nothing else changes:
+
+- Set the entry's `path` to the `.ts` file, at the old file's place in the list.
+- Add `registers`: the `window.LAHE` names the old file registered itself under (they do not always match the file name; `export.js` is both `exporter` and `export`). Use `[]` for a module nothing reads off the namespace.
+- When several modules replace one old file, add `modules`: every one of them, `path` first. The build registers one object holding all their exports, and refuses two modules that export the same name.
+- The registered object is an ordinary, writable copy of the exports, the same as the forwarder's.
+
+The Library page's list starts with `{ sameAsLayer: "protocol" }`, which stands for whichever `LAYER_FILES` entry registers `protocol`, so converting the protocol changes one entry and both files follow.
+
+Browser specs that load the layer into a page take it from `test/browser/support/bundles.js`, which runs the same build in memory, so they test the source in front of them. `npm run build:layer` writes both files and `npm run check:layer` checks both. Builders never commit `dist/`.
 
 A `.ts` file may import only `.ts` files (`lahe/no-js-imports`). To see what you can convert now, run:
 
@@ -83,7 +104,7 @@ It prints the unconverted `.js` files under `src/` in layers. Layer 0 imports no
 - no `@ts-` comment directives, no `as` casts (`as const` is fine), no `x!`;
 - a `switch` on a union handles every member, and a `default` does not count as handling one;
 - names: types in PascalCase, values in camelCase, constants in camelCase or UPPER_CASE. Object keys may also be snake_case or PascalCase, because the wire format and outside APIs set them;
-- no default exports, no top-level `await`, no `enum`, no `namespace`, no `require`;
+- no default exports (`export default` or `export { x as default }`), no exported `let` or `var` (see "Moving a file"), no top-level `await`, no `enum`, no `namespace`, no `require`;
 - per folder, no import of a package (Lahe has no runtime dependencies), of `node:` modules outside the server and CLI, or of a folder the table above forbids;
 - `lahe/no-comments` and `lahe/no-js-imports`, the two local rules in `scripts/eslint-rules/`;
 - `max-lines`, configured but off until each area's split slice turns it on.
@@ -108,4 +129,9 @@ A `.ts` unit test lives under `test/unit/`, in a folder that mirrors its source 
 
 ### Proving a rule
 
-`test/unit/strictness_gate.test.js` has a fixture for every rule under `test/fixtures/strictness/` and checks the real configuration refuses each one. When you add a rule, add a fixture that breaks it and a row in that test.
+`test/unit/strictness_gate.test.js` does two things:
+
+- It pins the configuration. What tsc resolves for every project, and what ESLint resolves for one file in each lint area (each `src/` folder, `test/`, `scripts/`), must equal tables in the test: the compiler options, `lib`, `types`, `include` and references, and every rule's severity and options on top of typescript-eslint's `strict-type-checked` set. Any edit to a `tsconfig*.json` or `eslint.config.mjs` fails it until the table is edited to match, in the same commit, where a reviewer sees it.
+- It proves each rule bites. Every rule has a fixture under `test/fixtures/strictness/` that breaks it, and the real configuration has to refuse it. That also covers the local rules' own code, which no table can.
+
+When you add a rule, add it to the table, add a fixture that breaks it, and add the fixture's row.

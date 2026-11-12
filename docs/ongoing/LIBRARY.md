@@ -19,7 +19,7 @@ Read this before touching `src/service/catalog_*.js`, `src/layer/catalog/`, or `
 
 ## Where it lives
 
-- The page: `src/service/catalog_page.js` renders the HTML, its one inline style and its content policy. The browser code is `src/layer/catalog/view_model.js` (every rule, no DOM) and `src/layer/catalog/page.js` (drawing and clicks only). Both are served from `src/` through the `catalog.asset` route, never from `dist/`.
+- The page: `src/service/catalog_page.js` renders the HTML, its one inline style and its content policy. The browser code is `src/layer/catalog/view_model.js` (every rule, no DOM) and `src/layer/catalog/page.js` (drawing and clicks only). They are built, with the protocol module and `copy_text.js`, into one file, `dist/lahe-library.js`, which the `catalog.asset` route serves.
 - The service: `catalog_reader.js` builds the list, `catalog_actions.js` handles each POST, `catalog_sites.js` is the Library's side of the site registry (a row's site and address, and how Open binds), `catalog_requests.js` is the queue, and `catalog_store.js` is the only code that touches `catalog.json`.
 - Copy: the Copy button calls `src/layer/copy_text.js`, the one copy function. It uses the clipboard API when the page has one, and otherwise a hidden field and the browser's copy command, so it works on a page the browser does not call secure.
 - The routes are `catalog.page`, `catalog.asset`, `catalog.list`, `catalog.open`, `catalog.star`, `catalog.rename` and `catalog.request` in `src/shared/protocol.js`. Their handlers are in `src/service/routes.js`.

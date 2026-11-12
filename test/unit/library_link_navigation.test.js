@@ -203,7 +203,7 @@ test("the Library page cannot be framed and cuts off any opener", async (t) => {
 test("the assets are unchanged: a cross-site navigation does not open an asset", async (t) => {
   const w = await sitesWorld(t);
   const port = w.helper.pagesPort;
-  const res = await raw(port, { path: "/catalog/assets/page.js", headers: Object.assign({ host: "library.lahe.localhost:" + port }, CROSS_SITE_NAVIGATE) });
+  const res = await raw(port, { path: "/catalog/assets/lahe-library.js", headers: Object.assign({ host: "library.lahe.localhost:" + port }, CROSS_SITE_NAVIGATE) });
   assert.equal(res.status, 403);
 });
 

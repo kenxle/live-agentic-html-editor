@@ -563,8 +563,8 @@ async function serve(options) {
         // connection to end on its own. The library polls on keep-alive
         // connections, so a page left open holds the socket and close() never
         // calls back: SIGTERM hung, `add`'s restart fallback timed out after ten
-        // seconds, and the unit suite flaked on teardown. Node 18.2+ has the one
-        // API that ends them, which is why engines.node is >=18.2.0.
+        // seconds, and the unit suite flaked on teardown. closeAllConnections()
+        // is the one API that ends them.
         if (typeof entry.server.closeAllConnections === "function") entry.server.closeAllConnections();
       });
     })).then(function () {});

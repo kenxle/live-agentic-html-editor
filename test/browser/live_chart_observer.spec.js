@@ -30,25 +30,15 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { test, expect, pollPage, readCounter, waitForCounter } = require("../helpers");
 const { startStaticServer } = require("../helpers/servers");
-const manifest = require("../../src/shared/manifest.js");
+const { layerBundle } = require("./support/bundles");
 
-const REPO_ROOT = path.join(__dirname, "..", "..");
 const REVIEW = "rev_live_chart";
 // Deep and long enough that a pass has real work in it, small enough to boot
 // fast. The measured page (measure.js in the feature folder) is larger.
 const FIXTURE = "live-chart.html?sections=40&depth=8";
 
-// The bundle from source, in the manifest's order. Builders never commit dist/,
-// so reading dist/ here would test whoever last ran the build script.
-const BUNDLE = manifest
-  .builtFiles()
-  .map(function (entry) {
-    return "/* ---- " + entry.path + " ---- */\n" + fs.readFileSync(path.join(REPO_ROOT, entry.path), "utf8");
-  })
-  .join("\n");
-
 async function bootLayer(page) {
-  await page.addScriptTag({ content: BUNDLE });
+  await page.addScriptTag({ content: await layerBundle() });
   await page.evaluate(function (review) {
     window.LAHE.layer.boot({ review: review, token: "", helper: "http://127.0.0.1:1", startSync: false });
   }, REVIEW);

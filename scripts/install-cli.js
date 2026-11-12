@@ -112,7 +112,7 @@ function install(options) {
     err(
       "lahe install-cli: " +
         floor.describe(found) +
-        " Install Node 24 (for example `nvm install 24`), then run `npm run install-cli` again from " +
+        " Install Node 24.12 or newer (for example `nvm install 24`), then run `npm run install-cli` again from " +
         REPO_ROOT +
         " with that Node.\n"
     );

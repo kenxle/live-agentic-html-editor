@@ -20,11 +20,18 @@ on:
       - "**/*.md"
       - ".claude-commit*"
 
+# The job only reads the code. A token that can write, left in the checkout's
+# git config, is one a compromised dev dependency could use.
+permissions:
+  contents: read
+
 jobs:
   gate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # Node 24, the line .nvmrc names. The tool's own floor is 24.12.0, and
       # setup-node resolves "24" to the newest 24.x, which is above it.

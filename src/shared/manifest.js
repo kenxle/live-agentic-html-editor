@@ -2,7 +2,7 @@
  * read-when: Adding a file under src or changing the order the layer bundle is built in.
  */
 
-// The file manifest: one owner per file, and the bundle's concatenation order.
+// The file manifest: one owner per file, and the bundle's load order.
 //
 // Owner: 0A-kernel, and FROZEN AT CP0. Read by scripts/build-layer.js,
 // scripts/lint.js (the completeness check), and every builder who needs to know
@@ -17,10 +17,20 @@
 //    who needs a file they do not own asks the orchestrator rather than editing
 //    it, or the change goes in a file they do own.
 //
-// 2. THE CONCATENATION ORDER. The library ships as one built file that a page
-//    loads with one script line (D1). There is no module loader in the browser
-//    here, so order is dependency order: a file may only use a namespace entry
-//    a file above it already registered.
+// 2. THE LOAD ORDER. The library ships as one built file that a page loads
+//    with one script line (D1). An old file reads its dependencies off the
+//    namespace when it loads, so order is dependency order: a file may only
+//    use a namespace entry a file above it already registered.
+//
+//    During the TypeScript migration an entry may name a converted module (a
+//    path ending in .ts). It is an ES module and does not register itself, so
+//    it carries `registers`, the namespace names its old file used, and the
+//    build registers it under each of them at this same place in the order.
+//    When several modules back one name, `modules` lists them all, `path`
+//    first, and the build registers one object holding all their exports. An
+//    old file may carry `registers` too, naming what it registers itself as,
+//    so CATALOG_PAGE can point at it with `sameAsLayer`.
+//    See scripts/build-layer.js.
 //
 // 3. THE FILES THAT DO NOT EXIST YET. Entries carrying `planned: true` name a
 //    file a later task creates. They are here because the ownership question
@@ -28,7 +38,7 @@
 //    two tasks stopped implicitly claiming the same work. The build script
 //    skips them until they land.
 //
-// Concatenation is development tooling, not a runtime dependency: a user clones
+// Bundling is development tooling, not a runtime dependency: a user clones
 // the repo and adds the built file to a page. The built artifact is committed,
 // which is only safe because the gate checks it is current. BUILDERS NEVER
 // COMMIT dist/; the orchestrator rebuilds it once at each checkpoint.
@@ -96,13 +106,15 @@ var LAYER_FILES = [
     why: "the write-epoch rule that stops replay retriggering replay. Depends on nothing"
   },
   {
-    path: "src/shared/elapsed.js",
-    owner: "0A-kernel",
+    path: "src/domain/elapsed.ts",
+    owner: "TypeScript S0c",
+    registers: ["elapsed"],
     why: "the one wording for how long something has been going on. Helper and rail both say it. Depends on nothing"
   },
   {
     path: "src/shared/protocol.js",
     owner: "0A-wire",
+    registers: ["protocol"],
     why: "routes, headers, the per-review token, error shapes. Needs failures"
   },
   {
@@ -346,10 +358,21 @@ var NON_BUNDLE_FILES = [
   }
 ];
 
-// The Library page's own scripts. NOT in the bundle: the helper serves them raw
-// from src/ through catalog.asset, so they never touch dist/. Listed so the
-// ownership question has an answer for them too.
+// The Library page's file, LIBRARY_OUTPUT, in load order. The helper serves it
+// through catalog.asset. It is built exactly as the layer is, so an entry here
+// may name a converted module with `registers` (and `modules`) too.
+//
+// The first entry is not a file of its own: `sameAsLayer` names the LAYER_FILES
+// entry registering `protocol`, which the page loads first, so the protocol
+// keeps one owner and one entry even after it converts. failures.js is NOT in
+// this file, so on the Library page the protocol's failures argument is
+// undefined; nothing the page calls reads it (view_model.js says so where it
+// matters).
 var CATALOG_PAGE = [
+  {
+    sameAsLayer: "protocol",
+    why: "the routes and the token meta name the page script reads, built from the layer's own protocol entry"
+  },
   {
     path: "src/layer/catalog/view_model.js",
     owner: "Library 2.2",
@@ -369,17 +392,26 @@ var CATALOG_PAGE = [
 
 // The TypeScript migration's one-line forwarders. Each stays at an old path
 // that unconverted callers still require, and holds only
-// `module.exports = require("<new path>.ts")`. The .ts file it points at is
-// owned by its folder, not by this manifest. Removed in the finishing slice.
+// `module.exports = require("<new path>.ts")`, or, for a module the browser
+// also loads, `Object.assign({}, require(...))`, an ordinary object old code may
+// write to, as in the bundle. The .ts file it points at is
+// owned by its folder, not by this manifest; a browser module is also listed
+// in LAYER_FILES, for its place in the bundle. Removed in the finishing slice.
 var FORWARDERS = [
   {
     path: "src/shared/script_line.js",
     owner: "TypeScript S0b",
     why: "forwards to src/server/sites/script-line.ts for add, heal, page_routes and catalog_reader"
+  },
+  {
+    path: "src/shared/elapsed.js",
+    owner: "TypeScript S0c",
+    why: "forwards to src/domain/elapsed.ts for reviews, store's Node branch and contracts"
   }
 ];
 
 var BUNDLE_OUTPUT = "dist/lahe-layer.js";
+var LIBRARY_OUTPUT = "dist/lahe-library.js";
 var GLOBAL_NAMESPACE = "LAHE";
 
 function allFiles() {
@@ -399,7 +431,7 @@ function ownerOf(path) {
   return entry ? entry.owner : null;
 }
 
-// The entries the build script concatenates: everything in the bundle that
+// The entries the build script bundles: everything in the bundle that
 // actually exists yet.
 function builtFiles() {
   return LAYER_FILES.filter(function (entry) {
@@ -412,6 +444,24 @@ function builtFiles() {
 function plannedFiles() {
   return allFiles().filter(function (entry) {
     return entry.planned === true;
+  });
+}
+
+// The entries the build script bundles into the Library page's file:
+// CATALOG_PAGE, with each `sameAsLayer` replaced by the LAYER_FILES entry that
+// registers that name, and without the planned entries, as builtFiles() does.
+function libraryFiles() {
+  return CATALOG_PAGE.map(function (entry) {
+    if (typeof entry.sameAsLayer !== "string") return entry;
+    var found = LAYER_FILES.filter(function (layer) {
+      return Array.isArray(layer.registers) && layer.registers.indexOf(entry.sameAsLayer) !== -1;
+    });
+    if (found.length !== 1) {
+      throw new Error("CATALOG_PAGE names the layer entry registering " + entry.sameAsLayer + ", and LAYER_FILES has " + found.length);
+    }
+    return found[0];
+  }).filter(function (entry) {
+    return entry.planned !== true;
   });
 }
 
@@ -428,11 +478,13 @@ module.exports = {
   CATALOG_PAGE: CATALOG_PAGE,
   FORWARDERS: FORWARDERS,
   BUNDLE_OUTPUT: BUNDLE_OUTPUT,
+  LIBRARY_OUTPUT: LIBRARY_OUTPUT,
   GLOBAL_NAMESPACE: GLOBAL_NAMESPACE,
   allFiles: allFiles,
   entryFor: entryFor,
   ownerOf: ownerOf,
   builtFiles: builtFiles,
+  libraryFiles: libraryFiles,
   plannedFiles: plannedFiles,
   cutFiles: cutFiles
 };

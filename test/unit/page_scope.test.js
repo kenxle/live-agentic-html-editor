@@ -15,7 +15,6 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const record = require("../../src/shared/record.js");
-const elapsed = require("../../src/shared/elapsed.js");
 
 function itemOn(origin, path) {
   return record.newItem({
@@ -158,23 +157,9 @@ test("samePage refuses to guess at a missing item or page", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The elapsed phrase, one home
+// The elapsed phrase, one home. Its own cases are in
+// test/unit/domain/elapsed.test.ts; these check the rail says it too.
 // ---------------------------------------------------------------------------
-
-test("recent times read as a span, older ones as a date, and it never prints an ISO string", () => {
-  const now = Date.parse("2026-08-18T04:40:00.000Z");
-  const at = (msAgo) => new Date(now - msAgo).toISOString();
-  assert.equal(elapsed.elapsedPhrase(at(20 * 1000), { now: now }), "for less than a minute");
-  assert.equal(elapsed.elapsedPhrase(at(60 * 1000), { now: now }), "for the last 1 minute");
-  assert.equal(elapsed.elapsedPhrase(at(4 * 60 * 1000), { now: now }), "for the last 4 minutes");
-  const old = elapsed.elapsedPhrase(at(5 * 60 * 60 * 1000), { now: now });
-  assert.equal(old.indexOf("since "), 0);
-  assert.equal(old.indexOf("T"), -1, "a local date and time, never the ISO form");
-});
-
-test("an unreadable value is echoed rather than guessed at", () => {
-  assert.equal(elapsed.elapsedPhrase("not a time"), "since not a time");
-});
 
 test("the helper's refusal and the rail's chip say the same words", () => {
   const store = require("../../src/layer/store.js");

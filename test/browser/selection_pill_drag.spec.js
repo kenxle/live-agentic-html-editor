@@ -31,22 +31,10 @@ const fs = require("node:fs");
 const { test, expect } = require("../helpers");
 const { startStaticServer } = require("../helpers/servers");
 const { pollPage } = require("../helpers/poll");
-const manifest = require("../../src/shared/manifest.js");
+const { layerBundle } = require("./support/bundles");
 
-const REPO_ROOT = path.join(__dirname, "..", "..");
 const FIXTURE = "css-reset.html";
 const PARA_ID = "drag-para";
-
-function layerBundle() {
-  return manifest
-    .builtFiles()
-    .map(function (entry) {
-      return "/* ---- " + entry.path + " ---- */\n" + fs.readFileSync(path.join(REPO_ROOT, entry.path), "utf8");
-    })
-    .join("\n");
-}
-
-const BUNDLE = layerBundle();
 
 // A paragraph of the test's own making, narrow enough that the lines are known
 // rather than guessed. It goes in BEFORE the library boots, so it is part of the
@@ -67,7 +55,7 @@ async function addDragParagraph(page) {
 }
 
 async function bootLayer(page, options = {}) {
-  await page.addScriptTag({ content: BUNDLE });
+  await page.addScriptTag({ content: await layerBundle() });
   await page.evaluate(
     function (opts) {
       var LAHE = window.LAHE;

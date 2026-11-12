@@ -21,22 +21,13 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { test, expect } = require("../helpers");
 const { startStaticServer } = require("../helpers/servers");
-const manifest = require("../../src/shared/manifest.js");
+const { layerBundle } = require("./support/bundles");
 
-const REPO_ROOT = path.join(__dirname, "..", "..");
 const FIXTURE = "oversized-records.html";
 const REVIEW = "rev_oversized";
 
-// The bundle from source, in the manifest's order. Builders never commit dist/.
-const BUNDLE = manifest
-  .builtFiles()
-  .map(function (entry) {
-    return "/* ---- " + entry.path + " ---- */\n" + fs.readFileSync(path.join(REPO_ROOT, entry.path), "utf8");
-  })
-  .join("\n");
-
 async function bootLayer(page) {
-  await page.addScriptTag({ content: BUNDLE });
+  await page.addScriptTag({ content: await layerBundle() });
   await page.evaluate(function (reviewId) {
     var LAHE = window.LAHE;
     var pageFields = LAHE.record.pageFrom({

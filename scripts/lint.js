@@ -3,7 +3,7 @@
  * read-when: Changing what npm run lint checks, or when lint fails on a rule that is not plain syntax.
  */
 
-// The lint gate. Zero dependencies, five checks, and it runs all of them before
+// The lint gate. It runs every check below before
 // it exits so one failure does not hide the others.
 //
 //   1. SYNTAX. `node --check` over every tracked .js file. The cheapest possible
@@ -28,8 +28,14 @@
 //      project references say what they may import), and the package.json and
 //      tsconfig.json files that make a folder an ES module TypeScript project.
 //      The one-line forwarders left at old paths are listed in FORWARDERS.
+//      A converted browser module is listed too, by its .ts path, because
+//      LAYER_FILES holds the bundle's order; a listed .ts path must exist.
 //   4. KEBAB-CASE .ts NAMES. Every .ts file under src/ is named in kebab-case,
 //      the standard the migration renames everything to.
+//   5. NO PACKAGE IMPORTS IN OLD .js. Every require(), import, export from and
+//      import() in a .js file under src/ or in bin/ names a relative path or a
+//      Node built-in. ESLint's no-restricted-imports covers the .ts files only;
+//      this covers the rest. See lint_imports.js.
 //
 // tsc -b and ESLint run after this script in `npm run lint`; see
 // docs/ongoing/code/README.md. The walk skips docs/ and .claude/worktrees/:
@@ -316,10 +322,14 @@ function checkManifest() {
   // An entry with no file. `planned: true` says a later task creates it, which
   // is the whole reason those entries are written before the file exists.
   // Anything else with no file on disk is a manifest that has drifted from the
-  // tree, and the gate should say so.
+  // tree, and the gate should say so. A .ts path is not in onDisk (see the
+  // header), but LAYER_FILES lists a converted browser module by its .ts path
+  // to keep its place in the bundle order, so that path only has to exist.
   const phantom = Array.from(counts.keys())
     .filter(function (file) {
-      return onDisk.indexOf(file) === -1 && !planned.has(file);
+      if (planned.has(file)) return false;
+      if (isTs(file)) return !fs.existsSync(path.join(root, file));
+      return onDisk.indexOf(file) === -1;
     })
     .sort();
 
@@ -381,6 +391,23 @@ if (badNames.length > 0) {
 }
 
 // ---------------------------------------------------------------------------
+// 5. No package imports in old .js
+// ---------------------------------------------------------------------------
+
+const { packageImports, filesToCheck } = require("./lint_imports.js");
+const packageHits = packageImports(filesToCheck(root), root);
+
+if (packageHits.length > 0) {
+  fail("no-package-imports", [
+    "A .js file under src/ or in bin/ may load only a relative path or a Node built-in.",
+    "Lahe has no runtime dependencies: a clone runs with no npm install.",
+    ""
+  ].concat(packageHits.map(function (hit) {
+    return "  " + hit;
+  })));
+}
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 
@@ -410,5 +437,5 @@ console.log(
     luaSummary +
     ", no " +
     JSDOM_NAME +
-    ", manifest complete, kebab-case .ts names)"
+    ", manifest complete, kebab-case .ts names, no package imports in .js)"
 );
