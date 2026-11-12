@@ -26,7 +26,7 @@
 //    path ending in .ts). It is an ES module and does not register itself, so
 //    it carries `registers`, the namespace names its old file used, and the
 //    build registers it under each of them at this same place in the order.
-//    See docs/ongoing/code/README.md, "Moving a browser file".
+//    See scripts/build-layer.js.
 //
 // 3. THE FILES THAT DO NOT EXIST YET. Entries carrying `planned: true` name a
 //    file a later task creates. They are here because the ownership question
@@ -102,8 +102,9 @@ var LAYER_FILES = [
     why: "the write-epoch rule that stops replay retriggering replay. Depends on nothing"
   },
   {
-    path: "src/shared/elapsed.js",
-    owner: "0A-kernel",
+    path: "src/domain/elapsed.ts",
+    owner: "TypeScript S0c",
+    registers: ["elapsed"],
     why: "the one wording for how long something has been going on. Helper and rail both say it. Depends on nothing"
   },
   {
@@ -376,12 +377,18 @@ var CATALOG_PAGE = [
 // The TypeScript migration's one-line forwarders. Each stays at an old path
 // that unconverted callers still require, and holds only
 // `module.exports = require("<new path>.ts")`. The .ts file it points at is
-// owned by its folder, not by this manifest. Removed in the finishing slice.
+// owned by its folder, not by this manifest; a browser module is also listed
+// in LAYER_FILES, for its place in the bundle. Removed in the finishing slice.
 var FORWARDERS = [
   {
     path: "src/shared/script_line.js",
     owner: "TypeScript S0b",
     why: "forwards to src/server/sites/script-line.ts for add, heal, page_routes and catalog_reader"
+  },
+  {
+    path: "src/shared/elapsed.js",
+    owner: "TypeScript S0c",
+    why: "forwards to src/domain/elapsed.ts for reviews, store's Node branch and contracts"
   }
 ];
 
