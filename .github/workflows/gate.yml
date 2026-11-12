@@ -26,10 +26,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Node 20, not the tool's own floor of 18.2, to match .nvmrc.
+      # Node 24, the line .nvmrc names. The tool's own floor is 24.12.0, and
+      # setup-node resolves "24" to the newest 24.x, which is above it.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
 
       # No npm ci, on purpose. The tool has no runtime dependencies and these
       # checks need none, so this run also proves a fresh clone works with no

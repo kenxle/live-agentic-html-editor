@@ -444,8 +444,8 @@
       SEVERITY.BLOCKING,
       false,
       SURFACE.CLI,
-      "Node 20 or newer is required and was not found.",
-      "Install Node 20 or newer, then run the add step again."
+      "Node 24.12 or newer is required and was not found.",
+      "Install Node 24.12 or newer, then run the add step again."
     ),
     CLI_PATH_REFUSED: def(
       SEVERITY.BLOCKING,

@@ -6,14 +6,14 @@ read-when: Installing Lahe, setting up the helper, or when an install step fails
 
 ## What you need
 
-**Node 18 or later.** The helper uses Node's stable core APIs plus two pinned
+**Node 24.12 or later.** On an older Node, the `lahe` command prints what it
+found and what to install, then stops. The helper uses Node's core APIs plus two pinned
 local packages for deterministic Markdown review: Marked for CommonMark/GFM and
 Mermaid's dependency-free browser bundle for diagrams. Both are vendored under
 `vendor/` in this repository, so there is no `npm install` step and nothing is
 fetched at runtime; there is no separate global package or npm-published Lahe
 release to keep in sync either. (The Playwright browser suite in `test/browser/`
-needs Node 20 and a `npm install` for its devDependencies; running the tool does
-not.)
+needs a `npm install` for its devDependencies; running the tool does not.)
 
 **Optional: pandoc 3 or later.** When pandoc is on the machine, Lahe renders
 Markdown with it, so pandoc fenced divs (`::: callout-req`, `::: stat`,

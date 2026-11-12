@@ -5,7 +5,7 @@
 **We've graduated from MD to HTML for many of our docs. Or maybe you just want to edit your homepage in place. Lahe is injectable into any HTML on your machine, and provides direct editing, as well as threaded conversations for agentic updates.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%E2%89%A518.2-brightgreen.svg)](package.json)
+[![Node](https://img.shields.io/badge/node-%E2%89%A524.12-brightgreen.svg)](package.json)
 [![Runtime dependencies: none](https://img.shields.io/badge/runtime%20dependencies-none-brightgreen.svg)](package.json)
 [![Agents: Claude Code, Codex, Gemini CLI, Antigravity](https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex%20%7C%20Gemini%20CLI%20%7C%20Antigravity-8A7CFF.svg)](#which-agents-this-works-with)
 [![Formats: HTML and Markdown](https://img.shields.io/badge/formats-HTML%20%7C%20Markdown-orange.svg)](#features)
@@ -175,7 +175,7 @@ The rail also shows these as hints, so you do not need this file open to work th
 
 ## Requirements
 
-- Node 18.2 or later. No npm runtime dependencies: the two Markdown packages are vendored in the repo, so a clone works with no install step.
+- Node 24.12 or later. No npm runtime dependencies: the two Markdown packages are vendored in the repo, so a clone works with no install step.
 - Optional: [pandoc](https://pandoc.org/installing.html) 3 or later. With it, Markdown pages render through pandoc, so pandoc fenced divs (`::: callout-req`, `::: stat`) draw as styled panels, the way the feature-forge and research-report builds draw them. Without it, LAHE renders with its vendored Markdown package and those blocks show as plain text.
 - A current Chrome, Edge, Safari, or Firefox.
 - macOS or Linux for the `install-cli` wrapper. On Windows, run `node bin/lahe.js` from the clone or work in WSL.

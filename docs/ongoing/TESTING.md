@@ -53,7 +53,7 @@ Each gate is a chain of the layers below it.
 | Lint | `npm run lint` | Syntax of every tracked `.js` file, no jsdom anywhere, and every file under `src/` listed once in `src/shared/manifest.js`. |
 | Bundle | `npm run check:layer` | The committed `dist/lahe-layer.js` matches a fresh build. |
 | Menu bar app | `npm run check:menubar` | Builds the Mac menu bar app, runs its self-test and its tests against a fake helper. Skips with one line off macOS. |
-| Unit | `npm run test:unit` | `node --test test/unit/`, wrapped to fail if a helper is left running. |
+| Unit | `npm run test:unit` | `node --test "test/unit/*.test.js"`, wrapped to fail if a helper is left running. |
 | Browser, Chromium | `npm run test:browser` | The Playwright suite in `test/browser/`, Chromium only. |
 | Browser, three engines | `npm run test:browser:all` | The same suite on Chromium, Firefox and WebKit. |
 
@@ -94,7 +94,7 @@ Notes on the browser run:
 
 ## What CI runs
 
-[The workflow](../../.github/workflows/gate.yml) is named `gate`. It runs on Node 20 on `ubuntu-latest`, with no install step, and runs three commands:
+[The workflow](../../.github/workflows/gate.yml) is named `gate`. It runs on Node 24 on `ubuntu-latest`, with no install step, and runs three commands:
 
 - `npm run lint`
 - `npm run check:layer`
@@ -112,7 +112,7 @@ The reasons are in [CLAUDE.md](../../CLAUDE.md), under "CI runs mail Ken". In sh
 
 ## Setup for a new builder
 
-- Node 20 or newer. `.nvmrc` says `20.19.0`; run `nvm use`. The tool itself runs on Node 18.2 or newer (`engines.node` is `>=18.2.0`), but Playwright 1.62 needs Node 20 for the browser suite.
+- Node 24.12 or newer. `.nvmrc` says `24.22.3`; run `nvm use`. `engines.node` is `>=24.12.0`, and `bin/lahe.js` and `npm run install-cli` refuse an older Node with a message that says what to install.
 - `npm install` in a fresh clone or worktree, then `git checkout -- package-lock.json`. A worktree under the clone finds the clone's `node_modules`, but `install_walk_3b.spec.js` fails on its precondition without its own install.
 - `npx playwright install chromium` once.
 - `npx playwright install firefox webkit` once, if you will run `gate:all` or a named lane.

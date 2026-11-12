@@ -4,6 +4,42 @@ read-when: Moving an existing Lahe install to a newer version, or when an upgrad
 
 # Upgrading
 
+## Node 24.12 or newer
+
+Lahe now needs Node 24.12 or newer (it was 18.2). If your Lahe was installed
+with an older Node, the next `lahe` command after a `git pull` prints this and
+stops with a non-zero exit code:
+
+```
+lahe: Lahe needs Node 24.12 or newer, and this is Node 20.19.0. Install Node 24, then run `npm run install-cli` and `lahe install` in /path/to/your/clone.
+```
+
+The wrapper at `~/.local/bin/lahe`, the login item and the agent's Stop hook all
+name the Node that was current when you installed them, so all three keep using
+the old one until you reinstall them. A helper that is already running keeps
+serving its old code until it restarts.
+
+### Steps
+
+1. **Install Node 24.12 or newer.** For example, with nvm: `nvm install 24`,
+   then `nvm use 24`. Check it with `node --version`.
+
+2. **Reinstall the command, the login item and the skills,** from the clone and
+   with that Node selected:
+
+   ```sh
+   npm run install-cli
+   lahe install          # Windows: node bin/lahe.js install
+   npm run install-skills
+   ```
+
+   `npm run install-cli` rewrites the wrapper so it names the new Node, and
+   refuses to run on a Node below 24.12. `lahe install` replaces the login item
+   so the helper starts on the new Node at login. `npm run install-skills`
+   refreshes the skill and the agent's Stop hook, which also name a Node.
+
+3. **Check it.** `lahe --help` runs, and `lahe status` shows the helper.
+
 ## From 0.2 to 0.3: stable addresses
 
 In 0.2, each document was served by a small server that belonged to one agent

@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.4.0+21cd55484adc
+ * version 0.4.0+325263424f47
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.4.0+21cd55484adc";
+  g.LAHE.version = "0.4.0+325263424f47";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 /*
@@ -2605,8 +2605,8 @@
       SEVERITY.BLOCKING,
       false,
       SURFACE.CLI,
-      "Node 20 or newer is required and was not found.",
-      "Install Node 20 or newer, then run the add step again."
+      "Node 24.12 or newer is required and was not found.",
+      "Install Node 24.12 or newer, then run the add step again."
     ),
     CLI_PATH_REFUSED: def(
       SEVERITY.BLOCKING,
@@ -54815,7 +54815,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.4.0+21cd55484adc";
+  var VERSION = "0.4.0+325263424f47";
 
   var protocol = ns.protocol;
   var record = ns.record;

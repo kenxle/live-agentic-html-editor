@@ -89,13 +89,19 @@ file over the old one and copy its `d` attribute into the matching constant.
 
 ## Node version
 
-`engines.node` is `>=18.2.0`. The tool itself is `node:`-prefixed core modules
-and the global `fetch`, both stable from Node 18, and the unit suite passes on
-18. The floor is 18.2 rather than 18.0 for one API: `server.closeAllConnections()`,
-which shutdown needs to end the library's keep-alive polls. Without it a page
-left open holds the socket and the helper never finishes closing. The DEV floor is higher: Playwright 1.62 requires Node >=20, so
-`npm run test:browser` needs 20. A `.nvmrc` (20.19.0) is checked in; run
-`nvm use` if you have nvm.
+`engines.node` is `>=24.12.0`. That is the first Node release where running
+TypeScript files directly is stable, and the migration to TypeScript depends on
+it. The tool and the dev tools share one floor. A `.nvmrc` (24.22.3) is
+checked in; run `nvm use` if you have nvm, and CI runs Node 24.
+
+An older Node gets a message, not a crash. `bin/lahe.js` checks the running
+version before it loads anything and prints the version found, the version
+needed and the fix (install Node 24, then run `npm run install-cli` and
+`lahe install` in the clone). `npm run install-cli` refuses to write a wrapper
+from an older Node. Both use `bin/node_floor.js`, which is written in plain
+ES5 so it still parses on an old Node. Change the floor there, in
+`package.json`, in `.nvmrc` and in the CI workflow together;
+`test/unit/node_floor.test.js` checks that they agree.
 
 Install the command with `npm run install-cli`, not `npm link`. It writes a
 wrapper at `~/.local/bin/lahe` naming absolute paths to the Node that ran it and
@@ -368,25 +374,17 @@ The feature folder (brief, architecture, plan) is HISTORY: what we set out
 to build and why. It is not rewritten as the tool evolves. The living
 truth for how the tool works now is:
 
-- **`skills/lahe/SKILL.md`**: every instruction for running a review.
-  Hosts load it automatically.
-- **The `contract` field in review.json** (authored in
-  `src/shared/review_format.js`): the only instructions an agent is
-  GUARANTEED to see, embedded into every review at setup time.
+- **`skills/lahe/SKILL.md`** and `skills/lahe/references/`: every instruction
+  for running a review, and the only home of agent instructions. Hosts load
+  the skill automatically. review.json carries no instructions: it has no
+  `contract` field, and `test/unit/review_format.test.js` asserts that.
 - **`AGENTS.md`**: about the tool, not the task. How each agent host
   connects, a pointer to install, and pointers to the docs.
 
-The skill and the contract travel together. A workflow change that lands
-in the skill must also be folded into the contract text, and into every
-copy of it:
-
-- the skill itself, `skills/lahe/SKILL.md` (then `npm run install-skills`)
-- the restated copy in `test/unit/review_format.test.js`
-- the restated copy in `docs/CONTRACTS.md`
-- a dist rebuild, since the contract ships in the bundle
-
-An agent instruction that exists only in the skill is invisible to an
-agent that only ever reads review.json.
+A workflow change goes into the skill, then `npm run install-skills` copies it
+to the hosts. Tests pin the skill's wording through `test/support/skill.js`,
+which reads SKILL.md and its references together. When you move or reword a
+pinned instruction, change the test that pins it in the same commit.
 
 The skill is `skills/lahe/SKILL.md` plus `skills/lahe/references/`.
 `npm run install-skills` copies both, and copies
