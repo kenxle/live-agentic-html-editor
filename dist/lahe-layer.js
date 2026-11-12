@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.4.0+d38fe29a13e9
+ * version 0.4.0+9b73f75785bd
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -11,7 +11,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.4.0+d38fe29a13e9";
+  g.LAHE.version = "0.4.0+9b73f75785bd";
 })();
 (() => {
   var __create = Object.create;
@@ -53,1388 +53,6 @@
     isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
     mod
   ));
-
-  // src/shared/normalize.js
-  var require_normalize = __commonJS({
-    "src/shared/normalize.js"(exports, module) {
-      (function(root, factory) {
-        "use strict";
-        var browser = typeof window !== "undefined" && !!window.document;
-        if (browser) {
-          root.LAHE = root.LAHE || {};
-          root.LAHE.normalize = factory(root.LAHE.markers);
-        } else {
-          module.exports = factory(__require("./markers.js"));
-        }
-      })(typeof globalThis !== "undefined" ? globalThis : exports, function(markers) {
-        "use strict";
-        var UNICODE_SPACES = /[\u0009\u000A\u000B\u000C\u000D\u0020\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g;
-        var INVISIBLES = /[\u200B\uFEFF\u00AD]/g;
-        var CONTROLS_KEEP_WS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
-        var CONTROLS_ALL = /[\u0000-\u001F\u007F-\u009F]/g;
-        function stripControls(input) {
-          return String(input).replace(CONTROLS_KEEP_WS, "");
-        }
-        function stripAllControls(input) {
-          return String(input).replace(CONTROLS_ALL, "");
-        }
-        function normalizeText(input) {
-          if (typeof input !== "string") {
-            throw new TypeError("normalizeText expects a string, got " + typeof input);
-          }
-          var s = input.normalize("NFC");
-          s = stripControls(s);
-          s = s.replace(INVISIBLES, "");
-          s = s.replace(UNICODE_SPACES, " ");
-          s = s.replace(/\s+/g, " ");
-          return s.trim();
-        }
-        function textEquals(a, b) {
-          return normalizeText(a) === normalizeText(b);
-        }
-        function foldTypography(input) {
-          return normalizeText(input).replace(/[\u2018\u2019\u201A\u201B\u2032]/g, "'").replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"').replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, "-").replace(/-{2,}/g, "-").replace(/\u2026/g, "...");
-        }
-        var VOID_TAGS = {
-          area: 1,
-          base: 1,
-          br: 1,
-          col: 1,
-          embed: 1,
-          hr: 1,
-          img: 1,
-          input: 1,
-          link: 1,
-          meta: 1,
-          param: 1,
-          source: 1,
-          track: 1,
-          wbr: 1
-        };
-        var DROP_SUBTREE_TAGS = {
-          script: 1,
-          style: 1,
-          template: 1,
-          noscript: 1,
-          iframe: 1,
-          object: 1,
-          embed: 1,
-          applet: 1,
-          frame: 1,
-          frameset: 1
-        };
-        var RENAME_TAGS = { b: "strong", i: "em" };
-        var NOT_BOLD_TAG = "not-bold";
-        var NOT_ITALIC_TAG = "not-italic";
-        var RESET_TAGS = { bold: NOT_BOLD_TAG, italic: NOT_ITALIC_TAG };
-        var NOT_BOLD_WEIGHTS = {
-          normal: 1,
-          lighter: 1,
-          "100": 1,
-          "200": 1,
-          "300": 1,
-          "400": 1,
-          "500": 1
-        };
-        function declarationOf(style, property) {
-          var parts = String(style).split(";");
-          var found = "";
-          for (var i = 0; i < parts.length; i += 1) {
-            var colon = parts[i].indexOf(":");
-            if (colon === -1) continue;
-            if (parts[i].slice(0, colon).trim().toLowerCase() !== property) continue;
-            found = parts[i].slice(colon + 1).trim().toLowerCase();
-          }
-          return found;
-        }
-        function isNotBoldWeight(value) {
-          return !!value && hasOwn(NOT_BOLD_WEIGHTS, String(value).trim().toLowerCase());
-        }
-        function isNotItalicStyle(value) {
-          return String(value).trim().toLowerCase() === "normal";
-        }
-        function resetTagsFor(attrs) {
-          var out = [];
-          var style = "";
-          for (var i = 0; i < attrs.length; i += 1) {
-            if (attrs[i].name === "style") style = attrs[i].value;
-          }
-          if (!style) return out;
-          if (isNotBoldWeight(declarationOf(style, "font-weight"))) out.push(NOT_BOLD_TAG);
-          if (isNotItalicStyle(declarationOf(style, "font-style"))) out.push(NOT_ITALIC_TAG);
-          return out;
-        }
-        var PRESERVE_WS_TAGS = { pre: 1, textarea: 1 };
-        var URL_ATTRS = {
-          href: 1,
-          src: 1,
-          srcset: 1,
-          action: 1,
-          formaction: 1,
-          poster: 1,
-          "xlink:href": 1,
-          data: 1,
-          cite: 1,
-          background: 1
-        };
-        var SAFE_SCHEMES = { http: 1, https: 1, mailto: 1, tel: 1 };
-        var DROP_ATTRS = {
-          style: 1,
-          contenteditable: 1,
-          spellcheck: 1,
-          autocorrect: 1,
-          autocapitalize: 1,
-          "data-turbo-permanent": 1,
-          srcdoc: 1
-        };
-        function decodeForSchemeCheck(value) {
-          var s = String(value);
-          s = s.replace(/&#[xX]([0-9a-fA-F]+);?/g, function(_m, hex) {
-            var code = parseInt(hex, 16);
-            return code >= 0 && code <= 1114111 ? String.fromCodePoint(code) : "";
-          });
-          s = s.replace(/&#(\d+);?/g, function(_m, dec) {
-            var code = parseInt(dec, 10);
-            return code >= 0 && code <= 1114111 ? String.fromCodePoint(code) : "";
-          });
-          s = s.replace(/&colon;?/gi, ":").replace(/&tab;?/gi, "").replace(/&newline;?/gi, "").replace(/&amp;?/gi, "&");
-          return stripAllControls(s).replace(/\s+/g, "");
-        }
-        function isSafeUrlValue(value) {
-          var s = decodeForSchemeCheck(value);
-          var colon = s.indexOf(":");
-          if (colon === -1) return true;
-          var beforeColon = s.slice(0, colon);
-          if (/[/?#]/.test(beforeColon)) return true;
-          if (!/^[a-zA-Z][a-zA-Z0-9+.-]*$/.test(beforeColon)) return true;
-          return Object.prototype.hasOwnProperty.call(SAFE_SCHEMES, beforeColon.toLowerCase());
-        }
-        function isEmbeddedValue(value) {
-          return typeof value === "string" && /^\s*data:/i.test(value);
-        }
-        function digestOf(value) {
-          var s = String(value);
-          var h1 = 3735928559;
-          var h2 = 1103547991;
-          for (var i = 0; i < s.length; i += 1) {
-            var ch = s.charCodeAt(i);
-            h1 = Math.imul(h1 ^ ch, 2654435761);
-            h2 = Math.imul(h2 ^ ch, 1597334677);
-          }
-          h1 = Math.imul(h1 ^ h1 >>> 16, 2246822507) ^ Math.imul(h2 ^ h2 >>> 13, 3266489909);
-          h2 = Math.imul(h2 ^ h2 >>> 16, 2246822507) ^ Math.imul(h1 ^ h1 >>> 13, 3266489909);
-          return hex8(h2 >>> 0) + hex8(h1 >>> 0);
-        }
-        function hex8(n) {
-          var out = n.toString(16);
-          while (out.length < 8) out = "0" + out;
-          return out;
-        }
-        function embeddedName(value) {
-          if (!isEmbeddedValue(value)) return value;
-          var text = String(value).replace(/^\s+/, "");
-          var comma = text.indexOf(",");
-          var media = comma === -1 ? "" : text.slice(5, comma);
-          return "embedded:" + media + ":" + text.length + ":" + digestOf(text);
-        }
-        function escapeAttrValue(value) {
-          return String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        }
-        function parseTag(html, at) {
-          var i = at + 1;
-          var closing = false;
-          if (html.charAt(i) === "/") {
-            closing = true;
-            i += 1;
-          }
-          var nameStart = i;
-          while (i < html.length && /[a-zA-Z0-9:_-]/.test(html.charAt(i))) i += 1;
-          if (i === nameStart) return null;
-          var name = html.slice(nameStart, i).toLowerCase();
-          var attrs = [];
-          var selfClosing = false;
-          while (i < html.length) {
-            while (i < html.length && /\s/.test(html.charAt(i))) i += 1;
-            var ch = html.charAt(i);
-            if (ch === ">") {
-              i += 1;
-              break;
-            }
-            if (ch === "/" && html.charAt(i + 1) === ">") {
-              selfClosing = true;
-              i += 2;
-              break;
-            }
-            if (i >= html.length) break;
-            var aStart = i;
-            while (i < html.length && !/[\s=/>]/.test(html.charAt(i))) i += 1;
-            if (i === aStart) {
-              i += 1;
-              continue;
-            }
-            var aName = html.slice(aStart, i).toLowerCase();
-            var aValue = "";
-            var save = i;
-            while (i < html.length && /\s/.test(html.charAt(i))) i += 1;
-            if (html.charAt(i) === "=") {
-              i += 1;
-              while (i < html.length && /\s/.test(html.charAt(i))) i += 1;
-              var q = html.charAt(i);
-              if (q === '"' || q === "'") {
-                i += 1;
-                var vStart = i;
-                while (i < html.length && html.charAt(i) !== q) i += 1;
-                aValue = html.slice(vStart, i);
-                i += 1;
-              } else {
-                var uStart = i;
-                while (i < html.length && !/[\s>]/.test(html.charAt(i))) i += 1;
-                aValue = html.slice(uStart, i);
-              }
-            } else {
-              i = save;
-            }
-            attrs.push({ name: aName, value: aValue });
-          }
-          return { name, closing, selfClosing, attrs, end: i };
-        }
-        function cleanAttrs(attrs) {
-          var kept = [];
-          for (var k = 0; k < attrs.length; k += 1) {
-            var name = attrs[k].name;
-            var value = attrs[k].value;
-            if (markers.isToolAttrName(name)) continue;
-            if (Object.prototype.hasOwnProperty.call(DROP_ATTRS, name)) continue;
-            if (name.indexOf("on") === 0) continue;
-            if (name === "class") {
-              var tokens = String(value).split(/\s+/).filter(function(t) {
-                return t && !markers.isToolClassToken(t);
-              });
-              if (!tokens.length) continue;
-              kept.push({ name, value: tokens.join(" ") });
-              continue;
-            }
-            if (Object.prototype.hasOwnProperty.call(URL_ATTRS, name) && !isSafeUrlValue(value)) continue;
-            kept.push({ name, value });
-          }
-          kept.sort(function(a, b) {
-            return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
-          });
-          return kept;
-        }
-        function closeTags(entry) {
-          var out = "";
-          for (var i = entry.emitNames.length - 1; i >= 0; i -= 1) out += "</" + entry.emitNames[i] + ">";
-          return out;
-        }
-        function serializeStartTag(name, attrs) {
-          var out = "<" + name;
-          for (var k = 0; k < attrs.length; k += 1) {
-            out += " " + attrs[k].name + '="' + escapeAttrValue(attrs[k].value) + '"';
-          }
-          return out + ">";
-        }
-        function collapseText(text) {
-          return text.replace(UNICODE_SPACES, " ").replace(/\s+/g, " ");
-        }
-        function cleanMarkup(html, options) {
-          if (typeof html !== "string") {
-            throw new TypeError("cleanMarkup expects a string, got " + typeof html);
-          }
-          var keepWhitespace = !!(options && options.keepWhitespace);
-          var out = [];
-          var stack = [];
-          var dropDepth = 0;
-          var preDepth = 0;
-          var i = 0;
-          var n = html.length;
-          function emitText(text) {
-            if (dropDepth > 0 || !text) return;
-            var t = text.normalize("NFC").replace(INVISIBLES, "");
-            if (!keepWhitespace) {
-              t = t.replace(/&nbsp;/gi, " ").replace(/&#160;/g, " ").replace(/&#[xX]a0;/g, " ");
-            }
-            t = stripControls(t);
-            out.push(preDepth > 0 || keepWhitespace ? t : collapseText(t));
-          }
-          while (i < n) {
-            var lt = html.indexOf("<", i);
-            if (lt === -1) {
-              emitText(html.slice(i));
-              break;
-            }
-            if (lt > i) emitText(html.slice(i, lt));
-            if (html.substr(lt, 4) === "<!--") {
-              var endC = html.indexOf("-->", lt + 4);
-              i = endC === -1 ? n : endC + 3;
-              continue;
-            }
-            if (html.charAt(lt + 1) === "!" || html.charAt(lt + 1) === "?") {
-              var gt = html.indexOf(">", lt);
-              i = gt === -1 ? n : gt + 1;
-              continue;
-            }
-            var tag = parseTag(html, lt);
-            if (!tag) {
-              emitText("<");
-              i = lt + 1;
-              continue;
-            }
-            i = tag.end;
-            if (tag.closing) {
-              var found = -1;
-              for (var s = stack.length - 1; s >= 0; s -= 1) {
-                if (stack[s].name === tag.name) {
-                  found = s;
-                  break;
-                }
-              }
-              if (found === -1) continue;
-              for (var p = stack.length - 1; p >= found; p -= 1) {
-                var entry = stack[p];
-                if (entry.action === "drop") dropDepth -= 1;
-                if (entry.preserve) preDepth -= 1;
-                if (entry.action === "keep" && dropDepth === 0) out.push(closeTags(entry));
-              }
-              stack.length = found;
-              continue;
-            }
-            var role = null;
-            var attrsRaw = tag.attrs;
-            for (var a = 0; a < attrsRaw.length; a += 1) {
-              if (attrsRaw[a].name === markers.TOOL_ATTR) role = attrsRaw[a].value;
-            }
-            var action = "keep";
-            if (dropDepth > 0) {
-              action = "drop";
-            } else if (Object.prototype.hasOwnProperty.call(DROP_SUBTREE_TAGS, tag.name) || role === markers.ROLE_CHROME) {
-              action = "drop";
-            } else if (role === markers.ROLE_WRAP) {
-              action = "unwrap";
-            }
-            var emitName = Object.prototype.hasOwnProperty.call(RENAME_TAGS, tag.name) ? RENAME_TAGS[tag.name] : tag.name;
-            var isVoid = Object.prototype.hasOwnProperty.call(VOID_TAGS, tag.name) || tag.selfClosing;
-            if (isVoid) {
-              if (action === "keep" && dropDepth === 0) {
-                out.push(serializeStartTag(emitName, cleanAttrs(tag.attrs)));
-              }
-              continue;
-            }
-            var keptAttrs = cleanAttrs(tag.attrs);
-            var emitNames = action === "keep" ? resetTagsFor(tag.attrs) : [];
-            if (!emitNames.length || keptAttrs.length || tag.name !== "span") emitNames.push(emitName);
-            if (action === "drop") dropDepth += 1;
-            var preserve = action === "keep" && Object.prototype.hasOwnProperty.call(PRESERVE_WS_TAGS, tag.name);
-            if (preserve) preDepth += 1;
-            if (action === "keep" && dropDepth === 0) {
-              for (var e = 0; e < emitNames.length; e += 1) {
-                out.push(e === emitNames.length - 1 ? serializeStartTag(emitNames[e], keptAttrs) : "<" + emitNames[e] + ">");
-              }
-            }
-            stack.push({ name: tag.name, emitNames, action, preserve });
-          }
-          for (var q = stack.length - 1; q >= 0; q -= 1) {
-            if (stack[q].action === "drop") dropDepth -= 1;
-            if (stack[q].action === "keep" && dropDepth === 0) out.push(closeTags(stack[q]));
-          }
-          return keepWhitespace ? out.join("") : out.join("").trim();
-        }
-        function markupEquals(a, b) {
-          return cleanMarkup(a) === cleanMarkup(b);
-        }
-        var LINE_BREAK = "\n";
-        var PARAGRAPH_BREAK = "\n\n";
-        var BLOCK_TAGS = {
-          address: 1,
-          article: 1,
-          aside: 1,
-          blockquote: 1,
-          dd: 1,
-          details: 1,
-          div: 1,
-          dl: 1,
-          dt: 1,
-          fieldset: 1,
-          figcaption: 1,
-          figure: 1,
-          footer: 1,
-          form: 1,
-          h1: 1,
-          h2: 1,
-          h3: 1,
-          h4: 1,
-          h5: 1,
-          h6: 1,
-          header: 1,
-          hgroup: 1,
-          hr: 1,
-          li: 1,
-          main: 1,
-          nav: 1,
-          ol: 1,
-          p: 1,
-          pre: 1,
-          section: 1,
-          summary: 1,
-          table: 1,
-          tbody: 1,
-          td: 1,
-          tfoot: 1,
-          th: 1,
-          thead: 1,
-          tr: 1,
-          ul: 1
-        };
-        var HORIZONTAL_SPACES = /[\u0009\u000B\u000C\u0020\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g;
-        var PRE_SPACE = "\uE000";
-        var PRE_NEWLINE = "\uE001";
-        var PRE_TAB = "\uE002";
-        function protectPre(text) {
-          return String(text).replace(/ /g, PRE_SPACE).replace(/\n/g, PRE_NEWLINE).replace(/\t/g, PRE_TAB);
-        }
-        function restorePre(text) {
-          return String(text).replace(new RegExp(PRE_SPACE, "g"), " ").replace(new RegExp(PRE_NEWLINE, "g"), "\n").replace(new RegExp(PRE_TAB, "g"), "	");
-        }
-        function hasOwn(map, key) {
-          return Object.prototype.hasOwnProperty.call(map, key);
-        }
-        function breakForTag(name) {
-          if (name === "br") return LINE_BREAK;
-          return hasOwn(BLOCK_TAGS, name) ? PARAGRAPH_BREAK : "";
-        }
-        function normalizeBlockText(input) {
-          if (typeof input !== "string") {
-            throw new TypeError("normalizeBlockText expects a string, got " + typeof input);
-          }
-          var s = input.normalize("NFC");
-          s = stripControls(s);
-          s = s.replace(INVISIBLES, "");
-          s = s.replace(/\r\n?/g, "\n");
-          s = s.replace(HORIZONTAL_SPACES, " ");
-          s = s.replace(/ +/g, " ");
-          s = s.replace(/ ?\n ?/g, "\n");
-          s = s.replace(/\n{3,}/g, "\n\n");
-          return s.trim();
-        }
-        function blockTextEquals(a, b) {
-          return normalizeBlockText(a) === normalizeBlockText(b);
-        }
-        function blockTextFromNode(node, options) {
-          var opts = options || {};
-          var skip = typeof opts.skip === "function" ? opts.skip : markers && typeof markers.isToolNode === "function" ? markers.isToolNode : null;
-          var parts = [];
-          collectNodeText(node, parts, skip, 0);
-          return restorePre(normalizeBlockText(parts.join("")));
-        }
-        function collectNodeText(node, parts, skip, preDepth) {
-          if (!node) return;
-          var type = node.nodeType;
-          if (type === 3 || type === 4) {
-            var data = typeof node.data === "string" ? node.data : typeof node.nodeValue === "string" ? node.nodeValue : "";
-            parts.push(preDepth > 0 ? protectPre(data) : collapseText(data));
-            return;
-          }
-          if (type === 1) {
-            if (skip && skip(node)) return;
-            var tag = typeof node.tagName === "string" ? node.tagName.toLowerCase() : "";
-            if (hasOwn(DROP_SUBTREE_TAGS, tag)) return;
-            if (tag === "br") {
-              parts.push(LINE_BREAK);
-              return;
-            }
-            var isBlock = hasOwn(BLOCK_TAGS, tag);
-            if (isBlock) parts.push(PARAGRAPH_BREAK);
-            var childPre = preDepth + (hasOwn(PRESERVE_WS_TAGS, tag) ? 1 : 0);
-            for (var child = node.firstChild; child; child = child.nextSibling) {
-              collectNodeText(child, parts, skip, childPre);
-            }
-            if (isBlock) parts.push(PARAGRAPH_BREAK);
-            return;
-          }
-          if (type !== 9 && type !== 11) return;
-          for (var kid = node.firstChild; kid; kid = kid.nextSibling) {
-            collectNodeText(kid, parts, skip, preDepth);
-          }
-        }
-        function blockText(html) {
-          return reduce(html, [], true);
-        }
-        function topLevelBlocks(html) {
-          if (typeof html !== "string") return null;
-          var clean = cleanMarkup(html);
-          var out = [];
-          var run = "";
-          var depth = 0;
-          var blockStart = -1;
-          var failed = false;
-          function flush(piece) {
-            var markup2 = piece.trim();
-            if (!markup2) return;
-            if (!normalizeText(textOf(markup2))) {
-              failed = true;
-              return;
-            }
-            out.push(markup2);
-          }
-          var i = 0;
-          while (i < clean.length) {
-            var lt = clean.indexOf("<", i);
-            var textEnd = lt === -1 ? clean.length : lt;
-            if (textEnd > i && blockStart === -1) run += clean.slice(i, textEnd);
-            if (lt === -1) break;
-            var tag = parseTag(clean, lt);
-            if (!tag) {
-              if (blockStart === -1) run += "<";
-              i = lt + 1;
-              continue;
-            }
-            i = tag.end;
-            var markup = clean.slice(lt, tag.end);
-            var isVoid = hasOwn(VOID_TAGS, tag.name) || tag.selfClosing;
-            if (depth === 0 && !tag.closing) {
-              if (tag.name === "br" || tag.name === "hr") {
-                flush(run);
-                run = "";
-                continue;
-              }
-              if (!isVoid && hasOwn(BLOCK_TAGS, tag.name)) {
-                flush(run);
-                run = "";
-                blockStart = tag.end;
-                depth = 1;
-                continue;
-              }
-            }
-            if (tag.closing) {
-              depth -= 1;
-              if (depth < 0) return null;
-              if (depth === 0 && blockStart !== -1) {
-                flush(clean.slice(blockStart, lt));
-                blockStart = -1;
-                continue;
-              }
-            } else if (!isVoid) {
-              depth += 1;
-            }
-            if (blockStart === -1) run += markup;
-          }
-          if (depth !== 0 || blockStart !== -1) return null;
-          flush(run);
-          return failed ? null : out;
-        }
-        var STRUCTURAL_TAGS = ["em", "strong", NOT_BOLD_TAG, NOT_ITALIC_TAG];
-        var MODE = { TEXT: "text", STRUCTURE: "structure" };
-        var MODES = [MODE.TEXT, MODE.STRUCTURE];
-        var FORMAT_ONLY_KIND = "format_only";
-        function modeFor(kind) {
-          return kind === FORMAT_ONLY_KIND ? MODE.STRUCTURE : MODE.TEXT;
-        }
-        function reduce(html, keepTags, keepBreaks) {
-          var clean = cleanMarkup(html);
-          var out = [];
-          var preDepth = 0;
-          var i = 0;
-          while (i < clean.length) {
-            var lt = clean.indexOf("<", i);
-            if (lt === -1) {
-              out.push(emitChunk(clean.slice(i), preDepth));
-              break;
-            }
-            if (lt > i) out.push(emitChunk(clean.slice(i, lt), preDepth));
-            var tag = parseTag(clean, lt);
-            if (!tag) {
-              out.push("<");
-              i = lt + 1;
-              continue;
-            }
-            i = tag.end;
-            if (keepTags.indexOf(tag.name) !== -1) {
-              out.push(tag.closing ? "</" + tag.name + ">" : "<" + tag.name + ">");
-              continue;
-            }
-            if (hasOwn(PRESERVE_WS_TAGS, tag.name) && !tag.selfClosing) {
-              if (tag.closing) preDepth = preDepth > 0 ? preDepth - 1 : 0;
-              else preDepth += 1;
-            }
-            out.push(breakForTag(tag.name));
-          }
-          var joined = out.join("");
-          if (keepBreaks) return restorePre(normalizeBlockText(joined));
-          return normalizeText(restorePre(joined));
-        }
-        function emitChunk(text, preDepth) {
-          return preDepth > 0 ? protectPre(text) : text;
-        }
-        function structureOf(html) {
-          return reduce(html, STRUCTURAL_TAGS, false);
-        }
-        function textOf(value) {
-          if (typeof value !== "string") {
-            throw new TypeError("textOf expects a string, got " + typeof value);
-          }
-          var out = [];
-          var dropDepth = 0;
-          var preDepth = 0;
-          var i = 0;
-          while (i < value.length) {
-            var lt = value.indexOf("<", i);
-            if (lt === -1) {
-              out.push(textChunk(value.slice(i), dropDepth, preDepth));
-              break;
-            }
-            if (lt > i) out.push(textChunk(value.slice(i, lt), dropDepth, preDepth));
-            var tag = parseTag(value, lt);
-            if (!tag) {
-              out.push("<");
-              i = lt + 1;
-              continue;
-            }
-            i = tag.end;
-            if (hasOwn(DROP_SUBTREE_TAGS, tag.name) && !tag.selfClosing) {
-              if (tag.closing) dropDepth = dropDepth > 0 ? dropDepth - 1 : 0;
-              else dropDepth += 1;
-              continue;
-            }
-            if (hasOwn(PRESERVE_WS_TAGS, tag.name) && !tag.selfClosing) {
-              if (tag.closing) preDepth = preDepth > 0 ? preDepth - 1 : 0;
-              else preDepth += 1;
-            }
-            if (dropDepth === 0) out.push(breakForTag(tag.name));
-          }
-          return restorePre(normalizeBlockText(out.join("")));
-        }
-        function textChunk(text, dropDepth, preDepth) {
-          if (dropDepth > 0 || !text) return "";
-          var t = text.replace(/&nbsp;/gi, " ").replace(/&#160;/g, " ").replace(/&#[xX]a0;/g, " ");
-          return preDepth > 0 ? protectPre(t) : t;
-        }
-        function structureEquals(a, b) {
-          return structureOf(a) === structureOf(b);
-        }
-        function emphasisRuns(html) {
-          var s = structureOf(html);
-          var open = [];
-          var runs = [];
-          var i = 0;
-          while (i < s.length) {
-            var lt = s.indexOf("<", i);
-            var chunk = lt === -1 ? s.slice(i) : s.slice(i, lt);
-            if (chunk) {
-              for (var k = 0; k < open.length; k += 1) open[k].text += chunk;
-            }
-            if (lt === -1) break;
-            var tag = parseTag(s, lt);
-            if (!tag) {
-              i = lt + 1;
-              continue;
-            }
-            i = tag.end;
-            if (STRUCTURAL_TAGS.indexOf(tag.name) === -1) continue;
-            if (!tag.closing) {
-              open.push({ tag: tag.name, text: "" });
-              continue;
-            }
-            for (var j = open.length - 1; j >= 0; j -= 1) {
-              if (open[j].tag !== tag.name) continue;
-              pushRun(runs, open.splice(j, 1)[0]);
-              break;
-            }
-          }
-          for (var q = open.length - 1; q >= 0; q -= 1) pushRun(runs, open[q]);
-          return runs;
-        }
-        function pushRun(runs, run) {
-          var text = normalizeText(run.text);
-          if (text) runs.push({ tag: run.tag, text });
-        }
-        function equalsInMode(mode, a, b) {
-          if (MODES.indexOf(mode) === -1) {
-            throw new Error("equalsInMode: unknown comparison mode " + String(mode) + "; expected one of " + MODES.join(", "));
-          }
-          if (mode === MODE.STRUCTURE) return structureEquals(a, b);
-          return textOf(a) === textOf(b);
-        }
-        var WRITABLE_BLOCK_TAGS = ["p", "h2", "h3", "h4", "ul", "ol"];
-        var LIST_BLOCK_TAGS = { ul: 1, ol: 1 };
-        var SHORT_BLOCK_WORDS = 5;
-        var RUN_WALK_SLACK = 2;
-        var RUN_BLOCK_REFUSED = "RUN_BLOCK_REFUSED";
-        var MAX_BLOCK_NESTING = 32;
-        var INLINE_ALLOWED = {
-          strong: "strong",
-          b: "strong",
-          em: "em",
-          i: "em"
-        };
-        INLINE_ALLOWED[NOT_BOLD_TAG] = NOT_BOLD_TAG;
-        INLINE_ALLOWED[NOT_ITALIC_TAG] = NOT_ITALIC_TAG;
-        function firstWords(text, max, more) {
-          var words = normalizeText(String(text || "")).split(" ").filter(Boolean);
-          return words.length > max ? words.slice(0, max).join(" ") + (more || "") : words.join(" ");
-        }
-        var NAMED_ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\xA0" };
-        function decodeEntities(text) {
-          return String(text).replace(/&(#[xX][0-9a-fA-F]+|#\d+|[A-Za-z]+);/g, function(whole, body) {
-            if (body.charAt(0) === "#") {
-              var code = body.charAt(1) === "x" || body.charAt(1) === "X" ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
-              if (!isFinite(code) || code <= 0 || code > 1114111) return whole;
-              try {
-                return String.fromCodePoint(code);
-              } catch (err) {
-                return whole;
-              }
-            }
-            var name = body.toLowerCase();
-            return hasOwn(NAMED_ENTITIES, name) ? NAMED_ENTITIES[name] : whole;
-          });
-        }
-        function escapeText(text) {
-          return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        }
-        function refuse(reason) {
-          return { code: RUN_BLOCK_REFUSED, reason };
-        }
-        function cleanText(raw) {
-          var t = decodeEntities(raw).normalize("NFC").replace(INVISIBLES, "");
-          t = stripAllControls(t);
-          return t.replace(UNICODE_SPACES, " ").replace(/ +/g, " ");
-        }
-        function cleanBlock(tag, html) {
-          var blockTag = typeof tag === "string" ? tag.toLowerCase() : "";
-          if (WRITABLE_BLOCK_TAGS.indexOf(blockTag) === -1) return refuse("tag " + String(tag) + " is not writable");
-          if (typeof html !== "string") return refuse("html must be a string");
-          var isList = hasOwn(LIST_BLOCK_TAGS, blockTag);
-          var rootNode = { name: blockTag, children: [] };
-          var stack = [rootNode];
-          var i = 0;
-          var n = html.length;
-          while (i < n) {
-            var lt = html.indexOf("<", i);
-            var textEnd = lt === -1 ? n : lt;
-            if (textEnd > i) {
-              var chunk = cleanText(html.slice(i, textEnd));
-              var top = stack[stack.length - 1];
-              if (isList && top === rootNode) {
-                if (chunk.trim()) return refuse("words outside an item in a list block");
-              } else if (chunk) {
-                top.children.push({ text: chunk });
-              }
-            }
-            if (lt === -1) break;
-            var next = html.charAt(lt + 1);
-            if (next === "!" || next === "?") return refuse("a comment or declaration in a block");
-            var parsed = parseTag(html, lt);
-            if (!parsed) {
-              var cur = stack[stack.length - 1];
-              if (isList && cur === rootNode) return refuse("words outside an item in a list block");
-              cur.children.push({ text: "<" });
-              i = lt + 1;
-              continue;
-            }
-            i = parsed.end;
-            var name = parsed.name;
-            if (parsed.closing) {
-              var want = hasOwn(INLINE_ALLOWED, name) ? INLINE_ALLOWED[name] : name;
-              for (var s = stack.length - 1; s > 0; s -= 1) {
-                if (stack[s].name === want) {
-                  stack.length = s;
-                  break;
-                }
-              }
-              continue;
-            }
-            var parent = stack[stack.length - 1];
-            if (name === "br") {
-              if (isList && parent === rootNode) return refuse("a break outside an item in a list block");
-              parent.children.push({ br: true });
-              continue;
-            }
-            if (name === "li") {
-              if (!isList) return refuse("li inside a " + blockTag + " block");
-              if (parent !== rootNode) return refuse("a nested item");
-              var li = { name: "li", children: [] };
-              rootNode.children.push(li);
-              if (stack.length > MAX_BLOCK_NESTING) return refuse("nesting deeper than " + MAX_BLOCK_NESTING);
-              stack.push(li);
-              if (parsed.selfClosing) stack.pop();
-              continue;
-            }
-            if (!hasOwn(INLINE_ALLOWED, name)) return refuse("element " + name + " is not allowed in a block");
-            if (isList && parent === rootNode) return refuse("formatting outside an item in a list block");
-            var el = { name: INLINE_ALLOWED[name], children: [] };
-            parent.children.push(el);
-            if (parsed.selfClosing) continue;
-            if (stack.length > MAX_BLOCK_NESTING) return refuse("nesting deeper than " + MAX_BLOCK_NESTING);
-            stack.push(el);
-          }
-          var out;
-          if (isList) {
-            var items = [];
-            for (var k = 0; k < rootNode.children.length; k += 1) {
-              var item = finishInline(rootNode.children[k].children);
-              if (item) items.push("<li>" + item + "</li>");
-            }
-            if (!items.length) return refuse("a list block with no words");
-            out = items.join("");
-          } else {
-            out = finishInline(rootNode.children);
-            if (!out) return refuse("a block with no words");
-          }
-          return { html: out };
-        }
-        function finishInline(children) {
-          var nodes = pruneEmpty(children);
-          trimEdge(nodes, true);
-          trimEdge(nodes, false);
-          dropTrailingBreaks(nodes);
-          nodes = pruneEmpty(nodes);
-          var html = serializeInline(nodes);
-          return textOf(html) ? html : "";
-        }
-        function hasWords(node) {
-          if (node.text !== void 0) return node.text.trim() !== "";
-          if (node.br) return false;
-          for (var i = 0; i < node.children.length; i += 1) if (hasWords(node.children[i])) return true;
-          return false;
-        }
-        function pruneEmpty(nodes) {
-          var out = [];
-          var pending = null;
-          function flush() {
-            if (!pending) return;
-            out.push({ text: pending.length === 1 ? pending[0] : pending.join("").replace(/ +/g, " ") });
-            pending = null;
-          }
-          for (var i = 0; i < nodes.length; i += 1) {
-            var node = nodes[i];
-            if (node.children) {
-              if (!hasWords(node)) continue;
-              flush();
-              out.push({ name: node.name, children: pruneEmpty(node.children) });
-            } else if (node.text !== void 0) {
-              if (!node.text) continue;
-              (pending = pending || []).push(node.text);
-            } else {
-              flush();
-              out.push(node);
-            }
-          }
-          flush();
-          return out;
-        }
-        function trimEdge(nodes, atStart) {
-          var guard = 0;
-          while (nodes.length && guard < 1e3) {
-            guard += 1;
-            var idx = atStart ? 0 : nodes.length - 1;
-            var node = nodes[idx];
-            if (node.text !== void 0) {
-              node.text = atStart ? node.text.replace(/^ +/, "") : node.text.replace(/ +$/, "");
-              if (!node.text) {
-                nodes.splice(idx, 1);
-                continue;
-              }
-              return;
-            }
-            if (node.children) {
-              trimEdge(node.children, atStart);
-              if (!node.children.length) {
-                nodes.splice(idx, 1);
-                continue;
-              }
-              return;
-            }
-            if (node.br && atStart) {
-              nodes.splice(idx, 1);
-              continue;
-            }
-            return;
-          }
-        }
-        function dropTrailingBreaks(nodes) {
-          while (nodes.length) {
-            var last = nodes[nodes.length - 1];
-            if (last.br) {
-              nodes.pop();
-              continue;
-            }
-            if (last.text !== void 0 && !last.text.trim()) {
-              nodes.pop();
-              continue;
-            }
-            if (last.children) {
-              dropTrailingBreaks(last.children);
-              if (!last.children.length) {
-                nodes.pop();
-                continue;
-              }
-              if (last.children[last.children.length - 1].text !== void 0) {
-                var t = last.children[last.children.length - 1];
-                t.text = t.text.replace(/ +$/, "");
-              }
-            } else if (last.text !== void 0) {
-              last.text = last.text.replace(/ +$/, "");
-            }
-            return;
-          }
-        }
-        function serializeInline(nodes) {
-          var out = "";
-          for (var i = 0; i < nodes.length; i += 1) {
-            var node = nodes[i];
-            if (node.text !== void 0) out += escapeText(node.text);
-            else if (node.br) out += "<br>";
-            else out += "<" + node.name + ">" + serializeInline(node.children) + "</" + node.name + ">";
-          }
-          return out;
-        }
-        function blockWords(html) {
-          if (typeof html !== "string") return "";
-          return foldTypography(decodeEntities(textOf(html)));
-        }
-        var RAW_TEXT_TAGS = { script: 1, style: 1, textarea: 1, title: 1, xmp: 1, noscript: 1 };
-        var CLOSES_P = {
-          address: 1,
-          article: 1,
-          aside: 1,
-          blockquote: 1,
-          details: 1,
-          div: 1,
-          dl: 1,
-          fieldset: 1,
-          figcaption: 1,
-          figure: 1,
-          footer: 1,
-          form: 1,
-          h1: 1,
-          h2: 1,
-          h3: 1,
-          h4: 1,
-          h5: 1,
-          h6: 1,
-          header: 1,
-          hgroup: 1,
-          hr: 1,
-          main: 1,
-          nav: 1,
-          ol: 1,
-          p: 1,
-          pre: 1,
-          section: 1,
-          table: 1,
-          ul: 1,
-          li: 1,
-          dd: 1,
-          dt: 1,
-          summary: 1
-        };
-        function parseTree(html) {
-          var rootNode = { name: "#root", attrs: [], children: [], parent: null };
-          var cur = rootNode;
-          var i = 0;
-          var n = html.length;
-          function openName(name2) {
-            for (var node2 = cur; node2 && node2 !== rootNode; node2 = node2.parent) if (node2.name === name2) return node2;
-            return null;
-          }
-          function closeTo(node2) {
-            cur = node2.parent;
-          }
-          while (i < n) {
-            var lt = html.indexOf("<", i);
-            var end = lt === -1 ? n : lt;
-            if (end > i) cur.children.push({ text: html.slice(i, end) });
-            if (lt === -1) break;
-            if (html.substr(lt, 4) === "<!--") {
-              var ce = html.indexOf("-->", lt + 4);
-              i = ce === -1 ? n : ce + 3;
-              continue;
-            }
-            var nx = html.charAt(lt + 1);
-            if (nx === "!" || nx === "?") {
-              var ge = html.indexOf(">", lt);
-              i = ge === -1 ? n : ge + 1;
-              continue;
-            }
-            var tag = parseTag(html, lt);
-            if (!tag) {
-              cur.children.push({ text: "<" });
-              i = lt + 1;
-              continue;
-            }
-            i = tag.end;
-            var name = tag.name;
-            if (tag.closing) {
-              var open = openName(name);
-              if (open) closeTo(open);
-              continue;
-            }
-            if (hasOwn(CLOSES_P, name)) {
-              var p = openName("p");
-              if (p) closeTo(p);
-            }
-            if (name === "li") {
-              for (var node = cur; node && node !== rootNode; node = node.parent) {
-                if (node.name === "ul" || node.name === "ol") break;
-                if (node.name === "li") {
-                  closeTo(node);
-                  break;
-                }
-              }
-            }
-            var el = { name, attrs: tag.attrs, children: [], parent: cur };
-            cur.children.push(el);
-            if (hasOwn(VOID_TAGS, name) || tag.selfClosing) continue;
-            if (hasOwn(RAW_TEXT_TAGS, name)) {
-              var close = html.toLowerCase().indexOf("</" + name, i);
-              var stop = close === -1 ? n : close;
-              el.children.push({ text: html.slice(i, stop), raw: true });
-              var gt = close === -1 ? -1 : html.indexOf(">", close);
-              i = gt === -1 ? n : gt + 1;
-              continue;
-            }
-            cur = el;
-          }
-          return rootNode;
-        }
-        function attrOf(el, name) {
-          for (var i = 0; i < el.attrs.length; i += 1) if (el.attrs[i].name === name) return el.attrs[i].value;
-          return null;
-        }
-        function isNotContent(el) {
-          if (hasOwn(DROP_SUBTREE_TAGS, el.name) || el.name === "head") return true;
-          if (attrOf(el, markers.TOOL_ATTR) === markers.ROLE_CHROME) return true;
-          return attrOf(el, "id") === markers.OVERLAY_ROOT_ID;
-        }
-        function isSkippedElement(el) {
-          return isNotContent(el) || attrOf(el, markers.FILE_TITLE_ATTR) === markers.FILE_TITLE_VALUE;
-        }
-        function serializeTree(nodes) {
-          var out = "";
-          for (var i = 0; i < nodes.length; i += 1) {
-            var node = nodes[i];
-            if (node.text !== void 0) {
-              out += node.text;
-              continue;
-            }
-            var attrs = "";
-            for (var a = 0; a < node.attrs.length; a += 1) {
-              attrs += " " + node.attrs[a].name + '="' + escapeAttrValue(node.attrs[a].value) + '"';
-            }
-            out += "<" + node.name + attrs + ">";
-            if (hasOwn(VOID_TAGS, node.name)) continue;
-            out += serializeTree(node.children) + "</" + node.name + ">";
-          }
-          return out;
-        }
-        function hasBlockInside(el) {
-          for (var i = 0; i < el.children.length; i += 1) {
-            var child = el.children[i];
-            if (!child.name || isNotContent(child)) continue;
-            if (hasOwn(BLOCK_TAGS, child.name) || hasBlockInside(child)) return true;
-          }
-          return false;
-        }
-        function leafBlocks(html) {
-          if (typeof html !== "string") return [];
-          var out = [];
-          (function walk(nodes) {
-            for (var i = 0; i < nodes.length; i += 1) {
-              var el = nodes[i];
-              if (!el.name || isSkippedElement(el)) continue;
-              var isBlock = hasOwn(BLOCK_TAGS, el.name);
-              if (isBlock && (hasOwn(LIST_BLOCK_TAGS, el.name) || !hasBlockInside(el))) {
-                var inner = cleanMarkup(serializeTree(el.children));
-                var words = blockWords(inner);
-                if (words) out.push({ tag: el.name, html: inner, words });
-                continue;
-              }
-              walk(el.children);
-            }
-          })(parseTree(html).children);
-          return out;
-        }
-        function wordsFor(entry) {
-          if (!entry) return "";
-          if (typeof entry.words === "string") return entry.words;
-          return blockWords(entry.html);
-        }
-        function joinWords(list) {
-          return list.filter(Boolean).join(" ");
-        }
-        function matchRun(blocks, leaves) {
-          var runBlocks = Array.isArray(blocks) ? blocks : [];
-          var pageLeaves = Array.isArray(leaves) ? leaves : [];
-          var bw = runBlocks.map(wordsFor);
-          var lw = pageLeaves.map(wordsFor);
-          var limit = Math.min(lw.length, runBlocks.length + RUN_WALK_SLACK);
-          var result = runBlocks.map(function(_b, index) {
-            return { index, status: "missing", leaves: [] };
-          });
-          var bi = 0;
-          var li = 0;
-          var matched = 0;
-          function tryAt(b2, l) {
-            if (!bw[b2]) return null;
-            if (lw[l] === bw[b2]) return { status: "whole", blocks: 1, leaves: 1 };
-            var acc = bw[b2];
-            for (var k = b2 + 1; k < bw.length; k += 1) {
-              acc = joinWords([acc, bw[k]]);
-              if (acc === lw[l]) return { status: "joined", blocks: k - b2 + 1, leaves: 1 };
-              if (acc.length > lw[l].length) break;
-            }
-            var spread = lw[l];
-            for (var m = l + 1; m < limit; m += 1) {
-              spread = joinWords([spread, lw[m]]);
-              if (spread === bw[b2]) return { status: "split", blocks: 1, leaves: m - l + 1 };
-              if (spread.length > bw[b2].length) break;
-            }
-            return null;
-          }
-          while (li < limit && bi < runBlocks.length) {
-            var hit = null;
-            var at = -1;
-            for (var b = bi; b < runBlocks.length; b += 1) {
-              hit = tryAt(b, li);
-              if (hit) {
-                at = b;
-                break;
-              }
-            }
-            if (!hit) {
-              if (matched > 0) break;
-              li += 1;
-              continue;
-            }
-            var leafList = [];
-            for (var x = 0; x < hit.leaves; x += 1) leafList.push(li + x);
-            for (var y = 0; y < hit.blocks; y += 1) {
-              result[at + y] = { index: at + y, status: hit.status, leaves: leafList.slice() };
-            }
-            matched += 1;
-            bi = at + hit.blocks;
-            li += hit.leaves;
-          }
-          return result;
-        }
-        var WORD_CHAR = /[\p{L}\p{N}]/u;
-        function heldInside(leafWords, words) {
-          if (!words || !leafWords || leafWords === words || leafWords.length <= words.length) return false;
-          var from = 0;
-          for (; ; ) {
-            var at = leafWords.indexOf(words, from);
-            if (at === -1) return false;
-            var before = at === 0 ? "" : leafWords.charAt(at - 1);
-            var after = leafWords.charAt(at + words.length);
-            if ((!before || !WORD_CHAR.test(before)) && (!after || !WORD_CHAR.test(after))) return true;
-            from = at + 1;
-          }
-        }
-        function wordTotal(words) {
-          return words ? words.split(" ").length : 0;
-        }
-        function runClash(blocks, leaves) {
-          var runBlocks = Array.isArray(blocks) ? blocks : [];
-          var pageLeaves = Array.isArray(leaves) ? leaves : [];
-          var matched = matchRun(runBlocks, pageLeaves);
-          var bw = runBlocks.map(wordsFor);
-          var lw = pageLeaves.map(wordsFor);
-          var limit = Math.min(lw.length, runBlocks.length + RUN_WALK_SLACK);
-          var used = {};
-          matched.forEach(function(m2) {
-            m2.leaves.forEach(function(l) {
-              used[l] = true;
-            });
-          });
-          var nextLeaf = 0;
-          for (var i = 0; i < matched.length; i += 1) {
-            var m = matched[i];
-            if (m.status !== "missing") {
-              nextLeaf = m.leaves[m.leaves.length - 1] + 1;
-              continue;
-            }
-            if (i > 0 && matched[i - 1].status === "missing") continue;
-            if (nextLeaf >= limit || used[nextLeaf]) continue;
-            var leafWords = lw[nextLeaf];
-            if (nextLeaf === 0 && wordTotal(bw[i]) < SHORT_BLOCK_WORDS) continue;
-            if (!heldInside(leafWords, bw[i])) continue;
-            var count = 1;
-            var acc = bw[i];
-            for (var k = i + 1; k < matched.length && matched[k].status === "missing"; k += 1) {
-              acc = joinWords([acc, bw[k]]);
-              if (!heldInside(leafWords, acc)) break;
-              count += 1;
-            }
-            return { index: i, blocks: count, leaf: nextLeaf };
-          }
-          return null;
-        }
-        function runWords(blocks) {
-          var total = 0;
-          (Array.isArray(blocks) ? blocks : []).forEach(function(b) {
-            if (!b || b.from_anchor === true) return;
-            var words = normalizeText(decodeEntities(textOf(typeof b.html === "string" ? b.html : "")));
-            if (words) total += words.split(" ").length;
-          });
-          return total;
-        }
-        var LOOPBACK_NAMES = { localhost: 1, "127.0.0.1": 1, "::1": 1, "[::1]": 1, "0:0:0:0:0:0:0:1": 1 };
-        var CANONICAL_HOST = "localhost";
-        var DEFAULT_PORTS = { "http:": "80", "https:": "443" };
-        function isLoopbackHost(host) {
-          if (typeof host !== "string" || !host) return false;
-          var h = host.toLowerCase().replace(/^\[|\]$/g, "");
-          if (Object.prototype.hasOwnProperty.call(LOOPBACK_NAMES, h)) return true;
-          if (Object.prototype.hasOwnProperty.call(LOOPBACK_NAMES, host.toLowerCase())) return true;
-          if (/^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h)) return true;
-          if (/\.localhost$/.test(h)) return true;
-          return false;
-        }
-        function resolveSegments(pathname) {
-          var parts = String(pathname).split("/");
-          var outParts = [];
-          for (var i = 0; i < parts.length; i += 1) {
-            var seg = parts[i];
-            if (seg === "" || seg === ".") continue;
-            if (seg === "..") {
-              outParts.pop();
-              continue;
-            }
-            outParts.push(seg.replace(/%[0-9a-fA-F]{2}/g, function(m) {
-              return m.toUpperCase();
-            }));
-          }
-          return "/" + outParts.join("/");
-        }
-        function canonicalTarget(input, options) {
-          var opts = options || {};
-          if (typeof input !== "string" || !input.trim()) {
-            throw new TypeError("canonicalTarget expects a non-empty string");
-          }
-          var raw = stripAllControls(input.trim());
-          if (/^https?:\/\//i.test(raw)) {
-            var u = new URL(raw);
-            var host = u.hostname.toLowerCase();
-            if (isLoopbackHost(host)) host = CANONICAL_HOST;
-            var port = u.port;
-            if (port && DEFAULT_PORTS[u.protocol.toLowerCase()] === port) port = "";
-            var pathPart = resolveSegments(u.pathname);
-            if (pathPart !== "/" && pathPart.charAt(pathPart.length - 1) === "/") {
-              pathPart = pathPart.slice(0, -1);
-            }
-            var search = u.search === "?" ? "" : u.search;
-            var canonical2 = u.protocol.toLowerCase() + "//" + host + (port ? ":" + port : "") + pathPart + search;
-            return {
-              kind: "route",
-              canonical: canonical2,
-              host,
-              port: port || null,
-              isLocal: isLoopbackHost(u.hostname),
-              resolved: true
-            };
-          }
-          var filePath = raw;
-          if (/^file:\/\//i.test(raw)) {
-            var fu = new URL(raw);
-            if (fu.hostname && !isLoopbackHost(fu.hostname)) {
-              throw new Error("canonicalTarget: a file:// URL with a remote host is not a local target: " + raw);
-            }
-            try {
-              filePath = decodeURIComponent(fu.pathname);
-            } catch (err) {
-              throw new Error("canonicalTarget: malformed percent-escape in file URL: " + raw);
-            }
-          }
-          if (filePath.charAt(0) !== "/") {
-            throw new Error(
-              "canonicalTarget: expected an absolute file path, a file:// URL, or an http(s) URL; got " + input
-            );
-          }
-          var canonicalPath = resolveSegments(filePath).replace(/%[0-9A-F]{2}/g, function(m) {
-            return decodeURIComponent(m);
-          });
-          if (canonicalPath.length > 1 && canonicalPath.charAt(canonicalPath.length - 1) === "/") {
-            canonicalPath = canonicalPath.slice(0, -1);
-          }
-          return {
-            kind: "file",
-            canonical: canonicalPath,
-            host: null,
-            port: null,
-            isLocal: true,
-            resolved: opts.resolved === true
-          };
-        }
-        var SLUG_MAX = 40;
-        function targetSlug(canonical2) {
-          var s = typeof canonical2 === "string" ? canonical2 : String(canonical2);
-          var tail = s.split("?")[0].split("/").filter(Boolean).pop() || "target";
-          var slug = tail.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, SLUG_MAX).replace(/^-+|-+$/g, "");
-          return slug || "target";
-        }
-        return {
-          stripControls,
-          stripAllControls,
-          normalizeText,
-          textEquals,
-          foldTypography,
-          cleanMarkup,
-          markupEquals,
-          LINE_BREAK,
-          PARAGRAPH_BREAK,
-          BLOCK_TAGS,
-          breakForTag,
-          normalizeBlockText,
-          blockTextEquals,
-          blockText,
-          topLevelBlocks,
-          blockTextFromNode,
-          STRUCTURAL_TAGS,
-          NOT_BOLD_TAG,
-          NOT_ITALIC_TAG,
-          RESET_TAGS,
-          isNotBoldWeight,
-          isNotItalicStyle,
-          MODE,
-          MODES,
-          modeFor,
-          structureOf,
-          structureEquals,
-          emphasisRuns,
-          textOf,
-          equalsInMode,
-          isSafeUrlValue,
-          // Exported so the anchor engine can serialize an element's opening tag for
-          // the agent with the same escaping cleanMarkup uses, rather than spelling a
-          // second one.
-          escapeAttrValue,
-          isEmbeddedValue,
-          digestOf,
-          embeddedName,
-          canonicalTarget,
-          isLoopbackHost,
-          targetSlug,
-          SLUG_MAX,
-          SAFE_SCHEMES,
-          DROP_SUBTREE_TAGS,
-          WRITABLE_BLOCK_TAGS,
-          MAX_BLOCK_NESTING,
-          SHORT_BLOCK_WORDS,
-          RUN_WALK_SLACK,
-          INLINE_ALLOWED,
-          firstWords,
-          RUN_BLOCK_REFUSED,
-          decodeEntities,
-          cleanBlock,
-          blockWords,
-          leafBlocks,
-          matchRun,
-          runClash,
-          runWords
-        };
-      });
-    }
-  });
 
   // src/shared/record.js
   var require_record = __commonJS({
@@ -2012,7 +630,7 @@
           return !!item && item[FIELD.STATE] === STATE.HANDLED && item[FIELD.CLOSED_BY] === CLOSED_BY_REVIEWER;
         }
         var REPLY_STAMP_MAX = 64;
-        function hasWords(value) {
+        function hasWords2(value) {
           return typeof value === "string" && value.trim() !== "";
         }
         function needsToSeeReply(reply) {
@@ -2020,7 +638,7 @@
           if (reply.status === REPLY_STATUS.QUESTION) return true;
           if (reply.status === REPLY_STATUS.NOT_HANDLED) return true;
           if (reply.user_needs_to_see_reply !== true) return false;
-          return hasWords(reply.text) || hasWords(reply.reason);
+          return hasWords2(reply.text) || hasWords2(reply.reason);
         }
         function isUnreadReply(item, mark) {
           var stamp = replyStamp(item);
@@ -3024,7 +1642,7 @@
           CLOSED_BY_REVIEWER,
           isClosedByReviewer,
           REPLY_STAMP_MAX,
-          hasWords,
+          hasWords: hasWords2,
           needsToSeeReply,
           isUnreadReply,
           unseenReplyIds,
@@ -4231,7 +2849,7 @@
           var req = request || {};
           var r = route(req.routeName);
           var headers = req.headers || {};
-          function refuse(name, detail) {
+          function refuse2(name, detail) {
             var c = checkNamed(name);
             return {
               ok: false,
@@ -4241,32 +2859,32 @@
             };
           }
           if (!hostAllowed(headerOf(headers, HEADER.HOST))) {
-            return refuse(CHECK.HOST, String(headerOf(headers, HEADER.HOST)));
+            return refuse2(CHECK.HOST, String(headerOf(headers, HEADER.HOST)));
           }
           if (r.auth === AUTH.NONE) {
             return { ok: true, review: null, origin: headerOf(headers, HEADER.ORIGIN) || null };
           }
           if (CLIENTS.indexOf(headerOf(headers, HEADER.CLIENT)) === -1) {
-            return refuse(CHECK.CUSTOM_HEADER, null);
+            return refuse2(CHECK.CUSTOM_HEADER, null);
           }
           if (r.mutating) {
             var ct = String(headerOf(headers, HEADER.CONTENT_TYPE) || "").split(";")[0].trim().toLowerCase();
-            if (ct !== JSON_CONTENT_TYPE) return refuse(CHECK.CONTENT_TYPE, ct || "none");
+            if (ct !== JSON_CONTENT_TYPE) return refuse2(CHECK.CONTENT_TYPE, ct || "none");
           }
           var reviews = config && config.reviews || null;
           var reviewId = req.review;
           if (!reviews || !isSafeId(reviewId) || !Object.prototype.hasOwnProperty.call(reviews, reviewId)) {
-            return refuse(CHECK.REVIEW_KNOWN, String(reviewId));
+            return refuse2(CHECK.REVIEW_KNOWN, String(reviewId));
           }
           var registered = reviews[reviewId];
           var presented = headerOf(headers, HEADER.TOKEN);
           if (!registered.token || typeof presented !== "string" || !tokensEqual(presented, registered.token)) {
-            return refuse(CHECK.TOKEN, null);
+            return refuse2(CHECK.TOKEN, null);
           }
           var origin = headerOf(headers, HEADER.ORIGIN);
           var allowed = registered.origins || [];
           var effective = origin === null || origin === void 0 || origin === "" ? "null" : String(origin);
-          if (allowed.indexOf(effective) === -1) return refuse(CHECK.ORIGIN, effective);
+          if (allowed.indexOf(effective) === -1) return refuse2(CHECK.ORIGIN, effective);
           return { ok: true, review: reviewId, origin: effective };
         }
         var STATUS_FOR_CODE = {
@@ -6509,7 +5127,7 @@
           var range = currentRange();
           return range ? range.cloneRange() : null;
         }
-        var BLOCK_TAGS = [
+        var BLOCK_TAGS2 = [
           "P",
           "LI",
           "H1",
@@ -6532,7 +5150,7 @@
         function blockFor(el) {
           var node = el || caretContainer();
           while (node && node.nodeType === 1) {
-            if (BLOCK_TAGS.indexOf(node.tagName) !== -1) return node;
+            if (BLOCK_TAGS2.indexOf(node.tagName) !== -1) return node;
             node = node.parentElement;
           }
           return null;
@@ -6549,7 +5167,7 @@
           return true;
         }
         return {
-          BLOCK_TAGS,
+          BLOCK_TAGS: BLOCK_TAGS2,
           currentSelection,
           currentRange,
           caretNode,
@@ -6581,7 +5199,6 @@
       })(typeof globalThis !== "undefined" ? globalThis : exports, function(markers, normalize) {
         "use strict";
         var WRITABLE = normalize.WRITABLE_BLOCK_TAGS;
-        var BLOCK_TAGS = normalize.BLOCK_TAGS;
         var LIST_TAGS = { ul: 1, ol: 1 };
         var NO_RUN_TAGS = { td: 1, th: 1, dt: 1, dd: 1, figcaption: 1 };
         var NO_RUN_HOSTS = { tr: 1, tbody: 1, thead: 1, tfoot: 1, table: 1, dl: 1, ul: 1, ol: 1 };
@@ -6597,26 +5214,26 @@
         function isElement(node) {
           return !!node && node.nodeType === 1;
         }
-        function isNotContent(el) {
+        function isNotContent2(el) {
           var tag = tagOf(el);
-          if (hasOwn(normalize.DROP_SUBTREE_TAGS, tag) || tag === "head") return true;
+          if (normalize.isDroppedSubtreeTag(tag) || tag === "head") return true;
           if (markers.roleOf(el) === markers.ROLE_CHROME) return true;
           return el.id === markers.OVERLAY_ROOT_ID;
         }
         function isSkipped(el) {
-          return isNotContent(el) || markers.isFileTitle(el);
+          return isNotContent2(el) || markers.isFileTitle(el);
         }
-        function hasBlockInside(el) {
+        function hasBlockInside2(el) {
           for (var child = el.firstElementChild; child; child = child.nextElementSibling) {
-            if (isNotContent(child)) continue;
-            if (hasOwn(BLOCK_TAGS, tagOf(child)) || hasBlockInside(child)) return true;
+            if (isNotContent2(child)) continue;
+            if (normalize.isBlockTag(tagOf(child)) || hasBlockInside2(child)) return true;
           }
           return false;
         }
         function isLeaf(el) {
           var tag = tagOf(el);
-          if (!hasOwn(BLOCK_TAGS, tag)) return false;
-          return hasOwn(LIST_TAGS, tag) || !hasBlockInside(el);
+          if (!normalize.isBlockTag(tag)) return false;
+          return hasOwn(LIST_TAGS, tag) || !hasBlockInside2(el);
         }
         function wordsOf(el) {
           return normalize.blockWords(normalize.cleanMarkup(el.innerHTML));
@@ -6654,8 +5271,8 @@
         function isInlineChrome(node) {
           if (node.nodeType === 8 || isWhitespaceText(node)) return "neutral";
           if (!isElement(node)) return "no";
-          if (isNotContent(node)) return "chrome";
-          if (hasOwn(BLOCK_TAGS, tagOf(node)) || hasBlockInside(node)) return "no";
+          if (isNotContent2(node)) return "chrome";
+          if (normalize.isBlockTag(tagOf(node)) || hasBlockInside2(node)) return "no";
           return "chrome";
         }
         function parentIsChromeWrapper(el) {
@@ -6680,8 +5297,8 @@
         function isLeadingChrome(node) {
           if (node.nodeType === 8 || isWhitespaceText(node)) return true;
           if (!isElement(node)) return false;
-          if (isNotContent(node) || markers.isFileTitle(node)) return true;
-          if (!hasOwn(BLOCK_TAGS, tagOf(node))) return false;
+          if (isNotContent2(node) || markers.isFileTitle(node)) return true;
+          if (!normalize.isBlockTag(tagOf(node))) return false;
           var sawTitle = false;
           for (var child = node.firstChild; child; child = child.nextSibling) {
             if (child.nodeType === 8 || isWhitespaceText(child)) continue;
@@ -6690,7 +5307,7 @@
               sawTitle = true;
               continue;
             }
-            if (isNotContent(child)) continue;
+            if (isNotContent2(child)) continue;
             if (wordsOf(child)) return false;
           }
           return sawTitle;
@@ -7994,12 +6611,12 @@
         }
         function twinOrdinalOf(node, scope) {
           var tag = tagOf(node);
-          var text = textOf(node);
+          var text = textOf2(node);
           var where = whereOf(node, scope);
           var index = 0;
           var of = 0;
           eachElement(scope, function(candidate) {
-            if (tagOf(candidate) !== tag || textOf(candidate) !== text) return;
+            if (tagOf(candidate) !== tag || textOf2(candidate) !== text) return;
             if (whereOf(candidate, scope) !== where) return;
             of += 1;
             if (candidate === node) index = of;
@@ -8043,7 +6660,7 @@
             textMemo = outer;
           }
         }
-        function textOf(node) {
+        function textOf2(node) {
           if (!node) return "";
           if (textMemo && textMemo.has(node)) return textMemo.get(node);
           var computed = textOfUncached(node);
@@ -8187,8 +6804,8 @@
           var at = siblings.indexOf(anchorNode);
           if (at === -1) return { before: [], after: [] };
           return {
-            before: siblings.slice(0, at).map(textOf),
-            after: siblings.slice(at + 1).map(textOf)
+            before: siblings.slice(0, at).map(textOf2),
+            after: siblings.slice(at + 1).map(textOf2)
           };
         }
         function joinContext(parts) {
@@ -8254,12 +6871,12 @@
           while (isElement(current) && current !== scope) {
             var siblings = siblingsOf(current);
             var at = siblings.indexOf(current);
-            if (!textOf(current)) {
+            if (!textOf2(current)) {
               for (var after = at + 1; after < siblings.length; after += 1) {
                 if (budget.left <= 0) return null;
                 budget.left -= 1;
                 if (Object.prototype.hasOwnProperty.call(HEADING_TAGS, tagOf(siblings[after])) && headingWords(siblings[after])) return headingWords(siblings[after]);
-                if (textOf(siblings[after])) break;
+                if (textOf2(siblings[after])) break;
               }
             }
             for (var i = at - 1; i >= 0; i -= 1) {
@@ -8408,7 +7025,7 @@
           var stop = new Array(list.length);
           var next = list.length;
           for (var i = list.length - 1; i >= 0; i -= 1) {
-            if (isWordedHeading(index, list[i]) || textOf(list[i])) next = i;
+            if (isWordedHeading(index, list[i]) || textOf2(list[i])) next = i;
             stop[i] = next;
           }
           info.ahead = stop;
@@ -8425,7 +7042,7 @@
             var list = info.list;
             var at = info.before.get(current);
             var after = isSkipped(current) ? at : at + 1;
-            if (!textOf(current) && after < list.length) {
+            if (!textOf2(current) && after < list.length) {
               var stop = aheadScan(index, info)[after];
               var steps = stop < list.length ? stop - after + 1 : list.length - after;
               if (budget < steps) return null;
@@ -8468,7 +7085,7 @@
           var startOf = [];
           var length = 0;
           for (var i = 0; i < list.length; i += 1) {
-            var text = normalize.normalizeText(textOf(list[i]));
+            var text = normalize.normalizeText(textOf2(list[i]));
             if (text) {
               if (length > 0) length += 1;
               startOf.push(length);
@@ -8537,7 +7154,7 @@
           }
           if (matchedBelow) return true;
           if (!isElement(node)) return false;
-          if (matchKind(textOf(node), probe)) {
+          if (matchKind(textOf2(node), probe)) {
             out.push(node);
             return true;
           }
@@ -8574,7 +7191,7 @@
           return /=\s*data:/i.test(probe) && !/=embedded:/.test(probe);
         }
         function contentOf(node, kind, legacy) {
-          return kind === PROBE.ELEMENT ? signatureOf(node, legacy) : textOf(node);
+          return kind === PROBE.ELEMENT ? signatureOf(node, legacy) : textOf2(node);
         }
         function findByAuthorAttr(node, value, out) {
           var kids = elementChildren(node);
@@ -8777,7 +7394,7 @@
           ref.failure = null;
           if (!element) return mintFailure(ref, MINT_FAILURE.NO_ELEMENT);
           ref.stamp = stampFor(element);
-          ref.probe = isElementOnly(element) ? "" : textOf(element);
+          ref.probe = isElementOnly(element) ? "" : textOf2(element);
           ref.probe_kind = PROBE.TEXT;
           if (!ref.probe) {
             ref.probe = signatureOf(element);
@@ -8905,11 +7522,11 @@
             return t === wanted || !!also && t === also;
           };
           if (!wanted || !isElement(bound) || fits(bound)) return bound;
-          var words = textOf(bound);
+          var words = textOf2(bound);
           var hop = bound;
           while (hop !== scope) {
             var parent = parentOf(hop);
-            if (!isElement(parent) || textOf(parent) !== words) return bound;
+            if (!isElement(parent) || textOf2(parent) !== words) return bound;
             if (fits(parent)) return parent;
             hop = parent;
           }
@@ -9065,7 +7682,7 @@
             heading: headingOf(element, scope),
             ordinal: ordinalInSection(element, scope),
             tag: tagOf(element),
-            text: textOf(element) || null
+            text: textOf2(element) || null
           };
         }
         function subjectFor(element, root) {
@@ -9087,10 +7704,10 @@
           var node = element;
           while (isElement(node)) {
             var worded = elementChildren(node).filter(function(kid) {
-              return !isSkipped(kid) && Object.prototype.hasOwnProperty.call(normalize.BLOCK_TAGS, tagOf(kid)) && !!textOf(kid);
+              return !isSkipped(kid) && normalize.isBlockTag(tagOf(kid)) && !!textOf2(kid);
             });
             if (worded.length !== 1) return worded.length;
-            if (textOf(worded[0]) !== textOf(node)) return 1;
+            if (textOf2(worded[0]) !== textOf2(node)) return 1;
             node = worded[0];
           }
           return 0;
@@ -9111,7 +7728,7 @@
           // The words the engine reads off a node. For size checks outside this file
           // (highlight.js), so there is one reading of "the text under an element".
           wordsOf: function(node) {
-            return textOf(node);
+            return textOf2(node);
           },
           descriptorFor,
           openingTagOf,
@@ -18645,7 +17262,7 @@
           return record.replyStamp(item);
         }
         var needsToSeeReply = record.needsToSeeReply;
-        var hasWords = record.hasWords;
+        var hasWords2 = record.hasWords;
         function roundStartsExpanded(round, index, total) {
           if (index === total - 1) return true;
           if (total <= 2) return true;
@@ -19250,7 +17867,7 @@
             if (!record.toolRoundOf(item)) return null;
             var reply = item[record.FIELD.REPLY];
             if (!reply || reply.status !== record.REPLY_STATUS.NOT_HANDLED) return null;
-            var why = hasWords(reply.reason) ? reply.reason : hasWords(reply.text) ? reply.text : null;
+            var why = hasWords2(reply.reason) ? reply.reason : hasWords2(reply.text) ? reply.text : null;
             if (!why) return "The agent could not carry the id into the source.";
             return "The agent could not carry the id into the source: " + boundedText(why);
           }
@@ -19604,7 +18221,7 @@
           function toastText(item) {
             var reply = item[record.FIELD.REPLY] || {};
             var said = reply.text || reply.reason;
-            if (hasWords(said)) return clip(boundedText(said), TOAST_TEXT_MAX);
+            if (hasWords2(said)) return clip(boundedText(said), TOAST_TEXT_MAX);
             if (reply.status === record.REPLY_STATUS.QUESTION) return agentName(reply) + " has a question about this.";
             if (reply.status === record.REPLY_STATUS.NOT_HANDLED) return agentName(reply) + " did not do this one.";
             return agentName(reply) + " answered this.";
@@ -23484,7 +22101,7 @@
           SAME_VALUE: "same-value",
           TWO_CHOSEN: "two-chosen"
         };
-        function textOf(node) {
+        function textOf2(node) {
           return String(node && node.textContent || "").replace(/\s+/g, " ").trim();
         }
         function clip(text, max) {
@@ -23505,7 +22122,7 @@
         }
         function questionOf(group) {
           var q = group.querySelector("." + M.QUESTION_CLASS);
-          var text = textOf(q);
+          var text = textOf2(q);
           return text || null;
         }
         function judge(group, counts) {
@@ -23544,7 +22161,7 @@
             var value = buttons[i].getAttribute("value");
             if (!record.isChoiceToken(value)) {
               out.refusal = REFUSAL.BAD_VALUE;
-              out.detail = 'the button "' + clip(textOf(buttons[i]), 40) + '" has ' + (value === null || value === "" ? "no value" : 'the value "' + clip(value, 40) + '", which is not ' + record.CHOICE_TOKEN_RULE);
+              out.detail = 'the button "' + clip(textOf2(buttons[i]), 40) + '" has ' + (value === null || value === "" ? "no value" : 'the value "' + clip(value, 40) + '", which is not ' + record.CHOICE_TOKEN_RULE);
               return out;
             }
             if (seen[value]) {
@@ -23780,7 +22397,7 @@
             if (groups.length !== 1) return null;
             var buttons = buttonsOf(groups[0]);
             for (var i = 0; i < buttons.length; i += 1) {
-              if (buttons[i].getAttribute("value") === answer) return textOf(buttons[i]) || null;
+              if (buttons[i].getAttribute("value") === answer) return textOf2(buttons[i]) || null;
             }
             return null;
           }
@@ -23972,7 +22589,7 @@
           while (el && el.nodeType !== 1) el = el.parentNode;
           while (el && el.nodeType === 1) {
             var tag = String(el.tagName || "").toLowerCase();
-            if (Object.prototype.hasOwnProperty.call(normalize.BLOCK_TAGS, tag)) return el;
+            if (normalize.isBlockTag(tag)) return el;
             el = el.parentElement;
           }
           return null;
@@ -26218,9 +24835,9 @@
           return { text, html };
         }
         function kindFor(before, after) {
-          var textSame = normalize.equalsInMode(normalize.MODE.TEXT, String(before.text || ""), String(after.text || ""));
+          var textSame = normalize.equalsInMode(normalize.COMPARISON_MODE.TEXT, String(before.text || ""), String(after.text || ""));
           var structureSame = normalize.equalsInMode(
-            normalize.MODE.STRUCTURE,
+            normalize.COMPARISON_MODE.STRUCTURE,
             String(before.html || ""),
             String(after.html || "")
           );
@@ -26603,23 +25220,23 @@
             else captureTyping();
             refreshBar();
           }
-          function escapeText(text) {
+          function escapeText2(text) {
             return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
           }
           function inlineMarkup(node) {
             var out = "";
             for (var child = node.firstChild; child; child = child.nextSibling) {
               if (child.nodeType === 3 || child.nodeType === 4) {
-                out += escapeText(child.nodeValue);
+                out += escapeText2(child.nodeValue);
                 continue;
               }
               if (child.nodeType !== 1 || markers.isInsideOverlay(child)) continue;
               var tag = tagOf(child);
+              var inline = normalize.inlineTagFor(tag);
               if (tag === "br") out += "<br>";
               else if (tag === "li") out += "<li>" + inlineMarkup(child) + "</li>";
-              else if (Object.prototype.hasOwnProperty.call(normalize.INLINE_ALLOWED, tag)) {
-                out += "<" + normalize.INLINE_ALLOWED[tag] + ">" + inlineMarkup(child) + "</" + normalize.INLINE_ALLOWED[tag] + ">";
-              } else if (tag !== "script" && tag !== "style" && tag !== "template") out += inlineMarkup(child);
+              else if (inline) out += "<" + inline + ">" + inlineMarkup(child) + "</" + inline + ">";
+              else if (tag !== "script" && tag !== "style" && tag !== "template") out += inlineMarkup(child);
             }
             return out;
           }
@@ -26681,9 +25298,9 @@
           function runVerdict(fields, beforeArg) {
             var before = beforeArg || session.before || { text: "", html: "" };
             var anchorText = normalize.blockText(fields.anchor_after_html || "");
-            var textSame = normalize.equalsInMode(normalize.MODE.TEXT, String(before.text || ""), anchorText);
+            var textSame = normalize.equalsInMode(normalize.COMPARISON_MODE.TEXT, String(before.text || ""), anchorText);
             var structureSame = normalize.equalsInMode(
-              normalize.MODE.STRUCTURE,
+              normalize.COMPARISON_MODE.STRUCTURE,
               String(before.html || ""),
               String(fields.anchor_after_html || "")
             );
@@ -26757,7 +25374,7 @@
             liveNode.textContent = text;
             return text;
           }
-          function firstWords(text) {
+          function firstWords2(text) {
             return normalize.firstWords(text, FIRST_WORDS);
           }
           function anchorBlockFor(el) {
@@ -26772,7 +25389,7 @@
             }
             return el;
           }
-          var OLD_SHAPE_TAG = new RegExp("<(" + Object.keys(normalize.BLOCK_TAGS).join("|") + ")[\\s>]", "i");
+          var OLD_SHAPE_TAG = new RegExp("<(" + normalize.BLOCK_TAGS.join("|") + ")[\\s>]", "i");
           function isOldShape(item) {
             if (!item || record.hasRunFields(item)) return false;
             return OLD_SHAPE_TAG.test(String(item[record.FIELD.AFTER_HTML] || ""));
@@ -26934,7 +25551,7 @@
             }
             if (protect && typeof protect.snapshot === "function") protect.snapshot();
             announce(
-              container ? ANNOUNCE.START_OF_PAGE : ANNOUNCE.AFTER.replace("{words}", firstWords(anchorEl.textContent))
+              container ? ANNOUNCE.START_OF_PAGE : ANNOUNCE.AFTER.replace("{words}", firstWords2(anchorEl.textContent))
             );
             refreshBar();
             return sessionInfo();
@@ -27486,22 +26103,22 @@
             if (!isRun() || markers.isInsideOverlay(event.target)) return;
             var type = String(event.inputType || "");
             if (session.composing || type === "insertCompositionText") return;
-            var refuse = function() {
+            var refuse2 = function() {
               if (typeof event.preventDefault === "function") event.preventDefault();
               counters.refused += 1;
             };
             var sel = liveRange();
             if (!rangeInSession(sel) || !rangeInSession(targetRange(event))) {
-              refuse();
+              refuse2();
               return;
             }
             if (type === "historyUndo" || type === "historyRedo") {
-              refuse();
+              refuse2();
               historyStep(type === "historyUndo" ? gestures.HISTORY.UNDO : gestures.HISTORY.REDO);
               return;
             }
             if (type === "insertParagraph" || type === "insertLineBreak") {
-              refuse();
+              refuse2();
               var shift = type === "insertLineBreak" || !!(session.lastKey && session.lastKey.key === "Enter" && session.lastKey.shiftKey);
               runEnter(shift);
               return;
@@ -27510,20 +26127,20 @@
               var key = /Forward$/.test(type) ? "Delete" : "Backspace";
               var spans = sel && !sel.collapsed && unitOf(sel.startContainer) !== unitOf(sel.endContainer);
               if (spans) {
-                refuse();
+                refuse2();
                 pushHistory();
                 deleteSpan();
                 return;
               }
               if (type === "deleteContentBackward" || type === "deleteContentForward") {
                 var edge = runEdgeDelete(key);
-                if (edge) refuse();
+                if (edge) refuse2();
                 else noteTyping();
               } else noteTyping();
               return;
             }
             if (type === "insertFromPaste" || type === "insertFromDrop" || type === "insertFromPasteAsQuotation" || type === "insertFromYank") {
-              refuse();
+              refuse2();
               var data = event.dataTransfer && typeof event.dataTransfer.getData === "function" ? event.dataTransfer.getData("text/plain") : null;
               if (data === null || data === void 0) data = typeof event.data === "string" ? event.data : "";
               if (data && !session.pasteHandled) insertPlain(data);
@@ -27531,18 +26148,18 @@
               return;
             }
             if (/^format/.test(type)) {
-              if (!ALLOWED_FORMATS[type]) refuse();
+              if (!ALLOWED_FORMATS[type]) refuse2();
               return;
             }
             if (type === "insertText" || type === "insertReplacementText") {
               var text = typeof event.data === "string" ? event.data : "";
               if (text && overCeiling(0, utf8Length(text))) {
-                refuse();
+                refuse2();
                 refuseAtCeiling();
                 return;
               }
               if (sel && !sel.collapsed && unitOf(sel.startContainer) !== unitOf(sel.endContainer)) {
-                refuse();
+                refuse2();
                 pushHistory();
                 deleteSpan();
                 if (text) {
@@ -27554,7 +26171,7 @@
               noteTyping();
               return;
             }
-            if (/^insert/.test(type) && type !== "insertText") refuse();
+            if (/^insert/.test(type) && type !== "insertText") refuse2();
           }
           function onRunPaste(event) {
             if (!isRun() || markers.isInsideOverlay(event.target)) return;
@@ -27834,7 +26451,7 @@
               startedAt: Date.now()
             };
             applyEditableAttrs(block);
-            announce(ANNOUNCE.AFTER.replace("{words}", firstWords(block.textContent)));
+            announce(ANNOUNCE.AFTER.replace("{words}", firstWords2(block.textContent)));
             protect.mark(block, { reason: "edit", item: item[record.FIELD.ID] });
             bindBlock(block);
             drawFrame(block);
@@ -28028,7 +26645,7 @@
             var el = node && node.nodeType === 1 ? node : node ? node.parentNode : null;
             while (el && el !== region) {
               var tag = typeof el.tagName === "string" ? el.tagName.toLowerCase() : "";
-              if (Object.prototype.hasOwnProperty.call(normalize.BLOCK_TAGS, tag)) return el;
+              if (normalize.isBlockTag(tag)) return el;
               el = el.parentNode;
             }
             return region;
@@ -28551,8 +27168,8 @@
           function removeFormat(command, value) {
             var authors = resetStyled(command);
             var ran = doc.execCommand(command, false, value === void 0 ? null : value) === true;
-            var converted7 = convertResets(command, authors);
-            if (converted7) return true;
+            var converted8 = convertResets(command, authors);
+            if (converted8) return true;
             if (!commandActive(command)) return ran;
             return wrapSelection(command) || ran;
           }
@@ -28562,7 +27179,7 @@
             if (!tag) return 0;
             var styled = resetStyled(command);
             var property = command === COMMANDS.bold ? "font-weight" : "font-style";
-            var converted7 = 0;
+            var converted8 = 0;
             var last = null;
             for (var i = 0; i < styled.length; i += 1) {
               var el = styled[i];
@@ -28577,11 +27194,11 @@
               } else {
                 marker.appendChild(el);
               }
-              converted7 += 1;
+              converted8 += 1;
               last = marker;
             }
             if (last) selectContents(last);
-            return converted7;
+            return converted8;
           }
           function resetStyled(command) {
             var block = formatScope();
@@ -31458,7 +30075,7 @@
           return folded(before) !== folded(after);
         }
         function splitPieces(item, mode) {
-          if (mode !== normalize.MODE.TEXT) return null;
+          if (mode !== normalize.COMPARISON_MODE.TEXT) return null;
           if (!item || item[record.FIELD.KIND] !== record.KIND.EDIT) return null;
           var after = item[record.FIELD.AFTER];
           if (typeof after !== "string" || after.indexOf("\n") === -1) return null;
@@ -31524,7 +30141,7 @@
           var match = tagName.exec(markup);
           while (match) {
             var name = match[1];
-            if (name === "br" || Object.prototype.hasOwnProperty.call(normalize.BLOCK_TAGS, name)) return false;
+            if (name === "br" || normalize.isBlockTag(name)) return false;
             match = tagName.exec(markup);
           }
           return true;
@@ -31533,7 +30150,7 @@
           return markup.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&apos;/g, "'").replace(/&amp;/g, "&");
         }
         function reflowMatch(item, mode, domText) {
-          if (mode !== normalize.MODE.TEXT || typeof domText !== "string") return null;
+          if (mode !== normalize.COMPARISON_MODE.TEXT || typeof domText !== "string") return null;
           if (!item || item[record.FIELD.KIND] !== record.KIND.EDIT) return null;
           var after = item[record.FIELD.AFTER];
           var before = item[record.FIELD.BEFORE];
@@ -32579,7 +31196,7 @@
           return words ? words.split(" ").length : 0;
         }
         var FIRST_WORDS = 6;
-        function firstWords(html) {
+        function firstWords2(html) {
           return normalize.firstWords(normalize.textOf(typeof html === "string" ? html : ""), FIRST_WORDS, "...");
         }
         function runAnchorView(item) {
@@ -32940,7 +31557,7 @@
                 ctx,
                 id,
                 RUN_NOTE_WRONG_TAG,
-                "The agent placed '" + firstWords(block.html) + "' as a " + blockTypeName(pageTag) + ". You wrote a " + blockTypeName(block.tag) + ", so Lahe sent it back."
+                "The agent placed '" + firstWords2(block.html) + "' as a " + blockTypeName(pageTag) + ". You wrote a " + blockTypeName(block.tag) + ", so Lahe sent it back."
               );
             }
           }
@@ -33033,7 +31650,7 @@
                 ctx,
                 id,
                 RUN_NOTE_ELSEWHERE,
-                "'" + firstWords(block.html) + "' is already further down the page, so Lahe did not add it again."
+                "'" + firstWords2(block.html) + "' is already further down the page, so Lahe did not add it again."
               );
               return;
             }
@@ -33728,7 +32345,7 @@
         }
       })(typeof globalThis !== "undefined" ? globalThis : exports, function(ns, ownScript) {
         "use strict";
-        var VERSION = "0.4.0+d38fe29a13e9";
+        var VERSION = "0.4.0+9b73f75785bd";
         var protocol = ns.protocol;
         var record = ns.record;
         var markers = ns.markers;
@@ -35286,8 +33903,1270 @@
   globalThis.LAHE = globalThis.LAHE || {};
   globalThis.LAHE.markers = converted;
 
-  // lahe-entry.js
-  var import_normalize = __toESM(require_normalize());
+  // src/domain/text.ts
+  var text_exports = {};
+  __export(text_exports, {
+    LINE_BREAK: () => LINE_BREAK,
+    PARAGRAPH_BREAK: () => PARAGRAPH_BREAK,
+    cleanCharacters: () => cleanCharacters,
+    collapseSpaces: () => collapseSpaces,
+    firstWords: () => firstWords,
+    foldTypography: () => foldTypography,
+    normalizeBlockText: () => normalizeBlockText,
+    normalizeText: () => normalizeText
+  });
+  var LINE_BREAK = "\n";
+  var PARAGRAPH_BREAK = "\n\n";
+  var CONTROLS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
+  var INVISIBLES = /[\u200B\uFEFF\u00AD]/g;
+  var SPACE_RUN = /[\t\n\r \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]+/g;
+  var HORIZONTAL_SPACE_RUN = /[\t \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]+/g;
+  function cleanCharacters(input) {
+    return input.normalize("NFC").replace(CONTROLS, "").replace(INVISIBLES, "");
+  }
+  function collapseSpaces(input) {
+    return input.replace(SPACE_RUN, " ");
+  }
+  function normalizeText(input) {
+    return collapseSpaces(cleanCharacters(input)).trim();
+  }
+  function normalizeBlockText(input) {
+    return cleanCharacters(input).replace(/\r\n?/g, LINE_BREAK).replace(HORIZONTAL_SPACE_RUN, " ").replace(/ ?\n ?/g, LINE_BREAK).replace(/\n{3,}/g, PARAGRAPH_BREAK).trim();
+  }
+  function foldTypography(input) {
+    return normalizeText(input).replace(/[\u2018\u2019\u201A\u201B\u2032]/g, "'").replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"').replace(/[\u2010-\u2015\u2212]/g, "-").replace(/-{2,}/g, "-").replace(/\u2026/g, "...");
+  }
+  function firstWords(text, max, more = "") {
+    const words = normalizeText(text ?? "").split(" ").filter((word) => word !== "");
+    return words.length > max ? words.slice(0, max).join(" ") + more : words.join(" ");
+  }
+
+  // src/domain/html-syntax.ts
+  var html_syntax_exports = {};
+  __export(html_syntax_exports, {
+    BLOCK_TAGS: () => BLOCK_TAGS,
+    DROP_SUBTREE_TAGS: () => DROP_SUBTREE_TAGS,
+    breakOfTag: () => breakOfTag,
+    decodeEntities: () => decodeEntities,
+    escapeAttrValue: () => escapeAttrValue,
+    isBlockTag: () => isBlockTag,
+    isDroppedSubtreeTag: () => isDroppedSubtreeTag,
+    isVoidTag: () => isVoidTag,
+    isWhitespacePreservingTag: () => isWhitespacePreservingTag,
+    nbspToSpace: () => nbspToSpace,
+    readTag: () => readTag,
+    skipDeclaration: () => skipDeclaration,
+    tokenizeMarkup: () => tokenizeMarkup
+  });
+  var BLOCK_TAGS = [
+    "address",
+    "article",
+    "aside",
+    "blockquote",
+    "dd",
+    "details",
+    "div",
+    "dl",
+    "dt",
+    "fieldset",
+    "figcaption",
+    "figure",
+    "footer",
+    "form",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "header",
+    "hgroup",
+    "hr",
+    "li",
+    "main",
+    "nav",
+    "ol",
+    "p",
+    "pre",
+    "section",
+    "summary",
+    "table",
+    "tbody",
+    "td",
+    "tfoot",
+    "th",
+    "thead",
+    "tr",
+    "ul"
+  ];
+  var DROP_SUBTREE_TAGS = [
+    "script",
+    "style",
+    "template",
+    "noscript",
+    "iframe",
+    "object",
+    "embed",
+    "applet",
+    "frame",
+    "frameset"
+  ];
+  var BLOCK_TAG_SET = new Set(BLOCK_TAGS);
+  var DROP_SUBTREE_TAG_SET = new Set(DROP_SUBTREE_TAGS);
+  var VOID_TAG_SET = /* @__PURE__ */ new Set([
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "param",
+    "source",
+    "track",
+    "wbr"
+  ]);
+  var WHITESPACE_PRESERVING_TAG_SET = /* @__PURE__ */ new Set(["pre", "textarea"]);
+  var NAMED_ENTITIES = /* @__PURE__ */ new Map([
+    ["amp", "&"],
+    ["lt", "<"],
+    ["gt", ">"],
+    ["quot", '"'],
+    ["apos", "'"],
+    ["nbsp", "\xA0"]
+  ]);
+  var MAX_CODE_POINT = 1114111;
+  var ASCII_LETTER = /[A-Za-z]/;
+  var NAME_CHARACTER = /[A-Za-z0-9:_-]/;
+  var ATTRIBUTE_NAME_END = /[\s=/>]/;
+  var UNQUOTED_VALUE_END = /[\s>]/;
+  var WHITESPACE = /\s/;
+  var REFERENCE = /&(#[xX][0-9a-fA-F]+|#\d+|[A-Za-z]+);/g;
+  var NBSP_SPELLING = /&(?:nbsp|#160|#xa0);/gi;
+  function isBlockTag(name) {
+    return BLOCK_TAG_SET.has(name);
+  }
+  function isDroppedSubtreeTag(name) {
+    return DROP_SUBTREE_TAG_SET.has(name);
+  }
+  function isVoidTag(name) {
+    return VOID_TAG_SET.has(name);
+  }
+  function isWhitespacePreservingTag(name) {
+    return WHITESPACE_PRESERVING_TAG_SET.has(name);
+  }
+  function breakOfTag(name) {
+    if (name === "br") return LINE_BREAK;
+    return isBlockTag(name) ? PARAGRAPH_BREAK : "";
+  }
+  function decodeEntities(text) {
+    return text.replace(REFERENCE, (whole, body) => {
+      if (body.startsWith("#")) {
+        const hex = body.charAt(1) === "x" || body.charAt(1) === "X";
+        const code = hex ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
+        return code > 0 && code <= MAX_CODE_POINT ? String.fromCodePoint(code) : whole;
+      }
+      return NAMED_ENTITIES.get(body.toLowerCase()) ?? whole;
+    });
+  }
+  function nbspToSpace(text) {
+    return text.replace(NBSP_SPELLING, " ");
+  }
+  function escapeAttrValue(value) {
+    return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function skipWhitespace(html, from) {
+    let at = from;
+    while (at < html.length && WHITESPACE.test(html.charAt(at))) at += 1;
+    return at;
+  }
+  function readTag(html, at) {
+    const closing = html.charAt(at + 1) === "/";
+    const nameStart = at + (closing ? 2 : 1);
+    if (!ASCII_LETTER.test(html.charAt(nameStart))) return null;
+    let i = nameStart;
+    while (i < html.length && NAME_CHARACTER.test(html.charAt(i))) i += 1;
+    const name = html.slice(nameStart, i).toLowerCase();
+    if (closing) {
+      const bracket = html.indexOf(">", i);
+      return { kind: "end", name, end: bracket === -1 ? html.length : bracket + 1 };
+    }
+    const attributes = [];
+    let selfClosing = false;
+    while (i < html.length) {
+      i = skipWhitespace(html, i);
+      const next = html.charAt(i);
+      if (next === ">") {
+        i += 1;
+        break;
+      }
+      if (next === "/" && html.charAt(i + 1) === ">") {
+        selfClosing = true;
+        i += 2;
+        break;
+      }
+      if (i >= html.length) break;
+      const nameFrom = i;
+      while (i < html.length && !ATTRIBUTE_NAME_END.test(html.charAt(i))) i += 1;
+      if (i === nameFrom) {
+        i += 1;
+        continue;
+      }
+      const attributeName = html.slice(nameFrom, i).toLowerCase();
+      const afterName = i;
+      let value = "";
+      i = skipWhitespace(html, i);
+      if (html.charAt(i) === "=") {
+        i = skipWhitespace(html, i + 1);
+        const quote = html.charAt(i);
+        if (quote === '"' || quote === "'") {
+          const close = html.indexOf(quote, i + 1);
+          const stop = close === -1 ? html.length : close;
+          value = html.slice(i + 1, stop);
+          i = close === -1 ? html.length : close + 1;
+        } else {
+          const valueFrom = i;
+          while (i < html.length && !UNQUOTED_VALUE_END.test(html.charAt(i))) i += 1;
+          value = html.slice(valueFrom, i);
+        }
+      } else {
+        i = afterName;
+      }
+      attributes.push({ name: attributeName, value: decodeEntities(value) });
+    }
+    return { kind: "start", name, attributes, selfClosing, end: Math.min(i, html.length) };
+  }
+  function tokenizeMarkup(html) {
+    const tokens = [];
+    let i = 0;
+    while (i < html.length) {
+      const lt = html.indexOf("<", i);
+      if (lt === -1) {
+        tokens.push({ kind: "text", text: html.slice(i) });
+        break;
+      }
+      if (lt > i) tokens.push({ kind: "text", text: html.slice(i, lt) });
+      const tag = readTag(html, lt);
+      if (tag === null) {
+        tokens.push({ kind: "text", text: "<" });
+        i = lt + 1;
+        continue;
+      }
+      tokens.push({ kind: "tag", tag, source: html.slice(lt, tag.end) });
+      i = tag.end;
+    }
+    return tokens;
+  }
+  function skipDeclaration(html, at) {
+    if (html.startsWith("<!--", at)) {
+      const close = html.indexOf("-->", at + 4);
+      return close === -1 ? html.length : close + 3;
+    }
+    const next = html.charAt(at + 1);
+    if (next !== "!" && next !== "?") return null;
+    const bracket = html.indexOf(">", at);
+    return bracket === -1 ? html.length : bracket + 1;
+  }
+
+  // src/domain/formatting.ts
+  var formatting_exports = {};
+  __export(formatting_exports, {
+    NOT_BOLD_TAG: () => NOT_BOLD_TAG,
+    NOT_ITALIC_TAG: () => NOT_ITALIC_TAG,
+    RESET_TAGS: () => RESET_TAGS,
+    STRUCTURAL_TAGS: () => STRUCTURAL_TAGS,
+    isNotBoldWeight: () => isNotBoldWeight,
+    isNotItalicStyle: () => isNotItalicStyle,
+    isStructuralTag: () => isStructuralTag,
+    resetTagsForStyle: () => resetTagsForStyle
+  });
+  var NOT_BOLD_TAG = "not-bold";
+  var NOT_ITALIC_TAG = "not-italic";
+  var RESET_TAGS = {
+    bold: NOT_BOLD_TAG,
+    italic: NOT_ITALIC_TAG
+  };
+  var STRUCTURAL_TAGS = [
+    "em",
+    "strong",
+    NOT_BOLD_TAG,
+    NOT_ITALIC_TAG
+  ];
+  var STRUCTURAL_TAG_SET = new Set(STRUCTURAL_TAGS);
+  var NOT_BOLD_WEIGHTS = /* @__PURE__ */ new Set(["normal", "lighter", "100", "200", "300", "400", "500"]);
+  function isStructuralTag(name) {
+    return STRUCTURAL_TAG_SET.has(name);
+  }
+  function isNotBoldWeight(value) {
+    return NOT_BOLD_WEIGHTS.has(value.trim().toLowerCase());
+  }
+  function isNotItalicStyle(value) {
+    return value.trim().toLowerCase() === "normal";
+  }
+  function lastDeclaration(style, property) {
+    let found = "";
+    for (const part of style.split(";")) {
+      const colon = part.indexOf(":");
+      if (colon === -1) continue;
+      if (part.slice(0, colon).trim().toLowerCase() !== property) continue;
+      found = part.slice(colon + 1).trim().toLowerCase();
+    }
+    return found;
+  }
+  function resetTagsForStyle(style) {
+    const tags = [];
+    if (isNotBoldWeight(lastDeclaration(style, "font-weight"))) tags.push(RESET_TAGS.bold);
+    if (isNotItalicStyle(lastDeclaration(style, "font-style"))) tags.push(RESET_TAGS.italic);
+    return tags;
+  }
+
+  // src/domain/clean-markup.ts
+  var clean_markup_exports = {};
+  __export(clean_markup_exports, {
+    cleanMarkup: () => cleanMarkup
+  });
+  var URL_ATTRIBUTES = /* @__PURE__ */ new Set([
+    "href",
+    "src",
+    "srcset",
+    "action",
+    "formaction",
+    "poster",
+    "xlink:href",
+    "data",
+    "cite",
+    "background"
+  ]);
+  var SAFE_SCHEMES = /* @__PURE__ */ new Set(["http", "https", "mailto", "tel"]);
+  var DROPPED_ATTRIBUTES = /* @__PURE__ */ new Set([
+    "style",
+    "contenteditable",
+    "spellcheck",
+    "autocorrect",
+    "autocapitalize",
+    TURBO_PERMANENT_ATTR,
+    "srcdoc"
+  ]);
+  var RENAMED_TAGS = /* @__PURE__ */ new Map([
+    ["b", "strong"],
+    ["i", "em"]
+  ]);
+  var MAX_CODE_POINT2 = 1114111;
+  var SCHEME_SHAPE = /^[a-zA-Z][a-zA-Z0-9+.-]*$/;
+  function codePointText(code) {
+    return code >= 0 && code <= MAX_CODE_POINT2 ? String.fromCodePoint(code) : "";
+  }
+  function resolveForSchemeCheck(value) {
+    return value.replace(/&#[xX]([0-9a-fA-F]+);?/g, (...match) => codePointText(parseInt(match[1] ?? "", 16))).replace(/&#(\d+);?/g, (...match) => codePointText(parseInt(match[1] ?? "", 10))).replace(/&colon;?/gi, ":").replace(/&tab;?/gi, "").replace(/&newline;?/gi, "").replace(/&amp;?/gi, "&").replace(/[\u0000-\u001F\u007F-\u009F]/g, "").replace(/\s+/g, "");
+  }
+  function isSafeUrl(value) {
+    const resolved = resolveForSchemeCheck(value);
+    const colon = resolved.indexOf(":");
+    if (colon === -1) return true;
+    const scheme = resolved.slice(0, colon);
+    return !SCHEME_SHAPE.test(scheme) || SAFE_SCHEMES.has(scheme.toLowerCase());
+  }
+  function lastValue(attributes, name) {
+    let found = null;
+    for (const attribute of attributes) {
+      if (attribute.name === name) found = attribute.value;
+    }
+    return found;
+  }
+  function cleanAttributes(attributes) {
+    const kept = [];
+    for (const { name, value } of attributes) {
+      if (isToolAttrName(name) || DROPPED_ATTRIBUTES.has(name) || name.startsWith("on")) continue;
+      if (name === "class") {
+        const tokens = value.split(/\s+/).filter((token) => token !== "" && !isToolClassToken(token));
+        if (tokens.length > 0) kept.push({ name, value: tokens.join(" ") });
+        continue;
+      }
+      if (URL_ATTRIBUTES.has(name) && !isSafeUrl(value)) continue;
+      kept.push({ name, value });
+    }
+    return kept.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+  }
+  function startTag(name, attributes) {
+    let out = "<" + name;
+    for (const attribute of attributes) out += " " + attribute.name + '="' + escapeAttrValue(attribute.value) + '"';
+    return out + ">";
+  }
+  function endTags(entry) {
+    let out = "";
+    for (let i = entry.emitNames.length - 1; i >= 0; i -= 1) out += "</" + (entry.emitNames[i] ?? "") + ">";
+    return out;
+  }
+  function cleanMarkup(html, options = {}) {
+    const keepWhitespace = options.keepWhitespace === true;
+    const out = [];
+    const stack = [];
+    let dropDepth = 0;
+    let preDepth = 0;
+    function emitText(text) {
+      if (dropDepth > 0 || text === "") return;
+      const characters = cleanCharacters(text);
+      if (keepWhitespace) {
+        out.push(characters);
+        return;
+      }
+      const spaced = nbspToSpace(characters);
+      out.push(preDepth > 0 ? spaced : collapseSpaces(spaced));
+    }
+    function closeDownTo(depth) {
+      while (stack.length > depth) {
+        const entry = stack.pop();
+        if (entry === void 0) return;
+        if (entry.action === "drop") dropDepth -= 1;
+        if (entry.preservesWhitespace) preDepth -= 1;
+        if (entry.action === "keep") out.push(endTags(entry));
+      }
+    }
+    function closeElement(name) {
+      for (let i2 = stack.length - 1; i2 >= 0; i2 -= 1) {
+        if (stack[i2]?.name === name) {
+          closeDownTo(i2);
+          return;
+        }
+      }
+    }
+    function openElement(name, attributes) {
+      const role = lastValue(attributes, TOOL_ATTR);
+      let action = "keep";
+      if (dropDepth > 0 || isDroppedSubtreeTag(name) || role === ROLE_CHROME) action = "drop";
+      else if (role === ROLE_WRAP) action = "unwrap";
+      const emitName = RENAMED_TAGS.get(name) ?? name;
+      const kept = cleanAttributes(attributes);
+      if (isVoidTag(name)) {
+        if (action === "keep") out.push(startTag(emitName, kept));
+        return;
+      }
+      const resets = action === "keep" ? resetTagsForStyle(lastValue(attributes, "style") ?? "") : [];
+      const keepsOwnTag = resets.length === 0 || kept.length > 0 || name !== "span";
+      const emitNames = keepsOwnTag ? [...resets, emitName] : [...resets];
+      if (action === "drop") dropDepth += 1;
+      const preservesWhitespace = action === "keep" && isWhitespacePreservingTag(name);
+      if (preservesWhitespace) preDepth += 1;
+      if (action === "keep") {
+        emitNames.forEach((emitted, index) => {
+          out.push(index === emitNames.length - 1 ? startTag(emitted, kept) : "<" + emitted + ">");
+        });
+      }
+      stack.push({ name, emitNames, action, preservesWhitespace });
+    }
+    let i = 0;
+    while (i < html.length) {
+      const lt = html.indexOf("<", i);
+      if (lt === -1) {
+        emitText(html.slice(i));
+        break;
+      }
+      if (lt > i) emitText(html.slice(i, lt));
+      const skipped = skipDeclaration(html, lt);
+      if (skipped !== null) {
+        i = skipped;
+        continue;
+      }
+      const tag = readTag(html, lt);
+      if (tag === null) {
+        emitText("<");
+        i = lt + 1;
+        continue;
+      }
+      i = tag.end;
+      if (tag.kind === "end") closeElement(tag.name);
+      else openElement(tag.name, tag.attributes);
+    }
+    closeDownTo(0);
+    const joined = out.join("");
+    return keepWhitespace ? joined : joined.trim();
+  }
+
+  // src/domain/embedded-value.ts
+  var embedded_value_exports = {};
+  __export(embedded_value_exports, {
+    embeddedName: () => embeddedName,
+    isEmbeddedValue: () => isEmbeddedValue
+  });
+  var EMBEDDED_PREFIX = /^\s*data:/i;
+  var DATA_SCHEME_LENGTH = "data:".length;
+  var MIX_A = 2654435761;
+  var MIX_B = 1597334677;
+  var FINISH_A = 2246822507;
+  var FINISH_B = 3266489909;
+  function hex8(value) {
+    return (value >>> 0).toString(16).padStart(8, "0");
+  }
+  function digestOf(value) {
+    let h1 = 3735928559;
+    let h2 = 1103547991;
+    for (let i = 0; i < value.length; i += 1) {
+      const unit = value.charCodeAt(i);
+      h1 = Math.imul(h1 ^ unit, MIX_A);
+      h2 = Math.imul(h2 ^ unit, MIX_B);
+    }
+    h1 = Math.imul(h1 ^ h1 >>> 16, FINISH_A) ^ Math.imul(h2 ^ h2 >>> 13, FINISH_B);
+    h2 = Math.imul(h2 ^ h2 >>> 16, FINISH_A) ^ Math.imul(h1 ^ h1 >>> 13, FINISH_B);
+    return hex8(h2) + hex8(h1);
+  }
+  function isEmbeddedValue(value) {
+    return EMBEDDED_PREFIX.test(value);
+  }
+  function embeddedName(value) {
+    if (!isEmbeddedValue(value)) return value;
+    const text = value.replace(/^\s+/, "");
+    const comma = text.indexOf(",");
+    const media = comma === -1 ? "" : text.slice(DATA_SCHEME_LENGTH, comma);
+    return "embedded:" + media + ":" + String(text.length) + ":" + digestOf(text);
+  }
+
+  // src/domain/block-text.ts
+  var block_text_exports = {};
+  __export(block_text_exports, {
+    blockText: () => blockText,
+    blockTextFromNode: () => blockTextFromNode,
+    textOf: () => textOf,
+    topLevelBlocks: () => topLevelBlocks
+  });
+  var NODE_TYPE = { ELEMENT: 1, TEXT: 3, CDATA: 4, DOCUMENT: 9, FRAGMENT: 11 };
+  var PRE_SPACE = "\uE000";
+  var PRE_NEWLINE = "\uE001";
+  var PRE_TAB = "\uE002";
+  function protectPreformatted(text) {
+    return text.replace(/ /g, PRE_SPACE).replace(/\n/g, PRE_NEWLINE).replace(/\t/g, PRE_TAB);
+  }
+  function restorePreformatted(text) {
+    return text.replaceAll(PRE_SPACE, " ").replaceAll(PRE_NEWLINE, "\n").replaceAll(PRE_TAB, "	");
+  }
+  function finishText(parts) {
+    return restorePreformatted(normalizeBlockText(parts.join("")));
+  }
+  function nextPreformattedDepth(depth, tag) {
+    if (!isWhitespacePreservingTag(tag.name)) return depth;
+    if (tag.kind === "end") return Math.max(0, depth - 1);
+    return tag.selfClosing ? depth : depth + 1;
+  }
+  function nextDroppedDepth(depth, tag) {
+    if (tag.kind === "end") return Math.max(0, depth - 1);
+    return tag.selfClosing ? depth : depth + 1;
+  }
+  function blockText(html) {
+    const parts = [];
+    let preDepth = 0;
+    for (const token of tokenizeMarkup(cleanMarkup(html))) {
+      if (token.kind === "text") {
+        parts.push(preDepth > 0 ? protectPreformatted(token.text) : token.text);
+        continue;
+      }
+      preDepth = nextPreformattedDepth(preDepth, token.tag);
+      parts.push(breakOfTag(token.tag.name));
+    }
+    return finishText(parts);
+  }
+  function textOf(value) {
+    const parts = [];
+    let dropDepth = 0;
+    let preDepth = 0;
+    for (const token of tokenizeMarkup(value)) {
+      if (token.kind === "text") {
+        if (dropDepth > 0) continue;
+        const text = nbspToSpace(token.text);
+        parts.push(preDepth > 0 ? protectPreformatted(text) : text);
+        continue;
+      }
+      if (isDroppedSubtreeTag(token.tag.name) && (token.tag.kind === "end" || !token.tag.selfClosing)) {
+        dropDepth = nextDroppedDepth(dropDepth, token.tag);
+        continue;
+      }
+      preDepth = nextPreformattedDepth(preDepth, token.tag);
+      if (dropDepth === 0) parts.push(breakOfTag(token.tag.name));
+    }
+    return finishText(parts);
+  }
+  function collectNodeText(node, parts, skip, preDepth) {
+    const type = node.nodeType;
+    if (type === NODE_TYPE.TEXT || type === NODE_TYPE.CDATA) {
+      const data = node.data ?? node.nodeValue ?? "";
+      parts.push(preDepth > 0 ? protectPreformatted(data) : collapseSpaces(data));
+      return;
+    }
+    const isElement = type === NODE_TYPE.ELEMENT;
+    if (!isElement && type !== NODE_TYPE.DOCUMENT && type !== NODE_TYPE.FRAGMENT) return;
+    let childDepth = preDepth;
+    let isBlock = false;
+    if (isElement) {
+      if (skip(node)) return;
+      const tag = node.tagName?.toLowerCase() ?? "";
+      if (isDroppedSubtreeTag(tag)) return;
+      if (tag === "br") {
+        parts.push(LINE_BREAK);
+        return;
+      }
+      isBlock = isBlockTag(tag);
+      if (isBlock) parts.push(PARAGRAPH_BREAK);
+      if (isWhitespacePreservingTag(tag)) childDepth += 1;
+    }
+    for (let child = node.firstChild; child; child = child.nextSibling) {
+      collectNodeText(child, parts, skip, childDepth);
+    }
+    if (isBlock) parts.push(PARAGRAPH_BREAK);
+  }
+  function blockTextFromNode(node, options = {}) {
+    const parts = [];
+    collectNodeText(node, parts, options.skip ?? isToolNode, 0);
+    return finishText(parts);
+  }
+  function topLevelBlocks(html) {
+    const candidates = [];
+    let loose = "";
+    let inner = "";
+    let inBlock = false;
+    let depth = 0;
+    for (const token of tokenizeMarkup(cleanMarkup(html))) {
+      if (token.kind === "text") {
+        if (inBlock) inner += token.text;
+        else loose += token.text;
+        continue;
+      }
+      const tag = token.tag;
+      const isVoid = isVoidTag(tag.name) || tag.kind === "start" && tag.selfClosing;
+      if (depth === 0 && tag.kind === "start") {
+        if (tag.name === "br" || tag.name === "hr") {
+          candidates.push(loose);
+          loose = "";
+          continue;
+        }
+        if (!isVoid && isBlockTag(tag.name)) {
+          candidates.push(loose);
+          loose = "";
+          inner = "";
+          inBlock = true;
+          depth = 1;
+          continue;
+        }
+      }
+      if (tag.kind === "end") {
+        depth -= 1;
+        if (depth < 0) return null;
+        if (depth === 0 && inBlock) {
+          candidates.push(inner);
+          inBlock = false;
+          continue;
+        }
+      } else if (!isVoid) {
+        depth += 1;
+      }
+      if (inBlock) inner += token.source;
+      else loose += token.source;
+    }
+    if (depth !== 0 || inBlock) return null;
+    candidates.push(loose);
+    const pieces = [];
+    for (const candidate of candidates) {
+      const markup = candidate.trim();
+      if (markup === "") continue;
+      if (normalizeText(textOf(markup)) === "") return null;
+      pieces.push(markup);
+    }
+    return pieces;
+  }
+
+  // src/domain/comparison.ts
+  var comparison_exports = {};
+  __export(comparison_exports, {
+    COMPARISON_MODE: () => COMPARISON_MODE,
+    emphasisRuns: () => emphasisRuns,
+    equalsInMode: () => equalsInMode,
+    modeFor: () => modeFor,
+    structureOf: () => structureOf
+  });
+  var COMPARISON_MODE = {
+    TEXT: "text",
+    STRUCTURE: "structure"
+  };
+  var FORMAT_ONLY_KIND = "format_only";
+  function modeFor(kind) {
+    return kind === FORMAT_ONLY_KIND ? COMPARISON_MODE.STRUCTURE : COMPARISON_MODE.TEXT;
+  }
+  function structureOf(html) {
+    const parts = [];
+    for (const token of tokenizeMarkup(cleanMarkup(html))) {
+      if (token.kind === "text") {
+        parts.push(token.text);
+      } else if (isStructuralTag(token.tag.name)) {
+        parts.push((token.tag.kind === "end" ? "</" : "<") + token.tag.name + ">");
+      } else {
+        parts.push(breakOfTag(token.tag.name));
+      }
+    }
+    return normalizeText(parts.join(""));
+  }
+  function equalsInMode(mode, a, b) {
+    switch (mode) {
+      case COMPARISON_MODE.TEXT:
+        return textOf(a) === textOf(b);
+      case COMPARISON_MODE.STRUCTURE:
+        return structureOf(a) === structureOf(b);
+    }
+  }
+  function finishRun(runs, run) {
+    const text = normalizeText(run.text);
+    if (text !== "") runs.push({ tag: run.tag, text });
+  }
+  function emphasisRuns(html) {
+    const open = [];
+    const runs = [];
+    for (const token of tokenizeMarkup(structureOf(html))) {
+      if (token.kind === "text") {
+        for (const run of open) run.text += token.text;
+        continue;
+      }
+      const name = token.tag.name;
+      if (!isStructuralTag(name)) continue;
+      if (token.tag.kind === "start") {
+        open.push({ tag: name, text: "" });
+        continue;
+      }
+      for (let i = open.length - 1; i >= 0; i -= 1) {
+        const run = open[i];
+        if (run?.tag !== name) continue;
+        open.splice(i, 1);
+        finishRun(runs, run);
+        break;
+      }
+    }
+    return runs;
+  }
+
+  // src/domain/run-blocks.ts
+  var run_blocks_exports = {};
+  __export(run_blocks_exports, {
+    MAX_BLOCK_NESTING: () => MAX_BLOCK_NESTING,
+    WRITABLE_BLOCK_TAGS: () => WRITABLE_BLOCK_TAGS,
+    blockWords: () => blockWords,
+    cleanBlock: () => cleanBlock,
+    inlineTagFor: () => inlineTagFor,
+    isWritableBlockTag: () => isWritableBlockTag,
+    runWords: () => runWords
+  });
+  var WRITABLE_BLOCK_TAGS = ["p", "h2", "h3", "h4", "ul", "ol"];
+  var MAX_BLOCK_NESTING = 32;
+  var RUN_BLOCK_REFUSED = "RUN_BLOCK_REFUSED";
+  var WRITABLE_BLOCK_TAG_SET = new Set(WRITABLE_BLOCK_TAGS);
+  var INLINE_TAGS = /* @__PURE__ */ new Map([
+    ["strong", "strong"],
+    ["b", "strong"],
+    ["em", "em"],
+    ["i", "em"],
+    [NOT_BOLD_TAG, NOT_BOLD_TAG],
+    [NOT_ITALIC_TAG, NOT_ITALIC_TAG]
+  ]);
+  function isWritableBlockTag(name) {
+    return WRITABLE_BLOCK_TAG_SET.has(name);
+  }
+  function inlineTagFor(name) {
+    return INLINE_TAGS.get(name) ?? null;
+  }
+  function refuse(reason) {
+    return { code: RUN_BLOCK_REFUSED, reason };
+  }
+  function escapeText(text) {
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function cleanText(raw) {
+    return collapseSpaces(cleanCharacters(decodeEntities(raw)));
+  }
+  function hasWords(node) {
+    if (node.kind === "text") return node.text.trim() !== "";
+    if (node.kind === "break") return false;
+    return node.children.some(hasWords);
+  }
+  function pruneEmpty(nodes) {
+    const out = [];
+    let pending = [];
+    function flush() {
+      if (pending.length === 0) return;
+      out.push({ kind: "text", text: pending.join("").replace(/ +/g, " ") });
+      pending = [];
+    }
+    for (const node of nodes) {
+      if (node.kind === "element") {
+        if (!hasWords(node)) continue;
+        flush();
+        out.push({ kind: "element", name: node.name, children: pruneEmpty(node.children) });
+      } else if (node.kind === "text") {
+        if (node.text !== "") pending.push(node.text);
+      } else {
+        flush();
+        out.push(node);
+      }
+    }
+    flush();
+    return out;
+  }
+  function trimStart(nodes) {
+    let removable = 0;
+    for (const node of nodes) {
+      if (node.kind === "break") {
+        removable += 1;
+        continue;
+      }
+      if (node.kind === "text") {
+        node.text = node.text.replace(/^ +/, "");
+        if (node.text === "") {
+          removable += 1;
+          continue;
+        }
+        break;
+      }
+      trimStart(node.children);
+      if (node.children.length === 0) {
+        removable += 1;
+        continue;
+      }
+      break;
+    }
+    nodes.splice(0, removable);
+  }
+  function trimEnd(nodes) {
+    while (nodes.length > 0) {
+      const last = nodes[nodes.length - 1];
+      if (last === void 0) return;
+      if (last.kind === "break") {
+        nodes.pop();
+        continue;
+      }
+      if (last.kind === "text") {
+        last.text = last.text.replace(/ +$/, "");
+        if (last.text === "") {
+          nodes.pop();
+          continue;
+        }
+        return;
+      }
+      trimEnd(last.children);
+      if (last.children.length === 0) {
+        nodes.pop();
+        continue;
+      }
+      return;
+    }
+  }
+  function serialize(nodes) {
+    let out = "";
+    for (const node of nodes) {
+      if (node.kind === "text") out += escapeText(node.text);
+      else if (node.kind === "break") out += "<br>";
+      else out += "<" + node.name + ">" + serialize(node.children) + "</" + node.name + ">";
+    }
+    return out;
+  }
+  function finishInline(children) {
+    const nodes = pruneEmpty(children);
+    trimStart(nodes);
+    trimEnd(nodes);
+    return serialize(pruneEmpty(nodes));
+  }
+  function cleanBlock(tag, html) {
+    const blockTag = typeof tag === "string" ? tag.toLowerCase() : "";
+    if (!isWritableBlockTag(blockTag)) return refuse("tag " + String(tag) + " is not writable");
+    if (typeof html !== "string") return refuse("html must be a string");
+    const isList = blockTag === "ul" || blockTag === "ol";
+    const root = { kind: "root", name: blockTag, children: [] };
+    const stack = [root];
+    let i = 0;
+    while (i < html.length) {
+      const lt = html.indexOf("<", i);
+      const textEnd = lt === -1 ? html.length : lt;
+      const top = stack[stack.length - 1] ?? root;
+      if (textEnd > i) {
+        const chunk = cleanText(html.slice(i, textEnd));
+        if (isList && top === root) {
+          if (chunk.trim() !== "") return refuse("words outside an item in a list block");
+        } else if (chunk !== "") {
+          top.children.push({ kind: "text", text: chunk });
+        }
+      }
+      if (lt === -1) break;
+      if (skipDeclaration(html, lt) !== null) return refuse("a comment or declaration in a block");
+      const parsed = readTag(html, lt);
+      if (parsed === null) {
+        if (isList && top === root) return refuse("words outside an item in a list block");
+        top.children.push({ kind: "text", text: "<" });
+        i = lt + 1;
+        continue;
+      }
+      i = parsed.end;
+      if (parsed.kind === "end") {
+        const written = inlineTagFor(parsed.name) ?? parsed.name;
+        for (let s = stack.length - 1; s > 0; s -= 1) {
+          if (stack[s]?.name === written) {
+            stack.length = s;
+            break;
+          }
+        }
+        continue;
+      }
+      if (parsed.name === "br") {
+        if (isList && top === root) return refuse("a break outside an item in a list block");
+        top.children.push({ kind: "break" });
+        continue;
+      }
+      if (parsed.name === "li") {
+        if (!isList) return refuse("li inside a " + blockTag + " block");
+        if (top !== root) return refuse("a nested item");
+        const item = { kind: "element", name: "li", children: [] };
+        root.children.push(item);
+        stack.push(item);
+        if (parsed.selfClosing) stack.pop();
+        continue;
+      }
+      const inline = inlineTagFor(parsed.name);
+      if (inline === null) return refuse("element " + parsed.name + " is not allowed in a block");
+      if (isList && top === root) return refuse("formatting outside an item in a list block");
+      const element = { kind: "element", name: inline, children: [] };
+      top.children.push(element);
+      if (parsed.selfClosing) continue;
+      if (stack.length > MAX_BLOCK_NESTING) return refuse("nesting deeper than " + String(MAX_BLOCK_NESTING));
+      stack.push(element);
+    }
+    if (!isList) {
+      const out = finishInline(root.children);
+      return out === "" ? refuse("a block with no words") : { html: out };
+    }
+    let items = "";
+    for (const item of root.children) {
+      if (item.kind !== "element") continue;
+      const inner = finishInline(item.children);
+      if (inner !== "") items += "<li>" + inner + "</li>";
+    }
+    return items === "" ? refuse("a list block with no words") : { html: items };
+  }
+  function asBlockWords(value) {
+    if (typeof value !== "string") throw new TypeError("block words are a string");
+  }
+  function blockWords(html) {
+    const words = html === null || html === void 0 ? "" : foldTypography(decodeEntities(textOf(html)));
+    asBlockWords(words);
+    return words;
+  }
+  function runWords(blocks) {
+    let total = 0;
+    for (const block of blocks ?? []) {
+      if (block.from_anchor === true) continue;
+      const words = normalizeText(decodeEntities(textOf(block.html)));
+      if (words !== "") total += words.split(" ").length;
+    }
+    return total;
+  }
+
+  // src/domain/run-match.ts
+  var run_match_exports = {};
+  __export(run_match_exports, {
+    MATCH_STATUS: () => MATCH_STATUS,
+    RUN_WALK_SLACK: () => RUN_WALK_SLACK,
+    SHORT_BLOCK_WORDS: () => SHORT_BLOCK_WORDS,
+    leafBlocks: () => leafBlocks,
+    matchRun: () => matchRun,
+    runClash: () => runClash
+  });
+  var SHORT_BLOCK_WORDS = 5;
+  var RUN_WALK_SLACK = 2;
+  var MATCH_STATUS = { WHOLE: "whole", JOINED: "joined", SPLIT: "split", MISSING: "missing" };
+  var ROOT_NAME = "#root";
+  var RAW_TEXT_TAGS = /* @__PURE__ */ new Set(["script", "style", "textarea", "title", "xmp", "noscript"]);
+  var CLOSES_PARAGRAPH = /* @__PURE__ */ new Set([
+    "address",
+    "article",
+    "aside",
+    "blockquote",
+    "details",
+    "div",
+    "dl",
+    "fieldset",
+    "figcaption",
+    "figure",
+    "footer",
+    "form",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "header",
+    "hgroup",
+    "hr",
+    "main",
+    "nav",
+    "ol",
+    "p",
+    "pre",
+    "section",
+    "table",
+    "ul",
+    "li",
+    "dd",
+    "dt",
+    "summary"
+  ]);
+  var WORD_CHARACTER = /[\p{L}\p{N}]/u;
+  function findRawTextEnd(html, name, from) {
+    const closing = new RegExp("</" + name, "gi");
+    closing.lastIndex = from;
+    return closing.exec(html)?.index ?? -1;
+  }
+  function parseTree(html) {
+    const root = { kind: "element", name: ROOT_NAME, attributes: [], children: [], parent: null };
+    let current = root;
+    function nearestOpen(name, stopAtList) {
+      for (let node = current; node !== null && node !== root; node = node.parent) {
+        if (stopAtList && (node.name === "ul" || node.name === "ol")) return null;
+        if (node.name === name) return node;
+      }
+      return null;
+    }
+    function closeTo(node) {
+      current = node.parent ?? root;
+    }
+    let i = 0;
+    while (i < html.length) {
+      const lt = html.indexOf("<", i);
+      const end = lt === -1 ? html.length : lt;
+      if (end > i) current.children.push({ kind: "text", text: html.slice(i, end) });
+      if (lt === -1) break;
+      const skipped = skipDeclaration(html, lt);
+      if (skipped !== null) {
+        i = skipped;
+        continue;
+      }
+      const tag = readTag(html, lt);
+      if (tag === null) {
+        current.children.push({ kind: "text", text: "<" });
+        i = lt + 1;
+        continue;
+      }
+      i = tag.end;
+      if (tag.kind === "end") {
+        const open = nearestOpen(tag.name, false);
+        if (open !== null) closeTo(open);
+        continue;
+      }
+      const name = tag.name;
+      if (CLOSES_PARAGRAPH.has(name)) {
+        const paragraph = nearestOpen("p", false);
+        if (paragraph !== null) closeTo(paragraph);
+      }
+      if (name === "li") {
+        const item = nearestOpen("li", true);
+        if (item !== null) closeTo(item);
+      }
+      const element = { kind: "element", name, attributes: tag.attributes, children: [], parent: current };
+      current.children.push(element);
+      if (isVoidTag(name) || tag.selfClosing) continue;
+      if (RAW_TEXT_TAGS.has(name)) {
+        const closeAt = findRawTextEnd(html, name, i);
+        element.children.push({ kind: "text", text: html.slice(i, closeAt === -1 ? html.length : closeAt) });
+        const bracket = closeAt === -1 ? -1 : html.indexOf(">", closeAt);
+        i = bracket === -1 ? html.length : bracket + 1;
+        continue;
+      }
+      current = element;
+    }
+    return root;
+  }
+  function attributeOf(element, name) {
+    return element.attributes.find((attribute) => attribute.name === name)?.value ?? null;
+  }
+  function isNotContent(element) {
+    if (isDroppedSubtreeTag(element.name) || element.name === "head") return true;
+    if (attributeOf(element, TOOL_ATTR) === ROLE_CHROME) return true;
+    return attributeOf(element, "id") === OVERLAY_ROOT_ID;
+  }
+  function isSkippedElement(element) {
+    return isNotContent(element) || attributeOf(element, FILE_TITLE_ATTR) === FILE_TITLE_VALUE;
+  }
+  function serializeTree(nodes) {
+    let out = "";
+    for (const node of nodes) {
+      if (node.kind === "text") {
+        out += node.text;
+        continue;
+      }
+      out += "<" + node.name;
+      for (const attribute of node.attributes) out += " " + attribute.name + '="' + escapeAttrValue(attribute.value) + '"';
+      out += ">";
+      if (!isVoidTag(node.name)) out += serializeTree(node.children) + "</" + node.name + ">";
+    }
+    return out;
+  }
+  function hasBlockInside(element) {
+    for (const child of element.children) {
+      if (child.kind === "text" || isNotContent(child)) continue;
+      if (isBlockTag(child.name) || hasBlockInside(child)) return true;
+    }
+    return false;
+  }
+  function leafBlocks(html) {
+    const leaves = [];
+    function walk(nodes) {
+      for (const node of nodes) {
+        if (node.kind === "text" || isSkippedElement(node)) continue;
+        const name = node.name;
+        if (isBlockTag(name) && (name === "ul" || name === "ol" || !hasBlockInside(node))) {
+          const inner = cleanMarkup(serializeTree(node.children));
+          const words = blockWords(inner);
+          if (words !== "") leaves.push({ tag: name, html: inner, words });
+          continue;
+        }
+        walk(node.children);
+      }
+    }
+    walk(parseTree(html).children);
+    return leaves;
+  }
+  function wordsFor(entry) {
+    return "words" in entry ? entry.words : blockWords(entry.html);
+  }
+  function joinWords(parts) {
+    return parts.filter((part) => part !== "").join(" ");
+  }
+  function wordAt(list, index) {
+    return list[index] ?? "";
+  }
+  function wordTotal(words) {
+    return words === "" ? 0 : words.split(" ").length;
+  }
+  function isWholeWordsInside(leafWords, words) {
+    if (words === "" || leafWords === "" || leafWords === words || leafWords.length <= words.length) return false;
+    let from = 0;
+    for (; ; ) {
+      const at = leafWords.indexOf(words, from);
+      if (at === -1) return false;
+      const before = at === 0 ? "" : leafWords.charAt(at - 1);
+      const after = leafWords.charAt(at + words.length);
+      if ((before === "" || !WORD_CHARACTER.test(before)) && (after === "" || !WORD_CHARACTER.test(after))) return true;
+      from = at + 1;
+    }
+  }
+  function matchRun(blocks, leaves) {
+    const blockList = blocks.map(wordsFor);
+    const leafList = leaves.map(wordsFor);
+    const limit = Math.min(leafList.length, blockList.length + RUN_WALK_SLACK);
+    const result = [];
+    for (let index = 0; index < blockList.length; index += 1) {
+      result.push({ index, status: MATCH_STATUS.MISSING, leaves: [] });
+    }
+    function tryAt(blockIndex2, leafIndex2) {
+      const target = wordAt(blockList, blockIndex2);
+      if (target === "") return null;
+      const leaf = wordAt(leafList, leafIndex2);
+      if (leaf === target) return { status: MATCH_STATUS.WHOLE, blocks: 1, leaves: 1 };
+      let joined = target;
+      for (let k = blockIndex2 + 1; k < blockList.length; k += 1) {
+        joined = joinWords([joined, wordAt(blockList, k)]);
+        if (joined === leaf) return { status: MATCH_STATUS.JOINED, blocks: k - blockIndex2 + 1, leaves: 1 };
+        if (joined.length > leaf.length) break;
+      }
+      let spread = leaf;
+      for (let m = leafIndex2 + 1; m < limit; m += 1) {
+        spread = joinWords([spread, wordAt(leafList, m)]);
+        if (spread === target) return { status: MATCH_STATUS.SPLIT, blocks: 1, leaves: m - leafIndex2 + 1 };
+        if (spread.length > target.length) break;
+      }
+      return null;
+    }
+    let blockIndex = 0;
+    let leafIndex = 0;
+    let matched = 0;
+    while (leafIndex < limit && blockIndex < blockList.length) {
+      let hit = null;
+      let hitAt = -1;
+      for (let b = blockIndex; b < blockList.length; b += 1) {
+        const found = tryAt(b, leafIndex);
+        if (found !== null) {
+          hit = found;
+          hitAt = b;
+          break;
+        }
+      }
+      if (hit === null) {
+        if (matched > 0) break;
+        leafIndex += 1;
+        continue;
+      }
+      const covered = [leafIndex];
+      for (let x = 1; x < hit.leaves; x += 1) covered.push(leafIndex + x);
+      for (let y = 0; y < hit.blocks; y += 1) {
+        result[hitAt + y] = { index: hitAt + y, status: hit.status, leaves: [...covered] };
+      }
+      matched += 1;
+      blockIndex = hitAt + hit.blocks;
+      leafIndex += hit.leaves;
+    }
+    return result;
+  }
+  function runClash(blocks, leaves) {
+    const matches = matchRun(blocks, leaves);
+    const blockList = blocks.map(wordsFor);
+    const leafList = leaves.map(wordsFor);
+    const limit = Math.min(leafList.length, blockList.length + RUN_WALK_SLACK);
+    const used = /* @__PURE__ */ new Set();
+    for (const match of matches) {
+      for (const leaf of match.leaves) used.add(leaf);
+    }
+    let nextLeaf = 0;
+    for (let i = 0; i < matches.length; i += 1) {
+      const match = matches[i];
+      if (match === void 0) continue;
+      if (match.status !== MATCH_STATUS.MISSING) {
+        nextLeaf = match.leaves[0] + match.leaves.length;
+        continue;
+      }
+      if (i > 0 && matches[i - 1]?.status === MATCH_STATUS.MISSING) continue;
+      if (nextLeaf >= limit || used.has(nextLeaf)) continue;
+      const leafWords = wordAt(leafList, nextLeaf);
+      const words = wordAt(blockList, i);
+      if (nextLeaf === 0 && wordTotal(words) < SHORT_BLOCK_WORDS) continue;
+      if (!isWholeWordsInside(leafWords, words)) continue;
+      let count = 1;
+      let together = words;
+      for (let k = i + 1; k < matches.length && matches[k]?.status === MATCH_STATUS.MISSING; k += 1) {
+        together = joinWords([together, wordAt(blockList, k)]);
+        if (!isWholeWordsInside(leafWords, together)) break;
+        count += 1;
+      }
+      return { index: i, blocks: count, leaf: nextLeaf };
+    }
+    return null;
+  }
+
+  // src/domain/target-slug.ts
+  var target_slug_exports = {};
+  __export(target_slug_exports, {
+    SLUG_MAX: () => SLUG_MAX,
+    targetSlug: () => targetSlug
+  });
+  var SLUG_MAX = 40;
+  var FALLBACK = "target";
+  function trimDashes(text) {
+    return text.replace(/^-+|-+$/g, "");
+  }
+  function targetSlug(canonical2) {
+    const query = canonical2.indexOf("?");
+    const path = query === -1 ? canonical2 : canonical2.slice(0, query);
+    const tail = path.split("/").filter((segment) => segment !== "").pop();
+    const slug = trimDashes(trimDashes((tail ?? FALLBACK).toLowerCase().replace(/[^a-z0-9]+/g, "-")).slice(0, SLUG_MAX));
+    return slug === "" ? FALLBACK : slug;
+  }
+
+  // lahe-register:src/domain/text.ts
+  var converted2 = Object.assign({}, text_exports, html_syntax_exports, formatting_exports, clean_markup_exports, embedded_value_exports, block_text_exports, comparison_exports, run_blocks_exports, run_match_exports, target_slug_exports);
+  globalThis.LAHE = globalThis.LAHE || {};
+  globalThis.LAHE.normalize = converted2;
 
   // src/contract/failures.ts
   var failures_exports = {};
@@ -35805,9 +35684,9 @@
   }
 
   // lahe-register:src/contract/failures.ts
-  var converted2 = Object.assign({}, failures_exports);
+  var converted3 = Object.assign({}, failures_exports);
   globalThis.LAHE = globalThis.LAHE || {};
-  globalThis.LAHE.failures = converted2;
+  globalThis.LAHE.failures = converted3;
 
   // src/contract/style-rules.ts
   var style_rules_exports = {};
@@ -35841,9 +35720,9 @@
   }
 
   // lahe-register:src/contract/style-rules.ts
-  var converted3 = Object.assign({}, style_rules_exports);
+  var converted4 = Object.assign({}, style_rules_exports);
   globalThis.LAHE = globalThis.LAHE || {};
-  globalThis.LAHE.styleRules = converted3;
+  globalThis.LAHE.styleRules = converted4;
 
   // lahe-entry.js
   var import_record = __toESM(require_record());
@@ -36309,9 +36188,9 @@
   }
 
   // lahe-register:src/domain/gestures.ts
-  var converted4 = Object.assign({}, gestures_exports);
+  var converted5 = Object.assign({}, gestures_exports);
   globalThis.LAHE = globalThis.LAHE || {};
-  globalThis.LAHE.gestures = converted4;
+  globalThis.LAHE.gestures = converted5;
 
   // src/browser/review-layer/editing/write-epoch.ts
   var write_epoch_exports = {};
@@ -36391,9 +36270,9 @@
   }
 
   // lahe-register:src/browser/review-layer/editing/write-epoch.ts
-  var converted5 = Object.assign({}, write_epoch_exports);
+  var converted6 = Object.assign({}, write_epoch_exports);
   globalThis.LAHE = globalThis.LAHE || {};
-  globalThis.LAHE.epoch = converted5;
+  globalThis.LAHE.epoch = converted6;
 
   // src/domain/elapsed.ts
   var elapsed_exports = {};
@@ -36417,9 +36296,9 @@
   }
 
   // lahe-register:src/domain/elapsed.ts
-  var converted6 = Object.assign({}, elapsed_exports);
+  var converted7 = Object.assign({}, elapsed_exports);
   globalThis.LAHE = globalThis.LAHE || {};
-  globalThis.LAHE.elapsed = converted6;
+  globalThis.LAHE.elapsed = converted7;
 
   // lahe-entry.js
   var import_protocol = __toESM(require_protocol());

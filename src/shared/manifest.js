@@ -57,9 +57,22 @@ var LAYER_FILES = [
     why: "the one spelling of 'this node is ours'. Nothing above it; it depends on nothing"
   },
   {
-    path: "src/shared/normalize.js",
-    owner: "0A-kernel",
-    why: "the one normalizer, both comparison modes. Needs markers for cleanMarkup"
+    path: "src/domain/text.ts",
+    owner: "TypeScript C2",
+    registers: ["normalize"],
+    modules: [
+      "src/domain/text.ts",
+      "src/domain/html-syntax.ts",
+      "src/domain/formatting.ts",
+      "src/domain/clean-markup.ts",
+      "src/domain/embedded-value.ts",
+      "src/domain/block-text.ts",
+      "src/domain/comparison.ts",
+      "src/domain/run-blocks.ts",
+      "src/domain/run-match.ts",
+      "src/domain/target-slug.ts"
+    ],
+    why: "the one normalizer, both comparison modes, in ten modules registered as one name. Needs markers for cleanMarkup"
   },
   {
     path: "src/contract/failures.ts",
@@ -431,6 +444,11 @@ var FORWARDERS = [
     path: "src/shared/style_rules.js",
     owner: "TypeScript C1",
     why: "forwards to src/contract/style-rules.ts for the service's styles and contracts"
+  },
+  {
+    path: "src/shared/normalize.js",
+    owner: "TypeScript C2",
+    why: "forwards to the ten modules of src/domain/ that replace it, for the service, the CLI, record, regions, uniqueness and contracts"
   },
   {
     path: "src/shared/epoch.js",

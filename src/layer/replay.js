@@ -1003,7 +1003,7 @@
 
   // Pieces the after splits into, or null for a record this rule is not for.
   function splitPieces(item, mode) {
-    if (mode !== normalize.MODE.TEXT) return null;
+    if (mode !== normalize.COMPARISON_MODE.TEXT) return null;
     if (!item || item[record.FIELD.KIND] !== record.KIND.EDIT) return null;
     var after = item[record.FIELD.AFTER];
     if (typeof after !== "string" || after.indexOf("\n") === -1) return null;
@@ -1157,7 +1157,7 @@
     var match = tagName.exec(markup);
     while (match) {
       var name = match[1];
-      if (name === "br" || Object.prototype.hasOwnProperty.call(normalize.BLOCK_TAGS, name)) return false;
+      if (name === "br" || normalize.isBlockTag(name)) return false;
       match = tagName.exec(markup);
     }
     return true;
@@ -1180,7 +1180,7 @@
   // breaks are read as plain spaces. Refuses when the two have the same words,
   // because then the breaks ARE the edit and reading past them is a guess.
   function reflowMatch(item, mode, domText) {
-    if (mode !== normalize.MODE.TEXT || typeof domText !== "string") return null;
+    if (mode !== normalize.COMPARISON_MODE.TEXT || typeof domText !== "string") return null;
     if (!item || item[record.FIELD.KIND] !== record.KIND.EDIT) return null;
     var after = item[record.FIELD.AFTER];
     var before = item[record.FIELD.BEFORE];
