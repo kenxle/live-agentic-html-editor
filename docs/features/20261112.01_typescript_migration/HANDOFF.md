@@ -39,31 +39,34 @@ Converting the syntax is not enough on its own.
     "two sides disagree" bugs;
   - a Rust helper ends "clone and run" and needs a prebuilt binary for every
     platform.
+- Use every strict feature the language and its tools offer. His reason:
+  agents write better code that way. In practice:
+  - real `.ts` files in `strict` mode, not type comments on plain `.js`;
+  - every stricter compiler flag on top of `strict`;
+  - no escape hatches: the gate rejects `any`, `@ts-ignore` and unchecked `as`
+    casts;
+  - every switch on a state or kind handles every case, so a new state that
+    some code ignores fails the build;
+  - the compiler enforces folder boundaries, so the browser layer cannot import
+    helper code;
+  - `tsc` runs inside `npm run gate:unit`.
+  Where a strict rule cannot be turned on yet, the plan names it and the slice
+  that turns it on.
+- Raise the Node minimum from 18.2 to a Node release line that is not past end
+  of life and also runs `.ts` files directly. Node 18 and 20 are already past
+  end of life. Node 22 is believed to reach end of life in April 2027, which
+  would make 24 the lowest safe choice. Check both against the official Node
+  release schedule and pick the lowest line that meets both conditions. Ken's
+  Mac runs 20.19 today (`.nvmrc` says 20.19.0), so the `.nvmrc` and his machine
+  both move up.
 
 **Recommended in the chat, not yet ruled on by Ken.** Confirm these or argue
 against them in the plan:
 
-- Real `.ts` files in `strict` mode. Type comments on plain `.js` were
-  considered and set aside, because an agent can skip writing them.
-- No escape hatches: the gate rejects `any`, `@ts-ignore` and unchecked `as`
-  casts.
-- Every switch on a state or kind handles every case, so a new state that some
-  code ignores fails the build.
-- The compiler enforces folder boundaries. For example, the browser layer cannot
-  import helper code.
-- `tsc` runs inside `npm run gate:unit`.
 - The helper runs its `.ts` files directly with Node's built-in type stripping,
-  so the helper keeps no build step. The belief is that this works without a
-  flag from Node 22.18. **Verify that before planning around it**, along with its
-  limits: only syntax that can be erased (no `enum`, no `namespace`), and imports
+  so the helper keeps no build step. Verify the limits before planning around
+  it: only syntax that can be erased (no `enum`, no `namespace`), and imports
   that name the `.ts` extension.
-- **Decided by Ken:** raise the Node minimum from 18.2 to a Node release line
-  that is not past end of life and also runs `.ts` files directly. Node 18
-  and 20 are already past end of life. Node 22 is believed to reach end of life
-  in April 2027, which would make 24 the lowest safe choice. Check both against
-  the official Node release schedule and pick the lowest line that meets both
-  conditions. Ken's Mac runs 20.19 today (`.nvmrc` says 20.19.0), so the
-  `.nvmrc` and his machine both move up.
 - Order: `src/shared` first, then the helper, then the browser layer.
 
 ## The codebase you are planning for
