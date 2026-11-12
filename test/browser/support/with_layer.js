@@ -14,8 +14,10 @@ read-when: Writing or debugging a spec that needs the real library on a page the
 // to arrive the way it arrives in a host application: ONE SCRIPT TAG carrying
 // protocol.js's three attributes. So this module routes the page's own document
 // responses through Playwright and appends that one tag before </body>, and
-// serves the built bundle from a path on the same origin (so a page under
-// script-src 'self' can load it).
+// serves the bundle from a path on the same origin (so a page under
+// script-src 'self' can load it). The bundle is built in memory from this
+// worktree's source by bundles.js, not read from dist/, so a spec always tests
+// the source in front of it and never whatever dist/ last held.
 //
 // Three rules it keeps, all of them load-bearing for what 2D asserts:
 //
@@ -46,26 +48,11 @@ read-when: Writing or debugging a spec that needs the real library on a page the
 
 "use strict";
 
-const fs = require("node:fs");
-const path = require("node:path");
-
 const protocol = require("../../../src/shared/protocol.js");
-
-const REPO_ROOT = path.join(__dirname, "..", "..", "..");
-const BUNDLE_PATH = path.join(REPO_ROOT, "dist", "lahe-layer.js");
+const { layerBundle } = require("./bundles.js");
 
 // Same-origin by construction, so 'self' covers it under any CSP the app sends.
 const BUNDLE_ROUTE = "/__lahe/lahe-layer.js";
-
-function readBundle() {
-  if (!fs.existsSync(BUNDLE_PATH)) {
-    throw new Error(
-      "with_layer: dist/lahe-layer.js is missing. Builders do not COMMIT dist, but they do build it: " +
-        "run `npm run build:layer` before the browser specs."
-    );
-  }
-  return fs.readFileSync(BUNDLE_PATH, "utf8");
-}
 
 function scriptTagFor(config) {
   const attrs = protocol.SCRIPT_ATTR;
@@ -103,7 +90,7 @@ function scriptTagFor(config) {
  * @param {{review: string, token: string, helper: string}} config
  */
 async function withLayer(page, config) {
-  const bundle = readBundle();
+  const bundle = await layerBundle();
   const tag = scriptTagFor(config);
   const helperOrigin = config.helper ? String(config.helper).replace(/\/+$/, "") : null;
 
@@ -137,4 +124,4 @@ async function withLayer(page, config) {
   });
 }
 
-module.exports = { withLayer, BUNDLE_ROUTE, BUNDLE_PATH, scriptTagFor };
+module.exports = { withLayer, BUNDLE_ROUTE, scriptTagFor };
