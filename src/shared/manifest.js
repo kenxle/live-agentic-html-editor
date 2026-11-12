@@ -117,10 +117,10 @@ var LAYER_FILES = [
     why: "the one wording for how long something has been going on. Helper and rail both say it. Depends on nothing"
   },
   {
-    path: "src/shared/protocol.js",
-    owner: "0A-wire",
+    path: "src/contract/protocol.ts",
+    owner: "TypeScript C4",
     registers: ["protocol"],
-    why: "routes, headers, the per-review token, error shapes. Needs failures"
+    why: "routes, headers, the per-review token, error shapes, the event and reply lines, the script tag and the agent commands, from seventeen modules in src/contract. Its error body takes the failure table from failures.ts"
   },
   {
     path: "src/shared/review_format.js",
@@ -369,10 +369,9 @@ var NON_BUNDLE_FILES = [
 //
 // The first entry is not a file of its own: `sameAsLayer` names the LAYER_FILES
 // entry registering `protocol`, which the page loads first, so the protocol
-// keeps one owner and one entry even after it converts. failures.js is NOT in
-// this file, so on the Library page the protocol's failures argument is
-// undefined; nothing the page calls reads it (view_model.js says so where it
-// matters).
+// keeps one owner and one entry even after it converts. The protocol's error
+// body imports the failure table, so the bundle carries it for the page too,
+// registered under no name of its own.
 var CATALOG_PAGE = [
   {
     sameAsLayer: "protocol",
@@ -403,6 +402,11 @@ var CATALOG_PAGE = [
 // owned by its folder, not by this manifest; a browser module is also listed
 // in LAYER_FILES, for its place in the bundle. Removed in the finishing slice.
 var FORWARDERS = [
+  {
+    path: "src/shared/protocol.js",
+    owner: "TypeScript C4",
+    why: "forwards to src/contract/protocol.ts, which re-exports the seventeen protocol modules, for the service, the CLI, scripts and tests"
+  },
   {
     path: "src/shared/script_line.js",
     owner: "TypeScript S0b",

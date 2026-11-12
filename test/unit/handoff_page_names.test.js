@@ -87,7 +87,10 @@ test("a page-derived session name never appears in the drain's handoff", async (
   assert.equal(entry.handoff.includes(HOSTILE), false, "the hand-off prompt carries no page text");
   // The drain's hand-off carries the request's id on the takeover, which is
   // what lets it through while the session's agent is listening.
-  assert.equal(entry.handoff, protocol.AGENT_LIVENESS.handoffMessage("s_doc", null, false, { library: true, stateDir: stateDir.flagFor(w.dir), request: entry.request }));
+  assert.equal(
+    entry.handoff,
+    protocol.handoffMessage({ from: "library", sessionId: "s_doc", name: null, stateDir: stateDir.flagFor(w.dir), request: entry.request })
+  );
   assert.match(entry.handoff, new RegExp("lahe session takeover s_doc .*--request " + entry.request));
 });
 
@@ -105,7 +108,7 @@ test("the Library's list marks a page-sourced name, and VM.handoffFor leaves it 
   view.sections.forEach((s) => s.cards.forEach((c) => c.rows.forEach((r) => { if (r.id === "r_doc") panel = r.panel; })));
   assert.ok(panel && panel.message, "the hand-off panel is drawn");
   assert.equal(panel.message.includes(HOSTILE), false);
-  assert.equal(panel.message, protocol.AGENT_LIVENESS.handoffMessage("s_doc", null, false, { library: true, stateDir: null }));
+  assert.equal(panel.message, protocol.handoffMessage({ from: "library", sessionId: "s_doc", name: null, stateDir: null, request: null }));
 });
 
 test("the rail's liveness says the name came from a page, so its hand-off leaves it out", async () => {

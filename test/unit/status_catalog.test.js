@@ -104,7 +104,7 @@ test("a pending request for the drained session gets past --quiet with nothing e
   assert.equal(entry.candidate, null);
   assert.equal(
     entry.handoff,
-    protocol.AGENT_LIVENESS.handoffMessage("s_doc", null, false, { library: true, stateDir: stateDir.flagFor(w.dir), request: entry.request }),
+    protocol.handoffMessage({ from: "library", sessionId: "s_doc", name: null, stateDir: stateDir.flagFor(w.dir), request: entry.request }),
     "the Library's hand-off message for the document's session, with the real --state-dir and the request that lets the takeover through"
   );
   // The field classes that fence the page-text fields travel in review.json's
@@ -288,7 +288,10 @@ test("the drain names the document with the reader's display name, its path, and
   assert.equal(entry.review, "r_titled");
   assert.equal(entry.title, "Feature Brief: Synthetic");
   assert.equal(entry.path, doc);
-  assert.equal(entry.handoff, protocol.AGENT_LIVENESS.handoffMessage("s_doc", "coach activity", false, { library: true, stateDir: stateDir.flagFor(w.dir), request: entry.request }));
+  assert.equal(
+    entry.handoff,
+    protocol.handoffMessage({ from: "library", sessionId: "s_doc", name: "coach activity", stateDir: stateDir.flagFor(w.dir), request: entry.request })
+  );
 });
 
 test("a title holding the fence's closing marker and a newline stays one fenced catalog_requests entry", async () => {

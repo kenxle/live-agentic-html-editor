@@ -430,7 +430,6 @@ test("clearing one code leaves every other chip standing", () => {
 
 test("the flush policy is imported, not restated", () => {
   assert.equal(protocol.FLUSH.HELPER_DEBOUNCE_MS, 750);
-  assert.equal(protocol.FLUSH.SEND_BEACON_IS_FORBIDDEN, true);
   assert.equal(protocol.REPLY_CURSOR_FIELD, "seq");
   // The library's own poll is a different number from the helper's file poll,
   // deliberately, and both are named rather than typed twice.

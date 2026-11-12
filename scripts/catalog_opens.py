@@ -14,7 +14,7 @@ Reads the helper log (helper.log in the state dir) and:
   * prints Opens per working day (Monday to Friday in --tz), the weekend
     Opens, and how many Opens were older than the default view
 
-The log line and the default view are read from src/shared/protocol.js, where
+The log line and the default view are read from src/contract/library.ts, where
 they are spelled once (CATALOG_LOG, catalogLogLine, CATALOG.DEFAULT_VIEW_DAYS).
 A helper log line is "<ISO time> <text>"; a Library action's text is
 
@@ -44,7 +44,7 @@ except ImportError:  # Python before 3.9
     zoneinfo = None
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PROTOCOL = os.path.join(HERE, "..", "src", "shared", "protocol.js")
+PROTOCOL = os.path.join(HERE, "..", "src", "contract", "library.ts")
 
 WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
@@ -55,7 +55,7 @@ def fail(message):
 
 
 def read_protocol():
-    """The log prefix, the Open action and DEFAULT_VIEW_DAYS, from protocol.js."""
+    """The log prefix, the Open action and DEFAULT_VIEW_DAYS, from library.ts."""
     try:
         with open(PROTOCOL, encoding="utf-8") as f:
             text = f.read()
@@ -65,7 +65,7 @@ def read_protocol():
     action = re.search(r'ACTION:\s*\{[^}]*OPEN:\s*"([^"]+)"', text)
     days = re.search(r"DEFAULT_VIEW_DAYS:\s*(\d+)", text)
     if not (prefix and action and days):
-        fail("protocol.js no longer spells CATALOG_LOG or DEFAULT_VIEW_DAYS the way this script reads them")
+        fail("library.ts no longer spells CATALOG_LOG or DEFAULT_VIEW_DAYS the way this script reads them")
     return prefix.group(1), action.group(1), int(days.group(1))
 
 

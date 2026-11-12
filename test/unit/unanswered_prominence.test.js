@@ -11,12 +11,14 @@
 //
 // Three things are pinned here, headless:
 //
-//   THE RULE      when a wait is overdue. One rule, in protocol.js, and the
-//                 footer line, the card color and the banner all read it.
+//   THE RULE      when a wait is overdue. One rule, livenessOverdue in
+//                 src/contract/agent-liveness.ts (tested there), and the footer
+//                 line, the card color and the banner all read it.
 //   THE CARD      a waiting card past the rule is overdue, says how long, and
 //                 stops being overdue the moment a reply lands.
-//   THE HANDOFF   the message the banner's button copies: plain text naming
-//                 this session and the takeover command, and no secret.
+//   THE HANDOFF   the message the banner's button copies reaches the rail with
+//                 no secret and no path. Its words are tested in
+//                 test/unit/contract/agent-liveness.test.ts.
 //
 // What it LOOKS like (the amber, the banner at the top of the rail) is asserted
 // in a real browser: test/browser/rail_agent_liveness.spec.js.
@@ -73,33 +75,6 @@ function railAt(clock) {
 // The rule
 // ---------------------------------------------------------------------------
 
-test("no agent listening: the line speaks at the quiet limit but is not loud yet", () => {
-  // The machine cannot see a listener, but a model thinking through a hard item
-  // leaves no footprint for minutes at a time. Half a minute of that is not
-  // evidence that nobody is there, so the line says the wait and stays calm.
-  assert.equal(LIVENESS.overdue(STATE.NO_AGENT, LIVENESS.QUIET_MS - 1), false);
-  assert.equal(LIVENESS.overdue(STATE.NO_AGENT, LIVENESS.QUIET_MS), false, "27s of thinking is not an absence");
-  assert.equal(LIVENESS.overdue(STATE.NO_AGENT, LIVENESS.NO_AGENT_LOUD_MS - 1), false);
-  assert.equal(LIVENESS.overdue(STATE.NO_AGENT, LIVENESS.NO_AGENT_LOUD_MS), true, "two minutes of nothing is");
-});
-
-test("an agent listening with nothing back: overdue after the stale limit, and not before", () => {
-  assert.equal(LIVENESS.overdue(STATE.WAITING, LIVENESS.QUIET_MS + 1000), false);
-  assert.equal(LIVENESS.overdue(STATE.WAITING, LIVENESS.STALE_MS - 1), false);
-  assert.equal(LIVENESS.overdue(STATE.WAITING, LIVENESS.STALE_MS), true);
-});
-
-test("an agent that is working is never overdue, however long the queue behind it", () => {
-  assert.equal(LIVENESS.overdue(STATE.WORKING, LIVENESS.STALE_MS * 20), false);
-});
-
-test("nothing waiting, an unknown state, or no wait at all is never overdue", () => {
-  assert.equal(LIVENESS.overdue(STATE.NONE, LIVENESS.STALE_MS * 2), false);
-  assert.equal(LIVENESS.overdue("something_new", LIVENESS.STALE_MS * 2), false);
-  assert.equal(LIVENESS.overdue(null, LIVENESS.STALE_MS * 2), false);
-  assert.equal(LIVENESS.overdue(STATE.NO_AGENT, null), false);
-});
-
 test("the footer's loud line is the same rule, not a second one", () => {
   const cases = [
     [STATE.NO_AGENT, LIVENESS.QUIET_MS + 1000],
@@ -114,7 +89,7 @@ test("the footer's loud line is the same rule, not a second one", () => {
     rail.setAgentLiveness({ state: state, unanswered: 1, oldest_unanswered_at: agoIso(waited) });
     assert.equal(
       rail.statusLine().loud,
-      LIVENESS.overdue(state, waited),
+      protocol.livenessOverdue(state, waited),
       state + " after " + waited + "ms: the line and the rule agree"
     );
     rail.unmount();
@@ -248,39 +223,9 @@ test("a reply landing puts the card back and takes the banner away", () => {
   rail.unmount();
 });
 
-test("the reviewer's words carry no tool jargon", () => {
-  const P = LIVENESS.PROMINENT;
-  const words = [P.BANNER.no_agent, P.BANNER.waiting, P.CHECK, P.HANDOFF_BUTTON, P.COPIED, P.COPY_FAILED, P.CARD]
-    .join(" ")
-    .toLowerCase();
-  ["monitor", "heartbeat", "wake", "liveness", "token", "session"].forEach((jargon) => {
-    assert.equal(words.includes(jargon), false, "the rail never says " + JSON.stringify(jargon));
-  });
-  // No em dashes, anywhere Ken reads.
-  assert.equal(/—/.test(words), false);
-});
-
 // ---------------------------------------------------------------------------
 // The handoff message
 // ---------------------------------------------------------------------------
-
-test("the handoff message names the session and the takeover command, in plain text", () => {
-  const message = LIVENESS.handoffMessage("s_7f3a", null, false);
-  assert.equal(typeof message, "string");
-  assert.ok(message.includes("lahe session takeover s_7f3a"), "the command that takes it over");
-  assert.equal(message.includes("--state-dir"), false, "no flag when the default folder is right");
-  assert.equal(/<[a-z]/i.test(message), false, "plain text, no markup");
-  assert.equal(/—/.test(message), false, "no em dashes");
-  // Pasting it is the human's explicit request, which is what takeover needs.
-  assert.match(message.toLowerCase(), /take over/);
-});
-
-test("with the state outside the default folder, the message says so without naming a path", () => {
-  const message = LIVENESS.handoffMessage("s_7f3a", null, true);
-  assert.ok(message.includes("lahe session takeover s_7f3a"));
-  assert.ok(message.includes("--state-dir"), "the new agent is told the flag is needed");
-  assert.equal(/\/[A-Za-z]/.test(message.replace(/lahe session list|--state-dir/g, "")), false, "and no path");
-});
 
 test("the page receives no token, secret or filesystem path, and neither does the message", () => {
   const rail = railAt(NOW);
@@ -303,16 +248,6 @@ test("the page receives no token, secret or filesystem path, and neither does th
   assert.equal(/token|secret/i.test(message), false);
   assert.equal(message.includes("/Users/"), false, "no path reaches the message");
   rail.unmount();
-});
-
-test("a review with no agent session still gets a message that works", () => {
-  // Reviews from before sessions existed have no id to name. The new agent is
-  // pointed at the list instead of handed a command with a hole in it.
-  const message = LIVENESS.handoffMessage(null, null, false);
-  assert.ok(message.includes("lahe session list"));
-  assert.ok(message.includes("lahe session takeover"));
-  assert.equal(message.includes("null"), false);
-  assert.equal(message.includes("undefined"), false);
 });
 
 test("the copy button writes the handoff message to the clipboard", async () => {
@@ -397,12 +332,6 @@ test("the banner names the agent to check when the session has a name, and says 
   assert.match(rail.statusLine().title, /lahe updates 9\/16/, "the footer hover names it too");
   assert.match(banner.message, /lahe updates 9\/16/, "and so does the handoff message");
   rail.unmount();
-});
-
-test("the handoff message names the session being taken over, quoted", () => {
-  const message = LIVENESS.handoffMessage("s_1", 'lahe "updates"', false);
-  assert.ok(message.includes('"lahe \\"updates\\""'), message);
-  assert.equal(LIVENESS.handoffMessage("s_1", null, false).includes("named"), false);
 });
 
 test("a name with $& and friends is filled in literally everywhere it is drawn", () => {

@@ -32,5 +32,5 @@ test("a Library entry that stands for a planned layer entry is left out too", (t
   withEntry(t, manifest.CATALOG_PAGE, { sameAsLayer: "later" });
   const paths = manifest.libraryFiles().map((entry) => entry.path);
   assert.ok(!paths.includes("src/browser/review-layer/later.ts"));
-  assert.ok(paths.includes("src/shared/protocol.js"), "the protocol entry still resolves");
+  assert.ok(paths.includes("src/contract/protocol.ts"), "the protocol entry still resolves");
 });

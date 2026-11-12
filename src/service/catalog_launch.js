@@ -180,8 +180,10 @@ function handoffFor(dir, described, request, sessionName) {
   var sessionId = request.session;
   var takeable = protocol.isSafeId(sessionId) && sessionId !== agentSessions.LEGACY_ID;
   if (!takeable) return null;
-  var message = protocol.AGENT_LIVENESS.handoffMessage(sessionId, sessionName || null, false, {
-    library: true,
+  var message = protocol.handoffMessage({
+    from: "library",
+    sessionId: sessionId,
+    name: sessionName || null,
     stateDir: stateDir.flagFor(dir),
     request: request.id
   });

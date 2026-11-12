@@ -146,9 +146,9 @@ test("the repo builds two files: the review layer and the Library page", async (
   assert.equal(layer.indexOf("0.0.0-dev"), -1, "no unstamped placeholder is left");
 });
 
-test("the Library page bundle holds the protocol, the view model, the copy function and the page script, in that order, and not the failure codes", () => {
+test("the Library page bundle holds the protocol, the view model, the copy function and the page script, in that order", () => {
   assert.deepEqual(
     manifest.libraryFiles().map((entry) => entry.path),
-    ["src/shared/protocol.js", "src/layer/catalog/view_model.js", "src/layer/copy_text.js", "src/layer/catalog/page.js"]
+    ["src/contract/protocol.ts", "src/layer/catalog/view_model.js", "src/layer/copy_text.js", "src/layer/catalog/page.js"]
   );
 });

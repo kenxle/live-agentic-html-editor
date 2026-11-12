@@ -278,7 +278,7 @@
   // THE ONE RULE for an overdue wait, and the words that go with it. The footer
   // going loud, a late card turning amber and the banner at the top of the rail
   // all read agentOverdue, so the three cannot disagree about when to speak up.
-  var agentOverdue = protocol.AGENT_LIVENESS.overdue;
+  var agentOverdue = protocol.livenessOverdue;
   var AGENT_PROMINENT = protocol.AGENT_LIVENESS.PROMINENT;
   // Ken's words for a page pandoc could not draw (2026-10-17). Exactly this.
   var RENDER_NOTE_TEXT = "Ask your agent to install pandoc to get the correct styles";
@@ -5528,11 +5528,12 @@
       // A name read off a page's title is shown on the rail but never put in the
       // hand-off message: that text is a new agent's first prompt.
       var name = agentLiveness && agentLiveness[AGENT_FIELD.NAME_FROM_PAGE] === true ? null : sessionName();
-      var message = protocol.AGENT_LIVENESS.handoffMessage(
-        typeof sessionId === "string" ? sessionId : null,
-        name,
-        !!(agentLiveness && agentLiveness[AGENT_FIELD.STATE_DIR_FLAG] === true)
-      );
+      var message = protocol.handoffMessage({
+        from: "rail",
+        sessionId: typeof sessionId === "string" ? sessionId : null,
+        name: name,
+        stateDirFlagNeeded: !!(agentLiveness && agentLiveness[AGENT_FIELD.STATE_DIR_FLAG] === true)
+      });
       var shown = !!current.loud;
       var state = shown ? current.agentState : null;
       var template =
