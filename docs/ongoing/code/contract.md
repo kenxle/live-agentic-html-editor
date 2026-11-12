@@ -88,3 +88,79 @@ An id arrives from outside Lahe's own code in five places (install, a served pat
 - Only the first six palette colours are shown.
 
 The source must spell any bidi control character as an escape; `styles.test.js` reads the file to check.
+
+## `json-object.ts`: narrowing parsed JSON
+
+The parsers in this folder take `unknown` and read fields only after `isJsonObject` has said the value is a plain object. An array is not one, even though `typeof` says `"object"`.
+
+## `safe-id.ts`: ids that become path components
+
+Review ids, agent names, session ids and Library request ids all end up in a file path or a command line, so they share one rule. The first character is a letter or digit, which rules out `.` and `..`, hidden files, and an id that looks like a flag. Sixty-four characters is enough for every id Lahe mints. `replies-<agent>.jsonl` uses the same character class, built from this pattern so the two cannot drift.
+
+## `service-contract.ts`: the contract number
+
+`API_VERSION` names the URL scheme and can stay `v1` while the helper's behavior moves on. The helper is long-running and shared: it keeps its modules in memory while it serves a freshly rebuilt browser bundle from disk, so a new rail can end up talking to yesterday's helper. `SERVICE_CONTRACT` is an integer bumped whenever a helper that old cannot safely back a newly built CLI or layer. The CLI and the layer read it from `/health`: an older helper is restarted; a newer one means this clone is behind, and it must not bounce a newer shared helper backward. A helper that reports no number is older.
+
+This is not the source-stamp check (`source_stamp.js`), which restarts a helper whose loaded files changed on disk. The contract number is what catches a different clone, or a helper started before a protocol change.
+
+**When you bump it,** add a row below in the same commit. `test/unit/contract/service-contract.test.ts` fails if the current number has no row.
+
+| Contract | What a helper below it lacks |
+| --- | --- |
+| 9 | `reply.at`, so it cannot back the timestamped rail. |
+| 10 | Wake-feed lines and `agent_liveness`, so a tail-armed agent would sleep through work and the rail could not tell whether an agent is watching. |
+| 11 | `user_needs_to_see_reply` in the reply fold, so a flagged reply would lose its flag and never badge the reviewer. |
+| 12 | Rendering on request: its static servers hand back raw Markdown from a source mount, so a document's links to other local documents download or 404. |
+| 13 | A window-session table on disk: it keeps it in memory, so replacing the helper throws every open page out of its review, and it leaves no `windows.json` for a CLI command to ask whether anybody is reviewing. |
+| 14 | The block allowlist and the size ceiling on free-writing run records, and `new_blocks` in the projection, so an agent would never see the reviewer's new text. |
+| 15 | The Library routes (`/catalog` and its API), the replay of `origin.removed`, the reopened-session sweep and `catalog_seen_at`, so `lahe library` would print a URL that 404s, and a restarted static server's stale origins would come back. |
+| 16 | Serving pages itself: no pages port, no site registry and no `site.bind`, so `lahe review` could not give a page its stable address. |
+| 17 | `review.retire`; it also takes events for a retired review, answers `records.read` for one review only, and binds a file into its own folder site even inside a reviewed folder, so one file could get two addresses. |
+
+## `helper-address.ts`: where the helper listens
+
+Port 7817 is fixed by default and changed only with `--port`. A page has the port baked into its script tag and no way to learn a new one, so an ephemeral port would break reconnecting the first time the helper restarted.
+
+The helper binds loopback only, and the Host check allows only `127.0.0.1`, `localhost` and `[::1]`, at any port. That check is what stops DNS rebinding: a hostile name that resolves to 127.0.0.1 still arrives with its own name in Host. The check ignores the port on purpose; the listener already decides which port answers. The old list also named a bare `::1`, which could never match: stripping a trailing `:<digits>` turns it into `:`. A bare IPv6 address is not a valid Host anyway, so the new list leaves it out.
+
+## `review-write.ts`: what `review.write` accepts
+
+A review is guarded by two factors: its token and its origin allowlist. The token is on the script tag, so any script on an allowed page can read it. `review.write` takes origins in its body, so if it accepted any origin, a script on an allowed page could add its own and leave the token as the only factor. So the route accepts only what `lahe add` legitimately sends: `"null"` (a page opened from a file) and `http` or `https` on a loopback host, at most 16 per review. Sixteen covers the ordinary spread (two loopback names, a few ports, both schemes) and refuses a caller that keeps adding. `lahe add` writing the review to disk may register wider origins, because there a person typed `--origin` at a terminal.
+
+The check matches what a browser sends in Origin, character for character. It is a regular expression and a port check, not `new URL`, because this folder has no DOM and no Node types. The tests list every case `URL` used to decide.
+
+The same narrowing applies to two flags. `only_recorded_pages` and `notes` are accepted as `true` and never as `false`: narrowing is the reviewer's choice, and widening a review back out is what a leaked token would ask for.
+
+## `site-addresses.ts`: sites and Host classification
+
+A site is a folder, or one notes page, that the helper serves at `http://<name>.lahe.localhost:1483/<path>`. Only `site.bind` makes names, and only the CLI can call it. Every browser treats `.localhost` names as this computer and as secure with no setup, which is the reason `lahe status` prints.
+
+`classifyHost` runs first in every request, on both listeners, and sorts the Host into the API (a loopback name), the Library (`library.lahe.localhost`), a page (`<name>.lahe.localhost`, one to four labels), or bad. Whether a page name is registered is the registry's question, asked afterwards. The port is checked before the Library's name: the Library answers at the pages port or with no port (the port-80 forward), never at another.
+
+The short `.lahe` ending counts only once the helper has proved its own name server answers `.lahe` lookups on this computer (`addresses.js`), and never for the Library. Without that proof, a website that answers its own `.lahe` name could pass as a page. `siteNameFromOrigin` follows the same rule for an Origin header.
+
+Every page response carries `Cross-Origin-Resource-Policy: same-origin` (`PAGES.CORP`), so another site cannot embed it.
+
+## `headers.ts`: headers and the signed-request wire
+
+- `x-lahe-client` has one job: to be a header a form or an image tag cannot set, so a CORS-simple request never reaches a handler. Review routes accept `layer` and `cli`. The Library page sends `catalog`, which review routes refuse on purpose: that page holds no review token.
+- `x-lahe-token` is the per-review token. Anything running on the reviewed page can read it, which is why it is scoped to one review and never to the machine.
+- `x-lahe-request-id` is echoed on every response, so a chip on the rail can be matched to a line in the helper log.
+- The `sec-fetch-*` headers are set by the browser and never by a script. The Library's routes read them to tell their own page from a document on another loopback port.
+- `x-lahe-cli-secret` is read from an owner-only file in the state folder and sent only by the CLI, so a page holding a review token still cannot name a file to serve.
+- The menu bar app proves it can read that secret without sending it. The signed string is these lines joined by single newlines, with no trailing newline. A request: `lahe-proof-v1`, the method, the path with its query exactly as sent, the timestamp in Unix milliseconds, the nonce, and the hex SHA-256 of the body. The answer: `lahe-proof-reply-v1`, the request's nonce, the status code, and the hex SHA-256 of the response body. A timestamp more than 30 seconds from the helper's clock either way is refused. The nonce is 16 random bytes as lowercase hex, and the MAC is a lowercase hex HMAC-SHA256 keyed by the CLI secret. A program squatting on the port learns one used proof and nothing else.
+- `summary.read` answers in version `SUMMARY_VERSION`. The app sends the version it was built for, and any other gets a signed 409.
+
+## `flush.ts`: the draft flush policy
+
+This decides how fast the log grows and how much of a sentence a crash can cost.
+
+- Browser storage gets every keystroke, synchronously, with no debounce. A reload, a crash or a sleep costs nothing.
+- The helper gets queued events within 750ms.
+- An item whose queued events are all drafts goes to the helper at most once per 10 seconds. The browser already has every keystroke, so the helper's copy is a crash backup, and a few seconds of it is an acceptable loss. It is a deadline from the item's last draft post, not a timer that typing pushes back, and `flush` itself applies it, so the poll loop cannot get round it.
+- A free-writing run record's drafts carry the whole run, so they wait 30 seconds. A commit is never held.
+- Every event of a choice item waits until 3 seconds after the page's last press, so presses close together reach the helper in one post and wake the agent once, capped at 10 seconds from the first held press so steady clicking cannot hold work back.
+- `blur`, `hide`, `ready`, `navigation` and `unload` flush at once, past the debounce and the draft floor. `hide` is the tab being hidden, often the last thing a page hears before the browser discards it. Hold's gate still applies.
+- **The unload post uses `fetch` with `keepalive: true`, never `sendBeacon`.** `sendBeacon` cannot set the custom header or the JSON content type, so it would either drop the header or be refused during unload, when nothing is watching. Keepalive carries headers at the cost of a body limit of about 64KB across all in-flight keepalive requests. A body too large for it is already safe in browser storage and goes on the next load: the cap costs latency, never work.
+
+`fitsKeepalive` counts UTF-8 bytes by code point, as `TextEncoder` would; this folder has neither `TextEncoder` nor `Buffer`. A lone surrogate counts 3 bytes, as the browser's encoder writes it as U+FFFD.
