@@ -4,7 +4,7 @@ read-when: Checking where the TypeScript migration stands, what it waits on, or 
 
 # Progress: TypeScript migration
 
-Wave 0 is done and merged: the Node 24.12 floor (PR #104), the TypeScript toolchain and strict gate (PR #105), and the esbuild bundles (PR #106). Checkpoint 0 passed. All five Wave 1 specs are written. C1 (the constant modules) is merged (PR #107). C2 (the normalizer) and C4 (the protocol) are building in parallel; C3 (the record) follows both, then C5.
+Wave 0 is done and merged: the Node 24.12 floor (PR #104), the TypeScript toolchain and strict gate (PR #105), and the esbuild bundles (PR #106). Checkpoint 0 passed. All five Wave 1 specs are written. C1 (constants, PR #107), C2 (normalizer, PR #108) and C4 (protocol, PR #109) are merged. C3 (the record) is building; C5 (item states and the review format) follows, then checkpoint 1.
 
 ## Attention needed
 
@@ -28,8 +28,9 @@ None. Ken's login item runs the server on Node 24.22.3, and the menu bar icon is
 | S0c Bundling, with checkpoint 0 fix round | Opus builders | merged | PR #106; gate:all alone 2831 passed, 2 known-kind flakes passing alone; CI pass on Linux | none |
 | Specs C1 to C5 | Opus spec writers | written and committed | `slices/C1-spec.md` to `C5-spec.md`, each with orchestrator decisions | none |
 | C1 Constants | Sonnet builder | merged | PR #107; gate:unit 3408 tests, 0 failed; 19 browser specs 211 passed; comment lines 706 to 15; 83 old cases carried, 1 dropped | none |
-| C2 Normalizer | Sonnet builder | building | worktree `ts-c2-normalize` | review and merge |
-| C4 Protocol | Sonnet builder | building | worktree `ts-c4-protocol` | review and merge |
+| C2 Normalizer | Sonnet builder | merged | PR #108; gate:unit 3486 tests, 0 failed; 27 browser specs 332 passed; 103 old cases carried, 10 dropped; fuzz and 81-mutation runs | none |
+| C4 Protocol | Sonnet builder | merged | PR #109; gate:unit 3595 tests, 0 failed, with C1 and C2; 16 browser specs 78 passed; 94,481-input old-against-new run | none |
+| C3 Record | Sonnet builder | building | worktree `ts-c3-record` | review and merge, then C5 |
 
 ## Decisions and events
 
@@ -55,3 +56,5 @@ None. Ken's login item runs the server on Node 24.22.3, and the menu bar icon is
 - **2026-11-12 15:20.** Checkpoint 0 passed: `gate:all` alone gave 2831 passed and 2 failed. Both failures are flakes that pass alone 3 of 3 and are on the board: the known Firefox Library hang, and a new WebKit toast timing case. Chromium was fully clean. S0c merged as PR #106 after CI passed on Linux, which also proves the bundle builds the same bytes there. C1 build started.
 - **2026-11-12 15:28.** Ken's second `lahe install` installed the server's login item on Node 24.22.3. The menu bar item failed with the same launchd error 5; a plain reload succeeded right after, though launchd said nothing was loaded. The board row now records that the cause is not proven.
 - **2026-11-12 15:51.** C1 merged as PR #107. C2 and C4 builds started in parallel.
+- **2026-11-12 16:28.** C2 merged as PR #108. Departures agents and reviewers will notice: links with a query string stop reaching agents as `&amp;amp;` (D8), and words stop running together in blocks taken from wrapped source (D9).
+- **2026-11-12 16:34.** C4 merged as PR #109. Departures agents will notice: a reply whose required reason is not a string becomes a malformed-line chip (D6), and the chip names a missing field once (D7). C3 build started.
