@@ -46,8 +46,8 @@ type Proofread = { readonly proofread: true; readonly suggestions: readonly Sugg
 
 export type Reply =
   | (ReplyCommon & NoProofread & { readonly status: "handled" })
-  | (ReplyCommon & NoProofread & { readonly status: "not_handled" })
-  | (ReplyCommon & (NoProofread | Proofread) & { readonly status: "question" });
+  | (ReplyCommon & NoProofread & { readonly status: "not_handled"; readonly reason: string })
+  | (ReplyCommon & (NoProofread | Proofread) & { readonly status: "question"; readonly text: string });
 
 export type ReplyParse =
   | { readonly ok: true; readonly reply: Reply; readonly reason: null }
@@ -61,7 +61,9 @@ type SuggestionsParse =
   | { readonly ok: true; readonly suggestions: readonly Suggestion[] }
   | { readonly ok: false; readonly reason: string };
 
-const REQUIRED: { readonly [Status in ReplyStatus]: readonly (typeof REPLY_FIELD)[keyof typeof REPLY_FIELD][] } = {
+type RequiredField = typeof REPLY_FIELD.ITEM | typeof REPLY_FIELD.REV | typeof REPLY_FIELD.STATUS | typeof REPLY_FIELD.REASON | typeof REPLY_FIELD.TEXT;
+
+const REQUIRED: { readonly [Status in ReplyStatus]: readonly RequiredField[] } = {
   handled: [REPLY_FIELD.ITEM, REPLY_FIELD.REV, REPLY_FIELD.STATUS],
   not_handled: [REPLY_FIELD.ITEM, REPLY_FIELD.REV, REPLY_FIELD.STATUS, REPLY_FIELD.REASON],
   question: [REPLY_FIELD.ITEM, REPLY_FIELD.REV, REPLY_FIELD.STATUS, REPLY_FIELD.TEXT]
@@ -75,8 +77,8 @@ function isReplyStatus(value: unknown): value is ReplyStatus {
   return typeof value === "string" && REPLY_STATUSES.some((status) => status === value);
 }
 
-function isBlank(value: unknown): boolean {
-  return value === null || value === undefined || value === "" || (typeof value === "string" && value.trim() === "");
+function nonBlankText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value : null;
 }
 
 function parseSuggestions(list: unknown): SuggestionsParse {
@@ -117,17 +119,18 @@ export function parseReplyLine(line: string, options?: ReplyParseOptions): Reply
     return malformed("status must be one of " + REPLY_STATUSES.join(", ") + ", got " + JSON.stringify(status));
   }
 
-  const item = parsed[REPLY_FIELD.ITEM];
-  const rev = parsed[REPLY_FIELD.REV];
-  const missing = REQUIRED[status].filter(
-    (field) =>
-      isBlank(parsed[field]) ||
-      (field === REPLY_FIELD.ITEM && typeof item !== "string") ||
-      (field === REPLY_FIELD.REV && typeof rev !== "number")
-  );
-  if (missing.length > 0 || typeof item !== "string" || typeof rev !== "number") {
-    return malformed("status " + status + " needs " + REQUIRED[status].join(", ") + "; missing or wrong type: " + missing.join(", "));
-  }
+  const item = nonBlankText(parsed[REPLY_FIELD.ITEM]);
+  const givenRev = parsed[REPLY_FIELD.REV];
+  const rev = typeof givenRev === "number" ? givenRev : null;
+  const givenReason = parsed[REPLY_FIELD.REASON];
+  const givenText = parsed[REPLY_FIELD.TEXT];
+  const reason = nonBlankText(givenReason);
+  const text = nonBlankText(givenText);
+  const found: { readonly [Field in RequiredField]: unknown } = { item, rev, status, reason, text };
+  const missing = REQUIRED[status].filter((field) => found[field] === null);
+  const incomplete = (): ReplyParse =>
+    malformed("status " + status + " needs " + REQUIRED[status].join(", ") + "; missing or wrong type: " + missing.join(", "));
+  if (missing.length > 0 || item === null || rev === null) return incomplete();
 
   const marksProofread = parsed[REPLY_FIELD.PROOFREAD] !== undefined || parsed[REPLY_FIELD.SUGGESTIONS] !== undefined;
   let proofread: readonly Suggestion[] | null = null;
@@ -143,15 +146,13 @@ export function parseReplyLine(line: string, options?: ReplyParseOptions): Reply
   const lineAgent = parsed[REPLY_FIELD.AGENT];
   const filenameAgent = options?.filenameAgent;
   const agent = typeof lineAgent === "string" && lineAgent !== "" ? lineAgent : filenameAgent === undefined || filenameAgent === "" ? null : filenameAgent;
-  const reason = parsed[REPLY_FIELD.REASON];
-  const text = parsed[REPLY_FIELD.TEXT];
   const files: unknown = parsed[REPLY_FIELD.FILES];
   const common: ReplyCommon = {
     item,
     rev,
     agent,
-    reason: typeof reason === "string" ? reason : null,
-    text: typeof text === "string" ? text : null,
+    reason: typeof givenReason === "string" ? givenReason : null,
+    text: typeof givenText === "string" ? givenText : null,
     files: Array.isArray(files) ? files.slice() : [],
     user_needs_to_see_reply: parsed[REPLY_FIELD.NEEDS_SEE] === true
   };
@@ -159,11 +160,15 @@ export function parseReplyLine(line: string, options?: ReplyParseOptions): Reply
     case "handled":
       return { ok: true, reply: { ...common, status: "handled" }, reason: null };
     case "not_handled":
-      return { ok: true, reply: { ...common, status: "not_handled" }, reason: null };
+      return reason === null ? incomplete() : { ok: true, reply: { ...common, status: "not_handled", reason }, reason: null };
     case "question":
+      if (text === null) return incomplete();
       return {
         ok: true,
-        reply: proofread === null ? { ...common, status: "question" } : { ...common, status: "question", proofread: true, suggestions: proofread },
+        reply:
+          proofread === null
+            ? { ...common, status: "question", text }
+            : { ...common, status: "question", text, proofread: true, suggestions: proofread },
         reason: null
       };
   }
