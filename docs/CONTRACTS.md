@@ -114,7 +114,7 @@ not stage it. The orchestrator rebuilds and commits it once at each checkpoint.
 | `reply` | data | The folded agent reply, or null. Its `at` is the durable agent-turn timestamp |
 | `thread` | data | Completed reviewer/agent rounds, presented in stable timestamp order |
 | `created_at`, `updated_at` | n/a | ISO 8601 |
-| `new_blocks` | data | Free writing, optional. The run of new blocks written after the anchor, in order: `[{tag, html, from_anchor?}]`. Each `tag` is one of `normalize.WRITABLE_BLOCK_TAGS` (p, h2, h3, h4, ul, ol) and each `html` is exactly what `normalize.cleanBlock` writes. `from_anchor: true` marks the tail of an anchor the reviewer split with Enter. A record with a non-empty `new_blocks` is a RUN RECORD (`record.isRunRecord`) |
+| `new_blocks` | data | Free writing, optional. The run of new blocks written after the anchor, in order: `[{tag, html, from_anchor?}]`. Each `tag` is one of `WRITABLE_BLOCK_TAGS` (p, h2, h3, h4, ul, ol) and each `html` is exactly what `cleanBlock` writes, both in `src/domain/run-blocks.ts` (still read as `normalize.WRITABLE_BLOCK_TAGS` and `normalize.cleanBlock` until the layer converts). `from_anchor: true` marks the tail of an anchor the reviewer split with Enter. A record with a non-empty `new_blocks` is a RUN RECORD (`record.isRunRecord`) |
 | `anchor_after_html` | data | Free writing, optional. The anchor's own inner markup after the sitting. `after_html` stays the whole sitting: this, then each new block as its own element (`record.buildRunAfter`) |
 | `anchor_tag_after` | data | Free writing, optional. The anchor's new tag, or null. Writable tags only |
 | `placement` | data | Free writing, optional. `after_anchor`, or `start_of_container` when the page had no content blocks and the anchor is its container (`record.PLACEMENTS`) |
@@ -252,18 +252,19 @@ revision. 1B sets it; the merge rule reads it.
 
 ## The two comparison modes
 
-`src/shared/normalize.js` is the one normalizer, and no other module may define its own text
-normalization. Two normalizers that disagree is how a replay engine ends up fighting the reviewer's
+The ten modules of `src/domain/` that replace `src/shared/normalize.js` (`text.ts` for text, `clean-markup.ts` for markup, `comparison.ts` for the two modes) are the one normalizer, and no other module may define its own text
+normalization. The old path forwards to them, so callers still read `normalize.<name>`. Two normalizers that disagree is how a replay engine ends up fighting the reviewer's
 cursor.
 
 | Mode | Used by | What it compares |
 | --- | --- | --- |
-| `normalize.MODE.TEXT` | every record except format-only | The words, with whitespace, invisibles, and every tag folded away |
-| `normalize.MODE.STRUCTURE` | `format_only` records | The words **and** which of them carry emphasis |
+| `normalize.COMPARISON_MODE.TEXT` | every record except format-only | The words, with whitespace, invisibles, and every tag folded away |
+| `normalize.COMPARISON_MODE.STRUCTURE` | `format_only` records | The words **and** which of them carry emphasis |
 
 `normalize.modeFor(kind)` picks; `record.comparisonMode(item)` is the same call from an item.
-`normalize.equalsInMode(mode, a, b)` is the only comparison a caller makes, and it throws on an
-unknown mode rather than falling back to text: a silent fallback makes the whole format-only branch a
+`normalize.equalsInMode(mode, a, b)` is the only comparison a caller makes, and its mode is the
+two-member `ComparisonMode` type with no fallback branch, so a third mode fails the build where it is
+unhandled instead of defaulting to text: a silent fallback makes the whole format-only branch a
 no-op that looks like a working feature.
 
 `record.comparisonFields(item)` says **which pair of fields** to compare: `before`/`after` for an
@@ -272,7 +273,7 @@ to its `before` by construction. Comparing a format-only record on its text fiel
 that looks like a working branch. `record.priorAfters(item, field)` takes the same field, so one
 history serves both modes.
 
-**Formatting is a closed list: bold and italic, nothing else in v1** (`normalize.STRUCTURAL_TAGS`).
+**Formatting is a closed list: bold and italic, nothing else in v1** (`STRUCTURAL_TAGS` in `src/domain/formatting.ts`).
 `cleanMarkup` renames `b` to `strong` and `i` to `em` first, so the comparator only ever sees
 canonical tag names, and a framework reserializing a span or adding a wrapper class is not a format
 change.
@@ -570,7 +571,7 @@ For a run record, `new_blocks`, `after_full` and `after_html` are **not** cut at
 helper's ceiling bounds them, and brief R6 keeps the words as typed. `anchor_after_html` is not cut
 either on any record with the free-writing fields, because a list anchor is the whole list and a
 character cut can end mid-tag. `run_words` is
-`normalize.runWords` (the run's words, `from_anchor` blocks skipped). `proofread` is true when
+`runWords` in `src/domain/run-blocks.ts` (the run's words, `from_anchor` blocks skipped). `proofread` is true when
 `run_words` is over `PROOFREAD_MIN_WORDS` (150), the review is not a notes review, and the item's
 thread holds no proofread question yet; the agent never counts, and "Use the fixes" or "Keep mine"
 ends it. The review-level `review.notes` is true for a `lahe write` notes review. Projected
@@ -1387,7 +1388,7 @@ The one read path, and the one keep-up loop. Before it, every agent hand-rolled 
     is empty once its own empty fields are gone (`status.leanValue`). An array keeps all its entries,
     so a block's index in `new_blocks` is the same as in `review.json`. The skill says a missing
     field means empty and a missing true/false field means false.
-  - leaves out `page.context.prefix` or `page.context.suffix` when, after `normalize.normalizeText`,
+  - leaves out `page.context.prefix` or `page.context.suffix` when, after `normalizeText` (`src/domain/text.ts`),
     it is wholly inside `page.quote`. A partial overlap is kept whole.
   - leaves out `agent_session_id`, `page.origin`, `page.title`, `page.region_label` and
     `card_first_created_at`. `review.json` keeps all of them. `reviewer_last_changed_at` stays on the
