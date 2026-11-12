@@ -4,11 +4,11 @@ read-when: Checking where the TypeScript migration stands, what it waits on, or 
 
 # Progress: TypeScript migration
 
-The architecture and the plan are written and served to Ken, he answered all three questions on it, approved it, and reshaped it: every conversion slice is now a rebuild to a written spec, test first. Slice S0a (raise the Node floor to 24.12) is being built in `.claude/worktrees/ts-s0a`.
+The architecture and the plan are written and served to Ken, he answered all three questions on it, approved it, and reshaped it: every conversion slice is now a rebuild to a written spec, test first. Slice S0a (Node floor 24.12) is merged. Slice S0b (TypeScript and lint setup, with the Node pilot) is being built in `.claude/worktrees/ts-s0b`.
 
 ## Attention needed
 
-None. An orchestrator can start slice S0a.
+Ken: run `! lahe install` once. Your login item still starts the server with Node 20, and from S0a on that Node prints the upgrade message instead of starting. Until you run it, the server will not come back after a reboot. The `lahe` wrapper and the Stop hook are already on Node 24.22.3.
 
 ## Documents
 
@@ -23,8 +23,9 @@ None. An orchestrator can start slice S0a.
 | Outcome | Owner | State | Evidence or blocker | Next action |
 | --- | --- | --- | --- | --- |
 | Architecture and plan | planning agent | done | this folder; Ken answered all three questions | none |
-| S0a Node floor | Sonnet builder | building | worktree `ts-s0a`, branch `ts/s0a-node-floor` | merge, then reinstall the wrapper, login item and Stop hook on Node 24.22.3 |
-| S0b Toolchain and pilot, S0c Bundling | orchestrator | waiting on S0a | none | start S0b after S0a merges |
+| S0a Node floor | Sonnet builder | merged | PR #104; gate:unit 3221 tests, 0 failed, on Node 24.22.3; CI pass; old-Node message checked on Node 18 and 20 | Ken runs `lahe install` |
+| S0b Toolchain and pilot | Opus builder | building | worktree `ts-s0b`, branch `ts/s0b-toolchain` | review and merge |
+| S0c Bundling | orchestrator | waiting on S0b | none | start after S0b merges |
 
 ## Decisions and events
 
@@ -36,3 +37,4 @@ None. An orchestrator can start slice S0a.
 - **2026-11-12 11:41.** Ken approved the plan and cleared the build to start. Node 24.22.3 installed on Ken's Mac for the builders.
 - **2026-11-12 11:43.** Ken: the code got lazy and sloppy and needs a real refactor; each section should write out the functionality it aims for and redo TDD. Every conversion slice is now a two-stage rebuild: an Opus spec of behavior and module design, then a test-first build. Old test cases are carried into new tests or listed as dropped with a reason.
 - **2026-11-12 12:50.** The pilots swap. `elapsed.js` is in the browser bundle, which cannot load `.ts` until S0c, so S0b pilots the Node-only `script_line.js` and S0c pilots `elapsed` through the new bundle.
+- **2026-11-12 12:48.** S0a merged as PR #104. Node 22 and later refuse a directory as a `node --test` path, so `test:unit` now passes a glob. Wrapper and Stop hook reinstalled on Node 24.22.3. `lahe install` refuses to run from an agent, so the login item waits on Ken.
