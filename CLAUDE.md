@@ -165,7 +165,7 @@ fail each other: tests the change never touched miss their timing limits or time
 out. A failure seen during overlap is rerun alone before anyone calls it real or
 a flake.
 
-`check:layer` fails when the committed bundle `dist/lahe-layer.js` is stale.
+`check:layer` fails when either committed bundle (`dist/lahe-layer.js`, the review layer, or `dist/lahe-library.js`, the Library page) is stale. esbuild builds both.
 **Builders never commit `dist/`**: it is generated, and four parallel branches
 rebuilding it means a machine-generated conflict at every checkpoint. Rebuild it
 locally if you need it for a browser test, but do not stage it. The orchestrator
@@ -323,8 +323,8 @@ The rule covers everything a builder makes along the way:
 - screenshots
 - `test-results/` folders
 - the `.bak` files that `sed -i` leaves (on macOS, write `sed -i ''` so none is made)
-- a locally rebuilt `dist/lahe-layer.js`: put it back with
-  `git checkout -- dist/lahe-layer.js`, never by deleting it
+- a locally rebuilt `dist/` file: put it back with
+  `git checkout -- dist/`, never by deleting it
 
 A builder's prompt states this rule near the top, not only in closing
 boilerplate. A one-line "never delete files" at the end did not hold on
