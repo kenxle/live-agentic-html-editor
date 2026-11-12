@@ -99,7 +99,7 @@ The full file-by-file mapping is in [parts/target_layout.md](parts/target_layout
 | 24 | 2028-04-30 | from 24.3.0 | stable from 24.12.0 |
 | 26 | 2029-04-30 | yes | stable |
 
-Read literally, the rule "the lowest line not past end of life that runs `.ts` files" picks 22.18. But 22 reaches end of life on 2027-04-30, and its own documentation does not call the feature stable. 24.12.0 is the first release where both conditions hold with no asterisk. The plan page asks Ken to confirm this.
+Read literally, the rule "the lowest line not past end of life that runs `.ts` files" picks 22.18. But 22 reaches end of life on 2027-04-30, and its own documentation does not call the feature stable. 24.12.0 is the first release where both conditions hold with no asterisk. Ken confirmed 24.12 on the plan page.
 
 What the change touches, all in slice S0a:
 

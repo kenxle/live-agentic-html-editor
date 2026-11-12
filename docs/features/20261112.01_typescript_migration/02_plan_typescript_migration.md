@@ -4,9 +4,9 @@ read-when: Building, reviewing or orchestrating a slice of the TypeScript migrat
 
 # Plan: move Lahe to strict TypeScript in slices that each leave main working
 
-This page lists every slice of the migration: what each one changes, what it waits on, and how it proves it is done. One question at the top still needs your answer; the first two are settled. Work starts without them: the first slices do not depend on it, and it shows the default the builders will follow until you choose. The reasoning behind each slice is in [the architecture](01_architecture_typescript_migration.md). Where every file goes is in [the target layout](parts/target_layout.md). [The progress page](03_progress_typescript_migration.md) tracks the build.
+This page lists every slice of the migration: what each one changes, what it waits on, and how it proves it is done. You have answered all three questions at the top, and work can start. The reasoning behind each slice is in [the architecture](01_architecture_typescript_migration.md). Where every file goes is in [the target layout](parts/target_layout.md). [The progress page](03_progress_typescript_migration.md) tracks the build.
 
-## Needs your answer
+## Your answers
 
 **1. Should "helper" change to "server" in what people read?** The code will say "server" whatever you choose, as you asked. The open question is the CLI output, the docs and the skill. [BRAND.md](../../ongoing/BRAND.md) already says "the Lahe program" for most people and "the Lahe server" for developers, and never "helper". The CLI and many docs still say "helper". **Decided: rename.** Slice W1 changes it, following BRAND, after the CLI converts, so wording changes never mix with conversions.
 
@@ -24,11 +24,11 @@ This page lists every slice of the migration: what each one changes, what it wai
 <button type="button" value="header" data-chosen>Keep one read-when header line per file</button>
 </div>
 
-**3. Is Node 24.12 the right minimum?** You asked for the lowest Node line that is not past end of life and runs `.ts` files directly. Read literally, that is Node 22.18. But Node 22 reaches end of life on 2027-04-30, and its own documentation still calls the `.ts` feature a release candidate. 24.12.0 is the first release where the feature is marked stable, and Node 24 is supported until 2028-04-30. Recommendation: 24.12. The [architecture](01_architecture_typescript_migration.md#question-4-the-node-minimum) has the table. Slice S0a uses 24.12 unless you choose 22.
+**3. Is Node 24.12 the right minimum?** You asked for the lowest Node line that is not past end of life and runs `.ts` files directly. Read literally, that is Node 22.18. But Node 22 reaches end of life on 2027-04-30, and its own documentation still calls the `.ts` feature a release candidate. 24.12.0 is the first release where the feature is marked stable, and Node 24 is supported until 2028-04-30. **Decided: 24.12.** The [architecture](01_architecture_typescript_migration.md#question-4-the-node-minimum) has the table.
 
 <div class="choice" data-choice="node-floor">
 <p class="choice-q">Which Node minimum?</p>
-<button type="button" value="24.12" data-recommended>Node 24.12 (stable, supported to April 2028)</button>
+<button type="button" value="24.12" data-recommended data-chosen>Node 24.12 (stable, supported to April 2028)</button>
 <button type="button" value="22.18">Node 22.18 (supported to April 2027)</button>
 </div>
 
@@ -268,7 +268,6 @@ Ken has said the planner and builders go ahead without waiting for his approval.
 
 Returning to Ken is needed only for:
 
-- the open questions above;
 - a type that cannot be written without an escape hatch;
 - a parser that would refuse input Lahe accepts today;
 - any change to a rule in this plan.
