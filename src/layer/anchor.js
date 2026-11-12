@@ -2103,7 +2103,7 @@
   /**
    * How many blocks with words this element is made of.
    *
-   * Counts the child elements that are blocks (normalize.BLOCK_TAGS) and hold
+   * Counts the child elements that are blocks (normalize.isBlockTag) and hold
    * words. A wrapper whose words all sit in one block child is looked through,
    * so <main><div><h2/><p/></div></main> is two blocks, not one. Inline
    * children (an <em>, a <span>) are never counted: a paragraph with two bits
@@ -2115,7 +2115,7 @@
       var worded = elementChildren(node).filter(function (kid) {
         return (
           !isSkipped(kid) &&
-          Object.prototype.hasOwnProperty.call(normalize.BLOCK_TAGS, tagOf(kid)) &&
+          normalize.isBlockTag(tagOf(kid)) &&
           !!textOf(kid)
         );
       });

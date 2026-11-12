@@ -400,13 +400,13 @@
     return first ? { first: first, last: last } : null;
   }
 
-  /** The innermost block element (normalize.BLOCK_TAGS) holding a node. */
+  /** The innermost block element (normalize.isBlockTag) holding a node. */
   function innermostBlockOf(node) {
     var el = node;
     while (el && el.nodeType !== 1) el = el.parentNode;
     while (el && el.nodeType === 1) {
       var tag = String(el.tagName || "").toLowerCase();
-      if (Object.prototype.hasOwnProperty.call(normalize.BLOCK_TAGS, tag)) return el;
+      if (normalize.isBlockTag(tag)) return el;
       el = el.parentElement;
     }
     return null;
