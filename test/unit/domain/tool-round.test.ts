@@ -35,6 +35,8 @@ test("only an object in region.check_reopen counts as a stamp", () => {
   assert.equal(pageCheckReopen(withCheck(anItem(), null)), null);
   const junk = { ...anItem(), region: { ...emptyRegion(), check_reopen: "yes" } };
   assert.equal(callUntyped(pageCheckReopen, junk), null);
+  assert.equal(callUntyped(pageCheckReopen, {}), null, "a record with no region");
+  assert.equal(callUntyped(pageCheckReopen, { region: null }), null);
 });
 
 test("the stamp's tool is the record's tool round while the stamp's revision is the record's", () => {

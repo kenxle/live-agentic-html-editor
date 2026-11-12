@@ -58,5 +58,5 @@ export const FIELD_CLASS: {
 };
 
 export function fieldClass(path: string): FieldClass {
-  throw new Error("C3: not built yet " + path);
+  return INSTRUCTION_PATHS.some((instruction) => instruction === path) ? CLASS_INSTRUCTION : CLASS_DATA;
 }

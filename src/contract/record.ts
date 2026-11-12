@@ -3,6 +3,7 @@
  */
 
 import type { ChoicePress } from "./choice.ts";
+import { isJsonObject } from "./json-object.ts";
 import { REPLY_STATUS, REPLY_STATUSES } from "./replies.ts";
 import type { ReplyStatus, Suggestion } from "./replies.ts";
 
@@ -222,45 +223,48 @@ export interface Item {
   choice?: ChoicePress;
 }
 
-function notBuilt(...args: readonly unknown[]): Error {
-  return new Error("C3: not built yet " + String(args.length));
-}
+const TOOL_ROUND_NAMES: readonly ToolRoundName[] = Object.values(TOOL_ROUND);
+const HAND_EDIT_KINDS = [KIND.EDIT, KIND.DELETE, KIND.FORMAT_ONLY] as const;
 
 export function isKind(value: unknown): value is Kind {
-  throw notBuilt(value);
+  return KINDS.some((kind) => kind === value);
 }
 export function isItemState(value: unknown): value is ItemState {
-  throw notBuilt(value);
+  return STATES.some((state) => state === value);
 }
 export function isToolRoundName(value: unknown): value is ToolRoundName {
-  throw notBuilt(value);
+  return TOOL_ROUND_NAMES.some((name) => name === value);
 }
 export function isPlacement(value: unknown): value is Placement {
-  throw notBuilt(value);
+  return PLACEMENTS.some((placement) => placement === value);
 }
 
 export function emptyRegion(): Region {
-  throw notBuilt();
+  return { ref: null, label: null, lost: null, accepted_page_texts: [], check_reopen: null };
 }
 export function emptyContext(): Context {
-  throw notBuilt();
+  return { quote: null, prefix: null, suffix: null, heading: null, element: null, subject: null };
 }
 export function emptySlideContext(): SlideContext {
-  throw notBuilt();
+  return { index: null, total: null, uncounted: false, id: null, heading: null, text: null };
 }
 
 export function isHandEdit(item: Pick<Item, "kind"> | null | undefined): boolean {
-  throw notBuilt(item);
+  return item !== null && item !== undefined && HAND_EDIT_KINDS.some((kind) => kind === item.kind);
 }
 export function isChoice(item: Pick<Item, "kind"> | null | undefined): boolean {
-  throw notBuilt(item);
+  return item?.kind === KIND.CHOICE;
 }
 export function isRevert(item: Pick<Item, "reverts"> | null | undefined): boolean {
-  throw notBuilt(item);
+  return typeof item?.reverts === "string" && item.reverts !== "";
 }
 export function isRunRecord(item: Pick<Item, "new_blocks"> | null | undefined): boolean {
-  throw notBuilt(item);
+  return Array.isArray(item?.new_blocks) && item.new_blocks.length > 0;
 }
 export function hasRunFields(item: object | null | undefined): boolean {
-  throw notBuilt(item);
+  if (!isJsonObject(item)) return false;
+  return RUN_FIELDS.some((field) => {
+    const value = item[field];
+    return value !== undefined && value !== null && !(Array.isArray(value) && value.length === 0);
+  });
 }

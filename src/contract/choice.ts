@@ -3,7 +3,8 @@
  */
 
 import type { FailureCode } from "./failures.ts";
-import { KIND } from "./record.ts";
+import { isJsonObject } from "./json-object.ts";
+import { FIELD, KIND, hasRunFields } from "./record.ts";
 
 declare const choiceTokenBrand: unique symbol;
 export type ChoiceToken = string & { readonly [choiceTokenBrand]: true };
@@ -44,16 +45,46 @@ export interface ChoiceRefusal {
   readonly reason: string;
 }
 
-function notBuilt(...args: readonly unknown[]): Error {
-  return new Error("C3: not built yet " + String(args.length));
-}
+const CHOICE_KEYS: readonly string[] = ["group", "answer"];
 
 export function isChoiceToken(value: unknown): value is ChoiceToken {
-  throw notBuilt(value);
+  return typeof value === "string" && CHOICE_TOKEN.test(value);
 }
+
 export function choiceRef(group: string): ChoiceRef {
-  throw notBuilt(group);
+  return { kind: KIND.CHOICE, group };
 }
+
+function refuse(reason: string): ChoiceRefusal {
+  return { code: "CHOICE_REFUSED", reason };
+}
+
+function carriedContent(value: Readonly<Record<string, unknown>>): string[] {
+  const carried: string[] = [FIELD.BEFORE, FIELD.AFTER, FIELD.BEFORE_HTML, FIELD.AFTER_HTML].filter(
+    (field) => value[field] !== undefined && value[field] !== null
+  );
+  const history = value[FIELD.AFTER_HISTORY];
+  if (Array.isArray(history) && history.length > 0) carried.push(FIELD.AFTER_HISTORY);
+  if (hasRunFields(value)) carried.push("the free-writing fields");
+  return carried;
+}
+
 export function validateChoice(value: unknown): ChoiceRefusal | null {
-  throw notBuilt(value);
+  if (!isJsonObject(value)) return refuse("not a record");
+  const press = value[FIELD.CHOICE];
+  const present = press !== undefined && press !== null;
+  if (value[FIELD.KIND] !== KIND.CHOICE) {
+    return present ? refuse("choice is set only on a choice record, and this is a " + String(value[FIELD.KIND])) : null;
+  }
+  if (!isJsonObject(press)) return refuse("a choice record must carry choice as {group, answer}");
+  const extra = Object.keys(press).filter((key) => !CHOICE_KEYS.includes(key));
+  if (extra.length > 0) return refuse("choice carries a key other than group and answer: " + extra.join(", "));
+  if (!isChoiceToken(press["group"])) return refuse("choice.group is missing or off the grammar");
+  if (!isChoiceToken(press["answer"])) return refuse("choice.answer is missing or off the grammar");
+  const carried = carriedContent(value);
+  if (carried.length > 0) return refuse("a choice record carries " + carried.join(", "));
+  const region = value[FIELD.REGION];
+  const ref = isJsonObject(region) ? region["ref"] : undefined;
+  if (isJsonObject(ref) && typeof ref["stamp"] === "string" && ref["stamp"] !== "") return refuse("a choice record carries a stamp");
+  return null;
 }

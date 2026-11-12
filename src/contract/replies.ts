@@ -3,6 +3,7 @@
  */
 
 import { isJsonObject } from "./json-object.ts";
+import { NEW_BLOCKS_MAX, NEW_BLOCKS_MAX_BYTES } from "./run-limits.ts";
 import { SAFE_ID, isSafeId } from "./safe-id.ts";
 import type { SafeId } from "./safe-id.ts";
 
@@ -23,8 +24,8 @@ export const REPLY_STATUS = { HANDLED: "handled", NOT_HANDLED: "not_handled", QU
 export type ReplyStatus = (typeof REPLY_STATUS)[keyof typeof REPLY_STATUS];
 export const REPLY_STATUSES: readonly ReplyStatus[] = Object.values(REPLY_STATUS);
 
-export const SUGGESTIONS_MAX = 400;
-export const SUGGESTION_TEXT_MAX = 200000;
+export const SUGGESTIONS_MAX: typeof NEW_BLOCKS_MAX = NEW_BLOCKS_MAX;
+export const SUGGESTION_TEXT_MAX: typeof NEW_BLOCKS_MAX_BYTES = NEW_BLOCKS_MAX_BYTES;
 
 export interface Suggestion {
   readonly block: number;
