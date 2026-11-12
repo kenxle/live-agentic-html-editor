@@ -16,33 +16,21 @@ not-for: The simulated-DOM version of these checks; see test/unit/anchor_engine.
 // different containers) and the multi-page app fixture in test/fixtures/app/,
 // whose content morphs under the engine's feet.
 //
-// The library modules are loaded as plain script tags, the way the built bundle
-// loads them, in the manifest's dependency order. dist/ is never built here:
-// builders do not commit it, and a browser test that depended on it would go
-// stale against its own source.
+// The page gets the whole layer bundle, built in memory from this worktree's
+// source (support/bundles.js). Nothing boots: the page carries no config tag.
+// dist/ is not read: builders do not commit it, and a browser test that
+// depended on it would go stale against its own source.
 
 "use strict";
 
-const path = require("path");
 const { test, expect } = require("../helpers");
 const { startAppServer } = require("../fixtures/app/server");
-
-const SRC = path.resolve(__dirname, "..", "..", "src");
-
-const LAYER_SCRIPTS = [
-  "shared/markers.js",
-  "shared/normalize.js",
-  "shared/uniqueness.js",
-  "shared/regions.js",
-  "layer/anchor.js"
-];
+const { layerBundle } = require("./support/bundles");
 
 async function loadEngine(page) {
-  for (const relative of LAYER_SCRIPTS) {
-    await page.addScriptTag({ path: path.join(SRC, relative) });
-  }
+  await page.addScriptTag({ content: await layerBundle() });
   // The engine has to be there before anything asserts on its verdicts;
-  // otherwise a typo in a path reads as a failed anchor.
+  // otherwise a bundle that failed to load reads as a failed anchor.
   expect(await page.evaluate(() => typeof window.LAHE.anchor.mint)).toBe("function");
 }
 

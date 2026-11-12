@@ -5,12 +5,12 @@ read-when: Writing or debugging a replay spec for run records that loads replay 
 // A page with replay loaded straight from src/, for the free-writing replay
 // specs (plan Tasks 2.5 to 2.7).
 //
-// Owner: free-writing replay (2B). The layer files load in manifest order up to
-// and including replay.js, and nothing boots: no rail, no sync, no helper. Each
-// spec builds its records in Node from record_fixtures.js, puts them in the
-// page as the replay context's items (the store's cache, as index.js hands
-// them over), and runs passes by hand. So the specs test the source and need
-// no bundle rebuild.
+// Owner: free-writing replay (2B). The page gets the layer bundle built in
+// memory from src/ (bundles.js), and nothing boots: no rail, no sync, no
+// helper, because the fixtures carry no config tag. Each spec builds its
+// records in Node from record_fixtures.js, puts them in the page as the replay
+// context's items (the store's cache, as index.js hands them over), and runs
+// passes by hand. So the specs test the source and need no bundle rebuild.
 //
 // The card is a small recorder with the rail's in-place mutator names
 // (setCardBadge, setCardNotice, attachCardNode ...). An attached node is put
@@ -18,24 +18,12 @@ read-when: Writing or debugging a replay spec for run records that loads replay 
 
 "use strict";
 
-const path = require("node:path");
-const manifest = require("../../../src/shared/manifest.js");
+const { layerBundle } = require("./bundles");
 
-const REPO_ROOT = path.join(__dirname, "..", "..", "..");
-
-function layerScripts() {
-  const out = [];
-  for (const entry of manifest.LAYER_FILES) {
-    out.push(entry.path);
-    if (entry.path === "src/layer/replay.js") break;
-  }
-  return out;
-}
-
-/** Open a fixture page and load the layer files up to replay, then wire a context. */
+/** Open a fixture page and load the layer bundle, then wire a replay context. */
 async function openReplayPage(page, server, fixture) {
   await page.goto(server.urlFor(fixture));
-  for (const file of layerScripts()) await page.addScriptTag({ path: path.join(REPO_ROOT, file) });
+  await page.addScriptTag({ content: await layerBundle() });
   await page.evaluate(() => {
     const cards = { badges: {}, notices: {}, nodes: {}, removed: [] };
     const tray = document.createElement("div");
@@ -118,4 +106,4 @@ function setItems(page, items) {
   }, items);
 }
 
-module.exports = { openReplayPage, setItems, layerScripts };
+module.exports = { openReplayPage, setItems };

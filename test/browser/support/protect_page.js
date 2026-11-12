@@ -11,7 +11,7 @@ read-when: Writing or debugging a protection spec that needs the real protection
 // Why it exists. The harness self-tests run against
 // test/fixtures/assets/harness-stub.js, a stand-in layer. A protection spec that
 // ran against the stub would be scoring the stub. So these specs load the real
-// modules out of src/ with addScriptTag, in dependency order, and wire them up:
+// layer, built in memory from src/ (bundles.js), and wire it up:
 //
 //   - the stub script is BLOCKED at the network (route.abort) on any fixture
 //     page that loads it, so nothing but the real protect.js can protect
@@ -27,28 +27,13 @@ read-when: Writing or debugging a protection spec that needs the real protection
 //     test/helpers/repaint.js the fixture surface it expects (repaintOnce,
 //     start, stop) over the app's own poll-and-morph engine.
 //
-// dist/ is not involved: builders may not rebuild it, so a spec that loaded the
-// bundle would depend on an artifact this branch cannot refresh.
+// dist/ is not read: builders do not commit it, so a spec that read it would
+// test whoever last ran the build script. The fixture pages carry no config
+// tag, so the bundle boots nothing; only the modules are used.
 
 "use strict";
 
-const path = require("node:path");
-
-const REPO_ROOT = path.join(__dirname, "..", "..", "..");
-
-// Dependency order, the same order src/shared/manifest.js concatenates them in.
-// Only what protection needs: loading the whole layer would boot modules other
-// Phase 2 tasks are still writing.
-const MODULE_FILES = [
-  "src/shared/markers.js",
-  "src/shared/normalize.js",
-  "src/shared/record.js",
-  "src/shared/uniqueness.js",
-  "src/shared/epoch.js",
-  "src/layer/selection.js",
-  "src/layer/replay.js",
-  "src/layer/protect.js"
-];
+const { layerBundle } = require("./bundles");
 
 /**
  * Stop the stub layer from ever loading on this page.
@@ -73,9 +58,7 @@ async function blockStubLayer(page) {
  *   cannot tell which one saved the caret.
  */
 async function loadRealLayer(page, options = {}) {
-  for (const relative of MODULE_FILES) {
-    await page.addScriptTag({ path: path.join(REPO_ROOT, relative) });
-  }
+  await page.addScriptTag({ content: await layerBundle() });
 
   return page.evaluate(function (opts) {
     const L = window.LAHE;
@@ -227,7 +210,6 @@ async function nodeStillIdentical(page, selector, token) {
 }
 
 module.exports = {
-  MODULE_FILES,
   blockStubLayer,
   loadRealLayer,
   tagNode,

@@ -6,9 +6,9 @@ read-when: Changing src/layer/blocks.js, the shared block rules for insert point
 // Task 1.3). Editing, replay, undo and protection all find the insert point,
 // the host, and a record's run on the live page through these functions.
 //
-// The page loads only the four files blocks.js needs (markers, normalize,
-// record, blocks), straight from src/, so this spec tests the source and needs
-// no bundle rebuild.
+// The page loads the layer bundle built in memory from src/
+// (support/bundles.js), so this spec tests the source and needs no bundle
+// rebuild. Nothing boots: the fixtures carry no config tag.
 
 "use strict";
 
@@ -18,10 +18,10 @@ const path = require("node:path");
 const { test, expect, startStaticServer } = require("../helpers");
 const normalize = require("../../src/shared/normalize.js");
 const corpus = require("../fixtures/free_writing/corpus.js");
+const { layerBundle } = require("./support/bundles");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
 const FIXTURES = path.join(REPO_ROOT, "test", "fixtures");
-const SCRIPTS = ["src/shared/markers.js", "src/shared/normalize.js", "src/shared/record.js", "src/layer/blocks.js"];
 
 let server = null;
 
@@ -35,7 +35,7 @@ test.afterAll(async () => {
 
 async function open(page, fixture) {
   await page.goto(server.urlFor(fixture));
-  for (const file of SCRIPTS) await page.addScriptTag({ path: path.join(REPO_ROOT, file) });
+  await page.addScriptTag({ content: await layerBundle() });
   await page.waitForFunction(() => !!(window.LAHE && window.LAHE.blocks));
 }
 

@@ -42,7 +42,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { test, expect, pollPage, pollUntil, startStaticServer, startService } = require("../helpers");
-const manifest = require("../../src/shared/manifest.js");
+const { layerBundle } = require("./support/bundles");
 const protocol = require("../../src/shared/protocol.js");
 const highlightModule = require("../../src/layer/highlight.js");
 const replayModule = require("../../src/layer/replay.js");
@@ -64,20 +64,6 @@ const COMMENT_NAMES = [highlightModule.NAME.COMMENT, highlightModule.NAME.ACTIVE
 // window, f goes fullscreen, o opens the overview, ArrowRight advances.
 const DECK_KEYS = [" ", "s", "f", "o"];
 
-// The bundle, concatenated in the manifest's order, in memory. Builders never
-// commit dist/, so reading dist/ would test whoever last ran the build script
-// rather than the source in this worktree.
-function layerBundle() {
-  return manifest
-    .builtFiles()
-    .map(function (entry) {
-      return "/* ---- " + entry.path + " ---- */\n" + fs.readFileSync(path.join(REPO_ROOT, entry.path), "utf8");
-    })
-    .join("\n");
-}
-
-const BUNDLE = layerBundle();
-
 // ---------------------------------------------------------------------------
 // Staging a deck that can carry its own script tag
 // ---------------------------------------------------------------------------
@@ -96,9 +82,10 @@ function copyTree(from, to) {
  * Lay out a temp directory with the repo's shape, so the fixture's relative
  * paths into vendor/ resolve exactly as they do in the repo.
  *
- * @returns {{dir: string, pagePath: string, pageUrlPath: string}}
+ * @returns {Promise<{dir: string, pagePath: string, pageUrlPath: string}>}
  */
-function stageDeckTree(label) {
+async function stageDeckTree(label) {
+  const bundle = await layerBundle();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-reveal-" + label + "-"));
   copyTree(path.join(REPO_ROOT, "vendor", "reveal.js"), path.join(dir, "vendor", "reveal.js"));
   fs.mkdirSync(path.join(dir, "test", "fixtures", "assets"), { recursive: true });
@@ -106,7 +93,7 @@ function stageDeckTree(label) {
     path.join(REPO_ROOT, "test", "fixtures", "assets", "ticking-counter.js"),
     path.join(dir, "test", "fixtures", "assets", "ticking-counter.js")
   );
-  fs.writeFileSync(path.join(dir, "lahe-layer.js"), BUNDLE);
+  fs.writeFileSync(path.join(dir, "lahe-layer.js"), bundle);
   return {
     dir: dir,
     pagePath: path.join(dir, FIXTURE_REL),
@@ -147,7 +134,7 @@ async function deckReady(page) {
 
 /** The library on top of the booted deck, with the sync client held back. */
 async function bootLayer(page) {
-  await page.addScriptTag({ content: BUNDLE });
+  await page.addScriptTag({ content: await layerBundle() });
   await page.evaluate(function (review) {
     window.__h = window.LAHE.layer.boot({
       review: review,
@@ -753,7 +740,7 @@ test.describe("the speaker-notes window does not start a second review", () => {
   let pages;
 
   test.beforeAll(async () => {
-    staged = stageDeckTree("notes");
+    staged = await stageDeckTree("notes");
     fs.writeFileSync(
       staged.pagePath,
       deckWithScriptTag(FIXTURE_HTML, "http://127.0.0.1:1", "notes-token")
@@ -926,7 +913,7 @@ test.describe("a rebuilt deck paints the agent's paragraph and nothing the deck 
   }
 
   test.beforeAll(async () => {
-    staged = stageDeckTree("rebuild");
+    staged = await stageDeckTree("rebuild");
     pages = await startStaticServer({ root: staged.dir, label: "reveal-rebuild" });
     service = await startService({
       reviews: [REVIEW],

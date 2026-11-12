@@ -32,30 +32,15 @@ const { pollPage, pollUntil } = require("../helpers/poll");
 const { pixelDiff, expectSamePixels, describeDiff } = require("../helpers/pixels");
 const { startService, readEventLog, SERVICE_ENTRY } = require("../helpers");
 const { startAppServer } = require("../fixtures/app/server");
-const manifest = require("../../src/shared/manifest.js");
+const { layerBundle } = require("./support/bundles");
 
-const REPO_ROOT = path.join(__dirname, "..", "..");
 const FIXTURE = "css-reset.html";
-
-// The bundle, concatenated in the manifest's order, in memory. Builders never
-// commit dist/, and a test that read dist/ would be testing whoever last ran the
-// build script rather than the source in this worktree.
-function layerBundle() {
-  return manifest
-    .builtFiles()
-    .map(function (entry) {
-      return "/* ---- " + entry.path + " ---- */\n" + fs.readFileSync(path.join(REPO_ROOT, entry.path), "utf8");
-    })
-    .join("\n");
-}
-
-const BUNDLE = layerBundle();
 
 // Boots the comment surface AND the editing surface, because the pill's two
 // buttons reach one each and a harness with only half of that would let the Edit
 // button pass by doing nothing.
 async function bootLayer(page, options = {}) {
-  await page.addScriptTag({ content: BUNDLE });
+  await page.addScriptTag({ content: await layerBundle() });
   await page.evaluate(function (opts) {
     var LAHE = window.LAHE;
     var pageRec = LAHE.record.pageFrom({

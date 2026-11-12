@@ -8,38 +8,36 @@
 //
 // The page is the generated knowledge tree (4,000 elements, 26 deep, few
 // headings), the shape of the Seneschal page that froze for 26 seconds on
-// every load because of one lost comment. The library modules load as plain
-// script tags, as in anchor_engine.spec.js, so dist/ is not needed.
+// every load because of one lost comment. The layer bundle is built in memory
+// from source, as in anchor_engine.spec.js, so dist/ is not needed.
 
 "use strict";
 
-const path = require("path");
 const { test, expect } = require("../helpers");
 const sim = require("../helpers/simulated_page.js");
-
-const SRC = path.resolve(__dirname, "..", "..", "src");
-
-const LAYER_SCRIPTS = [
-  "shared/markers.js",
-  "shared/normalize.js",
-  "shared/uniqueness.js",
-  "shared/regions.js",
-  "layer/anchor.js",
-  "layer/pointing.js"
-];
+const { layerBundle } = require("./support/bundles");
 
 // Generous: the pass took tens of seconds before the fix and well under a
 // second after it, so a slow machine does not flake this.
 const BUDGET_MS = 1500;
 
+// The page is answered by Playwright at an http address rather than set on
+// about:blank: the whole layer loads, and its store reads localStorage as it
+// loads, which about:blank refuses.
+const PAGE_URL = "http://knowledge-tree.test/";
+
 async function loadKnowledgeTree(page) {
   // Whitespace between the tags, as a hand-written page has, so the real
   // text nodes the simulated DOM lacks are on this page.
   const html = sim.toHtml(sim.knowledgeTreeSpec()).replace(/></g, ">\n  <");
-  await page.setContent("<!doctype html><html><head><title>Knowledge tree</title></head>" + html + "</html>");
-  for (const relative of LAYER_SCRIPTS) {
-    await page.addScriptTag({ path: path.join(SRC, relative) });
-  }
+  await page.route(PAGE_URL, (route) =>
+    route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: "<!doctype html><html><head><title>Knowledge tree</title></head>" + html + "</html>"
+    })
+  );
+  await page.goto(PAGE_URL);
+  await page.addScriptTag({ content: await layerBundle() });
   expect(await page.evaluate(() => typeof window.LAHE.pointing.bestGuess)).toBe("function");
 }
 
