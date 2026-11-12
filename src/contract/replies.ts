@@ -119,12 +119,12 @@ export function parseReplyLine(line: string, options?: ReplyParseOptions): Reply
 
   const item = parsed[REPLY_FIELD.ITEM];
   const rev = parsed[REPLY_FIELD.REV];
-  const missing: string[] = [];
-  for (const field of REQUIRED[status]) {
-    if (isBlank(parsed[field])) missing.push(field);
-  }
-  if (typeof item !== "string") missing.push(REPLY_FIELD.ITEM);
-  if (typeof rev !== "number") missing.push(REPLY_FIELD.REV);
+  const missing = REQUIRED[status].filter(
+    (field) =>
+      isBlank(parsed[field]) ||
+      (field === REPLY_FIELD.ITEM && typeof item !== "string") ||
+      (field === REPLY_FIELD.REV && typeof rev !== "number")
+  );
   if (missing.length > 0 || typeof item !== "string" || typeof rev !== "number") {
     return malformed("status " + status + " needs " + REQUIRED[status].join(", ") + "; missing or wrong type: " + missing.join(", "));
   }

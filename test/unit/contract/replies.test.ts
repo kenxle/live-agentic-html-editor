@@ -102,6 +102,24 @@ test("an item must be a string with a character in it and a revision must be a n
   assert.equal(parseReplyLine('{"item":"c_1","rev":0,"status":"handled"}').ok, true, "revision zero is a number");
 });
 
+test("a field that fails is named once in the reason, in the order the reason lists them", () => {
+  const needs = "status handled needs item, rev, status; missing or wrong type: ";
+  assert.deepEqual(parseReplyLine('{"rev":2,"status":"handled"}'), refusal(needs + "item"));
+  assert.deepEqual(parseReplyLine('{"item":null,"rev":2,"status":"handled"}'), refusal(needs + "item"));
+  assert.deepEqual(parseReplyLine('{"item":"c_1","status":"handled"}'), refusal(needs + "rev"));
+  assert.deepEqual(parseReplyLine('{"item":"c_1","rev":"","status":"handled"}'), refusal(needs + "rev"));
+  assert.deepEqual(parseReplyLine('{"status":"handled"}'), refusal(needs + "item, rev"));
+  assert.deepEqual(parseReplyLine('{"status":"handled","rev":"x","item":5}'), refusal(needs + "item, rev"));
+  assert.deepEqual(
+    parseReplyLine('{"item":5,"rev":2,"status":"not_handled"}'),
+    refusal("status not_handled needs item, rev, status, reason; missing or wrong type: item, reason")
+  );
+  assert.deepEqual(
+    parseReplyLine('{"rev":2,"status":"question"}'),
+    refusal("status question needs item, rev, status, text; missing or wrong type: item, text")
+  );
+});
+
 test("a malformed line is refused with a reason, whatever it holds, and never throws", () => {
   const bad = parseReplyLine("{oops");
   assert.deepEqual(bad, refusal("not JSON: " + jsonMessage("{oops")));
