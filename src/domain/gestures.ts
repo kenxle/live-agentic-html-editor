@@ -543,7 +543,7 @@ export function blockTypeChord(input: ChordInput): BlockTag | null {
   return null;
 }
 
-const NO_BREAK_SPACE = " ";
+const NO_BREAK_SPACE = "\u00a0";
 
 function hasShortcut(shortcuts: readonly string[], text: string): boolean {
   return shortcuts.includes(text);
