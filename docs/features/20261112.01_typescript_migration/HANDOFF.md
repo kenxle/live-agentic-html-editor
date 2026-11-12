@@ -77,7 +77,7 @@ Line counts from `wc -l` over each folder's `.js` files on 2026-11-12:
 | --- | --- | --- |
 | `src/layer` | 47,909 | The browser review layer |
 | `src/service` | 23,579 | The helper's HTTP service, store and rendering |
-| `src/shared` | 12,493 | Record shapes, protocol and rules used by both halves |
+| `src/shared` | 12,493 | Code both the helper and the browser run: record shapes, the protocol, item states, and logic both sides must agree on |
 | `src/cli` | 8,751 | The `lahe` commands |
 | `test/unit` | 67,523 | `node:test` unit tests |
 
@@ -122,8 +122,24 @@ you where to look.
    each file's types stripped? The type checker gets little from code that talks
    through one shared global, so this decides how much "enforced structure" the
    layer actually gets.
-2. **Shared code in two runtimes.** How does a `.ts` file in `src/shared` reach
-   both Node and the bundle?
+2. **What `src/shared` becomes.** It is more than an interface. It mixes three
+   kinds of code:
+   - the contract between helper and browser: record shapes (`record.js`), the
+     wire protocol (`protocol.js`), item states (`lifecycle.js`) and failure
+     codes (`failures.js`);
+   - logic both sides run and must agree on, such as text normalizing
+     (`normalize.js`), merging (`merge.js`) and the anchor-safety rule
+     (`uniqueness.js`);
+   - files that only one side or only the tooling uses, such as the build
+     manifest (`manifest.js`) and test fixtures (`record_fixtures.js`).
+
+   Much of its size is hand-written validation and long comments. Comments
+   are 38 to 40 percent of the lines in `record.js` and `protocol.js` (counted
+   by matching comment markers at the start of a line), and in TypeScript much
+   of that checking becomes types. Ken finds the name `shared` unclear. The
+   plan should decide whether the contract becomes its own clearly named module
+   of types, which logic stays shared, and where the one-sided files move. It
+   should also say how a `.ts` file there reaches both Node and the bundle.
 3. **How the helper runs.** Node type stripping, or compiled output that is
    committed the way `dist/` is? What does `bin/lahe.js` and the
    `npm run install-cli` wrapper become?
