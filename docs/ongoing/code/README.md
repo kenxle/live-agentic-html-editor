@@ -15,7 +15,7 @@ This folder also holds one doc per source folder (`server-sites.md` for `src/ser
 
 1. `node scripts/lint.js`: syntax of every `.js` file, duplicate declarations, Lua, no jsdom, manifest completeness, and kebab-case `.ts` names under `src/`.
 2. `tsc -b`: the compiler, over every project below.
-3. `eslint`: the rules below, over every `.ts` and `.mts` file.
+3. `eslint --max-warnings 0`: the rules below, over every `.ts` and `.mts` file. A warning fails it too.
 
 All three need the dev dependencies, so a fresh clone or worktree runs `npm install` first.
 
