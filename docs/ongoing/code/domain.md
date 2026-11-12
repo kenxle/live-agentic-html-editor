@@ -13,10 +13,10 @@ Source files carry no comments except their `read-when` header. The why, the tra
 
 ## How a domain module reaches both sides
 
-- **Node** imports the `.ts` file directly; Node strips the types. CommonJS callers that are still JavaScript reach it through a one-line forwarder at the module's old path under `src/shared/`, listed in the manifest's `FORWARDERS`.
+- **Node** imports the `.ts` file directly; Node strips the types. CommonJS callers that are still JavaScript reach it through a one-line forwarder at the module's old path under `src/shared/`, listed in the manifest's `FORWARDERS`. The forwarder copies the exports into an ordinary object.
 - **The browser** gets it inside the review-layer bundle. Until the layer's own files convert, they read their dependencies off `window.LAHE` as they load. So the module's entry in the manifest's `LAYER_FILES` names the `.ts` path at the old file's place in the order, with `registers` set to the namespace name the old file used. `scripts/build-layer.js` then registers the module under that name at that place, before any later file loads.
 
-The registered object is the module's namespace: read-only, holding exactly its exports. Old code that wrote to a module object it was handed would break, so check for writes before converting a module whose callers are still JavaScript.
+Both sides hand callers an ordinary, writable copy of the module's exports, not the read-only module namespace, because old code and tests replace functions on these objects. A copy taken once is why a module here exports functions and constants only, never a `let` it reassigns ([README.md](README.md#moving-a-file)).
 
 ## `elapsed.ts`: how long something has been going on, in words
 

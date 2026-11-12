@@ -65,7 +65,28 @@ When a `.js` file becomes a `.ts` file somewhere else, its old path keeps a one-
 module.exports = require("../server/sites/script-line.ts");
 ```
 
-The forwarder is listed in `FORWARDERS` in `src/shared/manifest.js`. The `.ts` file is not in the manifest: lint's completeness check skips `.ts` files and the `package.json` and `tsconfig.json` files, because the folder owns them. Forwarders are removed in the finishing slice.
+The forwarder is listed in `FORWARDERS` in `src/shared/manifest.js`. The `.ts` file is not in the manifest, unless the browser loads it (next section): lint's completeness check skips `.ts` files and the `package.json` and `tsconfig.json` files, because the folder owns them. Forwarders are removed in the finishing slice.
+
+A module the browser also loads gets an ordinary object at its old path instead, a copy of its exports, because old code and tests replace functions on these objects and an ES module namespace is read-only. When several modules replace one old file, the forwarder copies all of them:
+
+```js
+module.exports = Object.assign({}, require("../domain/elapsed.ts"));
+```
+
+**A converted module exports functions and constants only, never a `let` it reassigns later.** The forwarder and the bundle both hand callers a copy of the exports, taken once when the module loads. A reassigned export would change in the module and not in the copy.
+
+### Moving a browser file
+
+The review layer (`dist/lahe-layer.js`) and the Library page (`dist/lahe-library.js`) are built by `scripts/build-layer.js` from two lists in the manifest, `LAYER_FILES` and `CATALOG_PAGE`, in their order. Old files in those lists still read their dependencies off `window.LAHE` as they load, so a converted module has to be put there for them. The build does it from the manifest entry; nothing else changes:
+
+- Set the entry's `path` to the `.ts` file, at the old file's place in the list.
+- Add `registers`: the `window.LAHE` names the old file registered itself under (they do not always match the file name; `export.js` is both `exporter` and `export`). Use `[]` for a module nothing reads off the namespace.
+- When several modules replace one old file, add `modules`: every one of them, `path` first. The build registers one object holding all their exports, and refuses two modules that export the same name.
+- The registered object is an ordinary, writable copy of the exports, the same as the forwarder's.
+
+The Library page's list starts with `{ sameAsLayer: "protocol" }`, which stands for whichever `LAYER_FILES` entry registers `protocol`, so converting the protocol changes one entry and both files follow.
+
+Browser specs that load the layer into a page take it from `test/browser/support/bundles.js`, which runs the same build in memory, so they test the source in front of them. `npm run build:layer` writes both files and `npm run check:layer` checks both. Builders never commit `dist/`.
 
 A `.ts` file may import only `.ts` files (`lahe/no-js-imports`). To see what you can convert now, run:
 

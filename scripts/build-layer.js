@@ -34,7 +34,17 @@
 // - A converted module (an entry whose path ends in .ts) does not register
 //   itself. The entry imports a generated registration in its place, which
 //   imports the module and assigns it to window.LAHE under every name in the
-//   entry's `registers`.
+//   entry's `registers`. One name may be backed by several modules: the
+//   entry's `modules` lists them all, its `path` first, and their exports are
+//   combined. Two of them exporting the same name is a build error. An empty
+//   `registers` runs the module in its place and registers nothing.
+// - The Library page's file is built by this same code, from
+//   manifest.libraryFiles(), so its entries follow the same rules.
+// - The registered object is an ordinary, writable copy of the exports, not
+//   the frozen module namespace, because old code and tests replace functions
+//   on these objects. A copy is only safe because a converted module exports
+//   functions and constants, never a `let` it reassigns later
+//   (docs/ongoing/code/README.md).
 // - Every require() call is left out of the bundle (marked external). The only
 //   require() calls in these files are the old wrappers' Node branches, which
 //   a browser never runs: they sit behind `typeof window !== "undefined" &&
@@ -99,6 +109,10 @@ function isConverted(entry) {
   return /\.ts$/.test(entry.path);
 }
 
+function modulesOf(entry) {
+  return Array.isArray(entry.modules) ? entry.modules : [entry.path];
+}
+
 function checkEntries(root, entries) {
   entries.forEach(function (entry) {
     if (!entry || typeof entry.path !== "string") {
@@ -108,13 +122,22 @@ function checkEntries(root, entries) {
       throw new Error("manifest names a file that does not exist and is not marked planned: " + entry.path);
     }
     if (!isConverted(entry)) return;
+    var modules = modulesOf(entry);
+    if (modules[0] !== entry.path) {
+      throw new Error(entry.path + " lists `modules`, so its path must be the first of them.");
+    }
+    modules.forEach(function (file) {
+      if (typeof file !== "string" || !/\.ts$/.test(file) || !fs.existsSync(path.join(root, file))) {
+        throw new Error(entry.path + " combines " + JSON.stringify(file) + ", which is not a .ts file that exists.");
+      }
+    });
     var names = entry.registers;
-    if (!Array.isArray(names) || names.length === 0) {
+    if (!Array.isArray(names)) {
       throw new Error(
         entry.path +
           " is a converted module, so its manifest entry needs `registers`: the " +
           NAMESPACE +
-          " names its old file registered."
+          " names its old file registered ([] for a module that only runs)."
       );
     }
     names.forEach(function (name) {
@@ -136,10 +159,21 @@ function entrySource(entries) {
 
 function registrationSource(entry) {
   var global = "globalThis." + NAMESPACE;
-  return [
-    "import * as converted from " + JSON.stringify("./" + entry.path) + ";",
-    global + " = " + global + " || {};"
-  ]
+  var modules = modulesOf(entry);
+  return modules
+    .map(function (file, index) {
+      return "import * as module" + index + " from " + JSON.stringify("./" + file) + ";";
+    })
+    .concat([
+      "var converted = Object.assign({}, " +
+        modules
+          .map(function (file, index) {
+            return "module" + index;
+          })
+          .join(", ") +
+        ");",
+      global + " = " + global + " || {};"
+    ])
     .concat(
       entry.registers.map(function (name) {
         return global + "." + name + " = converted;";
@@ -204,10 +238,57 @@ function describe(messages) {
     .join("\n");
 }
 
+// The names each converted module exports, read from esbuild's own metafile so
+// re-exports count, and nothing runs. Refuses two modules under one entry that
+// export the same name: the combined object would silently keep only one.
+async function checkCombinedExports(root, entries) {
+  var combined = entries.filter(function (entry) {
+    return isConverted(entry) && modulesOf(entry).length > 1;
+  });
+  if (combined.length === 0) return;
+  var files = [];
+  combined.forEach(function (entry) {
+    modulesOf(entry).forEach(function (file) {
+      if (files.indexOf(file) === -1) files.push(file);
+    });
+  });
+  var result = await esbuild.build({
+    absWorkingDir: root,
+    entryPoints: files,
+    outdir: "lahe-exports",
+    bundle: true,
+    write: false,
+    metafile: true,
+    format: "esm",
+    platform: "browser",
+    target: TARGET,
+    logLevel: "silent",
+    plugins: [layerPlugin(root, [])]
+  });
+  var exportsOf = {};
+  Object.keys(result.metafile.outputs).forEach(function (output) {
+    var meta = result.metafile.outputs[output];
+    if (meta.entryPoint) exportsOf[meta.entryPoint] = meta.exports;
+  });
+  combined.forEach(function (entry) {
+    var seen = {};
+    modulesOf(entry).forEach(function (file) {
+      (exportsOf[file] || []).forEach(function (name) {
+        if (Object.prototype.hasOwnProperty.call(seen, name)) {
+          throw new Error(
+            entry.path + " combines " + seen[name] + " and " + file + ", which both export " + name + "."
+          );
+        }
+        seen[name] = file;
+      });
+    });
+  });
+}
+
 /**
  * One bundle, in memory.
  *
- * @param {{root: string, entries: Array<{path: string, registers?: string[]}>,
+ * @param {{root: string, entries: Array<{path: string, modules?: string[], registers?: string[]}>,
  *   title: string, namespace: boolean}} options entry paths are relative to
  *   root; `namespace` adds the statement that creates window.LAHE and sets its
  *   version
@@ -217,6 +298,7 @@ async function bundle(options) {
   var root = options.root;
   var entries = options.entries;
   checkEntries(root, entries);
+  await checkCombinedExports(root, entries);
 
   var result = await esbuild.build({
     absWorkingDir: root,

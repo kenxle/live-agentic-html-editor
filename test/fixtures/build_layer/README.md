@@ -7,3 +7,5 @@
 - `first.js` and `last.js` are old-style wrappers: each registers itself on `window.LAHE` in the browser, and exports in Node.
 - `middle.ts` is a converted ES module. The build registers it on `window.LAHE` between the two.
 - `node_only.js` is reached only from `last.js`'s Node branch, so it must never end up in a bundle.
+- `middle_more.ts` is a second converted module that a test combines with `middle.ts` under one name.
+- `clashing.ts` exports a name `middle.ts` also exports, so combining the two must be refused.

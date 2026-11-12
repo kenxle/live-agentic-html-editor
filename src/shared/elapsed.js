@@ -1,1 +1,1 @@
-module.exports = require("../domain/elapsed.ts");
+module.exports = Object.assign({}, require("../domain/elapsed.ts"));

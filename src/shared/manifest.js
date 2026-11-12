@@ -26,6 +26,10 @@
 //    path ending in .ts). It is an ES module and does not register itself, so
 //    it carries `registers`, the namespace names its old file used, and the
 //    build registers it under each of them at this same place in the order.
+//    When several modules back one name, `modules` lists them all, `path`
+//    first, and the build registers one object holding all their exports. An
+//    old file may carry `registers` too, naming what it registers itself as,
+//    so CATALOG_PAGE can point at it with `sameAsLayer`.
 //    See scripts/build-layer.js.
 //
 // 3. THE FILES THAT DO NOT EXIST YET. Entries carrying `planned: true` name a
@@ -110,6 +114,7 @@ var LAYER_FILES = [
   {
     path: "src/shared/protocol.js",
     owner: "0A-wire",
+    registers: ["protocol"],
     why: "routes, headers, the per-review token, error shapes. Needs failures"
   },
   {
@@ -353,10 +358,21 @@ var NON_BUNDLE_FILES = [
   }
 ];
 
-// The Library page's own scripts. NOT in the layer bundle: they build into the
-// Library page's own file, LIBRARY_OUTPUT, which the helper serves through
-// catalog.asset. libraryFiles() below gives that file's order.
+// The Library page's file, LIBRARY_OUTPUT, in load order. The helper serves it
+// through catalog.asset. It is built exactly as the layer is, so an entry here
+// may name a converted module with `registers` (and `modules`) too.
+//
+// The first entry is not a file of its own: `sameAsLayer` names the LAYER_FILES
+// entry registering `protocol`, which the page loads first, so the protocol
+// keeps one owner and one entry even after it converts. failures.js is NOT in
+// this file, so on the Library page the protocol's failures argument is
+// undefined; nothing the page calls reads it (view_model.js says so where it
+// matters).
 var CATALOG_PAGE = [
+  {
+    sameAsLayer: "protocol",
+    why: "the routes and the token meta name the page script reads, built from the layer's own protocol entry"
+  },
   {
     path: "src/layer/catalog/view_model.js",
     owner: "Library 2.2",
@@ -376,7 +392,9 @@ var CATALOG_PAGE = [
 
 // The TypeScript migration's one-line forwarders. Each stays at an old path
 // that unconverted callers still require, and holds only
-// `module.exports = require("<new path>.ts")`. The .ts file it points at is
+// `module.exports = require("<new path>.ts")`, or, for a module the browser
+// also loads, `Object.assign({}, require(...))`, an ordinary object old code may
+// write to, as in the bundle. The .ts file it points at is
 // owned by its folder, not by this manifest; a browser module is also listed
 // in LAYER_FILES, for its place in the bundle. Removed in the finishing slice.
 var FORWARDERS = [
@@ -429,13 +447,20 @@ function plannedFiles() {
   });
 }
 
-// The Library page's file, in load order: the protocol first, then the page's
-// own scripts in CATALOG_PAGE's order. The protocol is the layer's entry, not a
-// second one, so its owner stays in one place. failures.js is NOT in this
-// file, so on the Library page the protocol's failures argument is undefined;
-// nothing the page calls reads it (view_model.js says so where it matters).
+// The entries the build script bundles into the Library page's file:
+// CATALOG_PAGE, with each `sameAsLayer` replaced by the LAYER_FILES entry that
+// registers that name.
 function libraryFiles() {
-  return [entryFor("src/shared/protocol.js")].concat(CATALOG_PAGE);
+  return CATALOG_PAGE.map(function (entry) {
+    if (typeof entry.sameAsLayer !== "string") return entry;
+    var found = LAYER_FILES.filter(function (layer) {
+      return Array.isArray(layer.registers) && layer.registers.indexOf(entry.sameAsLayer) !== -1;
+    });
+    if (found.length !== 1) {
+      throw new Error("CATALOG_PAGE names the layer entry registering " + entry.sameAsLayer + ", and LAYER_FILES has " + found.length);
+    }
+    return found[0];
+  });
 }
 
 // Paths on the Phase 4B cleanup batch. Nothing is deleted during the build.

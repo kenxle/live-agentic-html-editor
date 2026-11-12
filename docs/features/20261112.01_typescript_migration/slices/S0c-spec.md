@@ -35,6 +35,7 @@ Each statement is something a caller, or a person reading a chip, can observe. T
 8. The module is reachable from all three places the code runs:
    - in Node, from `require("src/shared/elapsed.js")`, the old path, and from an ES module import of `src/domain/elapsed.ts`;
    - in the review-layer bundle, as `window.LAHE.elapsed`, registered before `store.js` loads, so the rail's chip reads the same words as the server's refusal;
+   - in both places, as an ordinary object a caller can replace a function on, as the old file's was;
    - in a real browser, through the bundle `npm run build:layer` writes.
 
 ## Module design
@@ -53,7 +54,7 @@ export function elapsedPhrase(since: ElapsedStart, options?: ElapsedOptions): st
 
 - The thresholds are module constants, not exports. No caller reads them.
 - The three kinds of phrase are three branches on the elapsed seconds, with no shared mutable state.
-- The old path keeps a one-line forwarder, `module.exports = require("../domain/elapsed.ts")`, listed in `FORWARDERS`, so `reviews.js`, `store.js`'s Node branch, `contracts.js` and the tests keep working unchanged.
+- The old path keeps a one-line forwarder, `module.exports = Object.assign({}, require("../domain/elapsed.ts"))`, listed in `FORWARDERS`, so `reviews.js`, `store.js`'s Node branch, `contracts.js` and the tests keep working unchanged. It hands them an ordinary, writable object, as the old file did, because old code and tests replace functions on these objects (a requirement from the C2 spec).
 - The manifest's `LAYER_FILES` entry at the same position becomes `src/domain/elapsed.ts` with `registers: ["elapsed"]`, so the bundle registers the module where the old file registered itself.
 
 ## Old tests, accounted for
@@ -76,9 +77,8 @@ The browser half of statement 8 is a new spec, `test/browser/bundle_registration
 ## Deliberate differences
 
 - `RECENT_MINUTES_MAX` is no longer exported. No caller read it.
-- In Node, the old path now returns an ES module namespace (read-only) instead of a plain object. No caller writes to it.
 
-Neither is something a person or an agent can observe. No behavior statement above differs from the old code.
+It is not something a person or an agent can observe. No behavior statement above differs from the old code.
 
 ## Fixed behavior tests that touch this slice
 
