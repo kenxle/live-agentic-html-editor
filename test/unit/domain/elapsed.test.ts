@@ -66,9 +66,13 @@ test("without a clock it measures from now", () => {
   assert.equal(elapsedPhrase(new Date(Date.now() - 4 * MINUTE).toISOString()), "for the last 4 minutes");
 });
 
-test("the old path still loads the same module for code that requires it", () => {
+test("the old path loads the same function, in an ordinary object old code can write to", () => {
   const load = createRequire(import.meta.url);
   const old: unknown = load("../../../src/shared/elapsed.js");
   assert.ok(typeof old === "object" && old !== null && "elapsedPhrase" in old);
   assert.equal(old.elapsedPhrase, elapsedPhrase);
+  const replacement = (): string => "replaced";
+  Reflect.set(old, "elapsedPhrase", replacement);
+  assert.equal(Reflect.get(old, "elapsedPhrase"), replacement);
+  Reflect.set(old, "elapsedPhrase", elapsedPhrase);
 });

@@ -50,6 +50,50 @@ test("a converted module is registered under every name its old file used", asyn
   assert.equal(LAHE.greeter, LAHE.middle);
 });
 
+test("one namespace name can be backed by several converted modules, combined into one object", async () => {
+  const LAHE = runInPage(
+    await fixtureBundle(FIXTURES, [
+      { path: "first.js" },
+      { path: "middle.ts", modules: ["middle.ts", "middle_more.ts"], registers: ["middle"] },
+      { path: "last.js" }
+    ])
+  );
+  assert.equal(LAHE.middle.greet("you"), "hello you");
+  assert.equal(LAHE.middle.shout("you"), "YOU!");
+  assert.equal(LAHE.middle.PUNCTUATION, "!");
+  assert.equal(LAHE.last.greeting, "hello reviewer");
+});
+
+test("the registered object is ordinary and writable, so old code and tests can replace a function on it", async () => {
+  const LAHE = runInPage(await fixtureBundle());
+  const replacement = () => "replaced";
+  LAHE.middle.greet = replacement;
+  assert.equal(LAHE.middle.greet, replacement);
+});
+
+test("a converted entry with an empty registration runs in its place and registers nothing", async () => {
+  const LAHE = runInPage(
+    await fixtureBundle(FIXTURES, [{ path: "first.js" }, { path: "middle.ts", registers: [] }])
+  );
+  assert.deepEqual(Object.keys(LAHE).sort(), ["first", "version"]);
+});
+
+test("two modules combined under one name may not export the same name", async () => {
+  await assert.rejects(
+    () =>
+      fixtureBundle(FIXTURES, [{ path: "middle.ts", modules: ["middle.ts", "clashing.ts"], registers: ["middle"] }]),
+    /greet/
+  );
+});
+
+test("a combined entry's path is the first of its modules", async () => {
+  await assert.rejects(
+    () =>
+      fixtureBundle(FIXTURES, [{ path: "middle_more.ts", modules: ["middle.ts", "middle_more.ts"], registers: ["middle"] }]),
+    /middle_more\.ts/
+  );
+});
+
 test("an old file's Node branch stays out of the bundle, even when it requires a Node module", async () => {
   const code = await fixtureBundle();
   assert.equal(code.indexOf("NODE_ONLY_MARKER"), -1);
