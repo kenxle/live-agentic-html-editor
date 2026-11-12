@@ -171,12 +171,15 @@ rebuilding it means a machine-generated conflict at every checkpoint. Rebuild it
 locally if you need it for a browser test, but do not stage it. The orchestrator
 rebuilds and commits it once per checkpoint, then runs `gate` and `gate:all`.
 
-`lint` is more than syntax: `node --check` over every tracked `.js` file, no
+`lint` is more than syntax. It runs `tsc -b` over every TypeScript project and
+ESLint over every `.ts` file, with the strict rules described in
+`docs/ongoing/code/README.md`. It also runs `node --check` over every `.js` file, no
 function declared twice at a file's top level, a compile of every `.lua` file
 under `src/` (with `luac` or `pandoc lua`, skipped with a line when the machine
 has neither), **no jsdom** (not in `package.json`, not imported anywhere under
-`test/`), and **manifest completeness** (every file under `src/`, of any kind,
-appears exactly once across `src/shared/manifest.js`'s lists). `npm run test:unit`
+`test/`), and **manifest completeness** (every non-TypeScript file under `src/`
+appears exactly once across `src/shared/manifest.js`'s lists, forwarders
+included). `npm run test:unit`
 and `npm run test:browser` also run individually. `test:unit` stops itself and
 fails after 30 minutes (`--limit-minutes` in `scripts/no_stray_helpers.js`), so a
 stuck test cannot hold the run.
@@ -186,11 +189,10 @@ Browsers install once: `npx playwright install chromium`, plus
 is Chromium only, so the inner loop stays one browser wide; `--project=webkit`
 runs a single lane by name.
 
-A fresh worktree under the clone has no `node_modules`, and the suite still
-runs there because Node walks up to the clone's. Run `npm install` in the
-worktree before its first `npm run gate`, then `git checkout -- package-lock.json`.
-Without it, `install_walk_3b.spec.js` fails on its precondition and nothing
-else does.
+Every checkout needs `npm install` once before `npm run lint` or any gate:
+lint runs TypeScript and ESLint, which are dev dependencies. That includes a
+fresh worktree under the clone. Run it, then `git checkout -- package-lock.json`
+if it changed the lockfile.
 
 ## Tests leave nothing running
 
@@ -277,9 +279,10 @@ GitHub emails the pusher for every failed or cancelled workflow run, and on
 
 - A stress or bisect workflow never fails the run. Put `continue-on-error: true`
   on the step, write the verdict to the log or an artifact, and read it there.
-- **The browser suite runs here, not on GitHub.** CI runs only lint, the bundle
-  check and the unit tests, with no install step: that proves a fresh clone
-  works on a clean Linux machine, which is all only GitHub can prove. Waiting
+- **The browser suite runs here, not on GitHub.** CI first runs `lahe --help` with nothing
+  installed, which proves a fresh clone works on a clean Linux machine (all
+  only GitHub can prove). Then it installs the dev tools and runs lint, the
+  bundle check and the unit tests. Waiting
   14 minutes on GitHub for the same suite we run locally cost Ken most of a day
   on 2026-10-11. So:
   - Before opening a pull request, and before any push to an open one, run

@@ -32,14 +32,19 @@ jobs:
         with:
           node-version: 24
 
-      # No npm ci, on purpose. The tool has no runtime dependencies and these
-      # checks need none, so this run also proves a fresh clone works with no
-      # install step on a clean Linux machine. That is what only CI can prove.
-      #
+      # Proof that a fresh clone runs with no install step. The tool has no
+      # runtime dependencies, so this runs before anything is installed, on a
+      # clean Linux machine. That is what only CI can prove.
+      - run: node bin/lahe.js --help
+
+      # The dev tools (TypeScript, ESLint) come after that proof. npm run lint
+      # runs tsc and ESLint, and the unit suite checks the gate rules with them.
+      - run: npm ci
+
       # The browser suite is NOT run here. It runs locally with `npm run gate`
-      # before a pull request and again on main after a merge; the PR body
-      # states the local result. On GitHub's small runner it took 14.3
-      # minutes on 2026-10-11 and was the same command we already run locally.
+      # at each checkpoint; the PR body states the local result. On GitHub's
+      # small runner it took 14.3 minutes on 2026-10-11 and was the same
+      # command we already run locally.
       - run: npm run lint
       - run: npm run check:layer
       - run: npm run test:unit
