@@ -4,7 +4,7 @@ read-when: Checking where the TypeScript migration stands, what it waits on, or 
 
 # Progress: TypeScript migration
 
-The architecture and the plan are written and served to Ken, and he has answered all three questions on it. No code has changed yet. The next step is slice S0a (raise the Node floor to 24.12).
+The architecture and the plan are written and served to Ken, he answered all three questions on it, approved it, and reshaped it: every conversion slice is now a rebuild to a written spec, test first. Slice S0a (raise the Node floor to 24.12) is being built in `.claude/worktrees/ts-s0a`.
 
 ## Attention needed
 
@@ -23,7 +23,8 @@ None. An orchestrator can start slice S0a.
 | Outcome | Owner | State | Evidence or blocker | Next action |
 | --- | --- | --- | --- | --- |
 | Architecture and plan | planning agent | done | this folder; Ken answered all three questions | none |
-| Wave 0: foundation (S0a, S0b, S0c) | orchestrator | not started | none | start S0a |
+| S0a Node floor | Sonnet builder | building | worktree `ts-s0a`, branch `ts/s0a-node-floor` | merge, then reinstall the wrapper, login item and Stop hook on Node 24.22.3 |
+| S0b Toolchain and pilot, S0c Bundling | orchestrator | waiting on S0a | none | start S0b after S0a merges |
 
 ## Decisions and events
 
