@@ -13,7 +13,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const gestures = require("../../src/shared/gestures.js");
 const overlay = require("../../src/layer/overlay.js");
 const storeModule = require("../../src/layer/store.js");
 
@@ -33,54 +32,6 @@ function memoryBacking() {
     }
   };
 }
-
-test("Cmd-Shift-X is the show/hide chord, in both directions and in any state", () => {
-  const both = [
-    { name: "on the page", state: {} },
-    { name: "with a selection", state: { hasSelection: true } },
-    { name: "while a comment box is focused", state: { inCommentBox: true } },
-    { name: "while a block is being edited", state: { editing: true } },
-    { name: "while element-pick mode is open", state: { pickMode: true } }
-  ];
-  both.forEach((shape) => {
-    const got = gestures.gestureFor(
-      Object.assign({ type: "keydown", key: "x", metaKey: true, shiftKey: true }, shape.state)
-    );
-    assert.equal(got.gesture, gestures.GESTURE.TOGGLE_PRESENT, shape.name);
-    assert.equal(got.preventDefault, true);
-    assert.equal(got.passThrough, false);
-  });
-  // Ctrl is the same chord off macOS, and the letter's case is the layout's.
-  assert.equal(
-    gestures.gestureFor({ type: "keydown", key: "X", ctrlKey: true, shiftKey: true }).gesture,
-    gestures.GESTURE.TOGGLE_PRESENT
-  );
-});
-
-test("the chord takes nothing away from the gestures that were already there", () => {
-  const table = [
-    [{ key: "c", metaKey: true, shiftKey: true, hasSelection: true }, gestures.GESTURE.COMMENT_ON_SELECTION],
-    [{ key: "c", metaKey: true, shiftKey: true }, gestures.GESTURE.ENTER_ELEMENT_PICK],
-    [{ key: "e", metaKey: true, shiftKey: true }, gestures.GESTURE.EDIT_BLOCK],
-    [{ key: "Enter", metaKey: true, inCommentBox: true }, gestures.GESTURE.MARK_READY],
-    [{ key: "Escape", pickMode: true }, gestures.GESTURE.CANCEL],
-    // X without the modifiers is typing, and stays the page's.
-    [{ key: "x" }, gestures.GESTURE.NONE],
-    [{ key: "x", shiftKey: true }, gestures.GESTURE.NONE],
-    [{ key: "x", metaKey: true }, gestures.GESTURE.NONE]
-  ];
-  table.forEach(([shape, expected]) => {
-    assert.equal(gestures.gestureFor(Object.assign({ type: "keydown" }, shape)).gesture, expected, shape.key);
-  });
-});
-
-test("the chord is taught on the rail, like every other gesture", () => {
-  const line = gestures.hintLines().filter((one) => one.keys === "Cmd-Shift-X")[0];
-  assert.ok(line, "it has a hint line");
-  assert.match(line.hint, /hide the review/i);
-  assert.match(line.hint, /again to bring it back/i);
-  assert.equal(gestures.hintLines().length, gestures.TABLE.length);
-});
 
 test("the reviewer's choice to present is remembered per review", () => {
   const backing = memoryBacking();

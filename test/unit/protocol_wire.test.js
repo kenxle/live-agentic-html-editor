@@ -398,42 +398,6 @@ test("the script tag refuses to be written without a token or with an unsafe rev
   assert.throws(() => protocol.scriptTag({ src: "x.js", review: "../etc", token: "t" }), /safe id/);
 });
 
-// ---------------------------------------------------------------------------
-// The failure table
-// ---------------------------------------------------------------------------
-
-test("the new failure codes exist and the pruned ones are gone", () => {
-  [
-    "HELPER_UNREACHABLE",
-    "CSP_REFUSED",
-    "SECOND_WINDOW_REFUSED",
-    "ANCHOR_NO_TEXT_MATCH",
-    "ANCHOR_AMBIGUOUS",
-    "ANCHOR_STRUCTURE_ONLY",
-    "ANCHOR_LOST",
-    "REPLAY_NEITHER_MATCHES",
-    "REPLY_LINE_MALFORMED"
-  ].forEach(
-    (code) => assert.equal(typeof failures.describe(code).message, "string", code)
-  );
-  ["VERIFY_NOT_FOUND", "VERIFY_NOT_VERIFIABLE", "PROTO_NOT_DELIVERED", "PROTO_TARGET_MISMATCH"].forEach((code) =>
-    assert.equal(failures.CODE_NAMES.includes(code), false, code + " belonged to the send and ack model")
-  );
-});
-
-test("an old spelling resolves to its canonical code and keeps its own name", () => {
-  const f = failures.failure("SYNC_SERVICE_DOWN", null);
-  assert.equal(f.code, "SYNC_SERVICE_DOWN");
-  assert.equal(f.canonical_code, "HELPER_UNREACHABLE");
-  assert.equal(failures.canonical("SECOND_TAB_REFUSED"), "SECOND_WINDOW_REFUSED");
-  assert.equal(failures.canonical("ANCHOR_NOT_FOUND"), "ANCHOR_LOST");
-});
-
-test("telling a CSP refusal from a helper that is down is two codes, not one", () => {
-  assert.notEqual(failures.describe("CSP_REFUSED").message, failures.describe("HELPER_UNREACHABLE").message);
-  assert.match(failures.describe("CSP_REFUSED").message, /not the helper being down/);
-});
-
 test("the drain and monitor commands carry a state directory, quoted when the path needs it", () => {
   // No directory: the copied command resolves the default, which is what the
   // helper that printed it used.

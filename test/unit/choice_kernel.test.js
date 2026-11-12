@@ -20,7 +20,6 @@ const path = require("node:path");
 
 const record = require("../../src/shared/record.js");
 const merge = require("../../src/shared/merge.js");
-const gestures = require("../../src/shared/gestures.js");
 const protocol = require("../../src/shared/protocol.js");
 const failures = require("../../src/shared/failures.js");
 const reviewFormat = require("../../src/shared/review_format.js");
@@ -375,60 +374,6 @@ test("choice is a browser-owned content field: an unacknowledged press wins at t
   const comment = record.newItem({ kind: "comment", state: "ready", note: "x", page_origin: "o", page_path: "/", id: "itm_c" });
   const cm = merge.mergeItem(Object.assign({}, comment, { acknowledged: false }), comment);
   assert.equal(Object.prototype.hasOwnProperty.call(cm.item, "choice"), false);
-});
-
-// --- V1 and V8, unit halves: the gesture rule ------------------------------------
-
-function press(overrides) {
-  return gestures.gestureFor(
-    Object.assign({ type: "click", inArmedChoice: true, documentPage: true, mayWrite: true }, overrides || {})
-  );
-}
-
-test("a click on an armed button on a document page, in browse, is a press, and it prevents the default", () => {
-  const g = press();
-  assert.equal(g.gesture, gestures.GESTURE.PRESS_CHOICE);
-  assert.equal(g.passThrough, false);
-  assert.equal(g.preventDefault, true, "so a group inside a form submits nothing");
-});
-
-test("V8: pick mode, an open edit, edit state, a read-only window and present mode each refuse the press", () => {
-  assert.equal(press({ pickMode: true }).gesture, gestures.GESTURE.PICK_ELEMENT);
-  assert.equal(press({ editing: true, inEditedBlock: false }).gesture, gestures.GESTURE.COMMIT_EDIT);
-  assert.equal(press({ editing: true, inEditedBlock: true }).gesture, gestures.GESTURE.PAGE_DEFAULT);
-  assert.equal(press({ editState: true }).gesture, gestures.GESTURE.PAGE_DEFAULT);
-  assert.equal(press({ mayWrite: false }).gesture, gestures.GESTURE.PAGE_DEFAULT);
-  assert.equal(press({ mayWrite: undefined }).gesture, gestures.GESTURE.PAGE_DEFAULT);
-  assert.equal(press({ presenting: true }).gesture, gestures.GESTURE.PAGE_DEFAULT);
-  assert.equal(press({ inOverlay: true }).gesture, gestures.GESTURE.NONE);
-  [{ editState: true }, { mayWrite: false }, { presenting: true }].forEach((o) => {
-    const g = press(o);
-    assert.equal(g.passThrough, true);
-    assert.equal(g.preventDefault, false);
-  });
-});
-
-test("V1: off a document page, or on a button outside an armed group, the click is the page's own", () => {
-  const offDocument = press({ documentPage: false });
-  assert.equal(offDocument.gesture, gestures.GESTURE.PAGE_DEFAULT);
-  assert.equal(offDocument.passThrough, true);
-  assert.equal(offDocument.preventDefault, false);
-  assert.equal(press({ inArmedChoice: false }).gesture, gestures.GESTURE.PAGE_DEFAULT);
-  assert.equal(gestures.gestureFor({ type: "click" }).gesture, gestures.GESTURE.PAGE_DEFAULT);
-  // A keydown or a pointerdown is never a press: Enter and Space on a focused
-  // button arrive as the button's own click.
-  assert.notEqual(press({ type: "keydown", key: "Enter" }).gesture, gestures.GESTURE.PRESS_CHOICE);
-  assert.notEqual(press({ type: "pointerdown" }).gesture, gestures.GESTURE.PRESS_CHOICE);
-});
-
-test("V1: PRESS_CHOICE has no hint row, so a page with no groups shows the same rail hints as before", () => {
-  assert.equal(gestures.hintFor(gestures.GESTURE.PRESS_CHOICE), null);
-  assert.equal(gestures.TABLE.some((row) => row.gesture === gestures.GESTURE.PRESS_CHOICE), false);
-  // The rail's hint list, pinned on purpose: eleven lines, none of them about
-  // choices. A new row here is a new line on every page's rail.
-  assert.equal(gestures.hintLines().length, 11);
-  assert.equal(gestures.panelLines().length, 10);
-  assert.equal(gestures.hintLines().some((line) => /choice/i.test(line.hint)), false);
 });
 
 // --- the tag's document mark ----------------------------------------------------

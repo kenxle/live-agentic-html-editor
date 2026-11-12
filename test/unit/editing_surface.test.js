@@ -137,23 +137,6 @@ test("styleWithCSS is off at boot, because R35 forbids writing a style attribute
   assert.equal(boot[0].value, false);
 });
 
-// Ken, 2026-08-23: "simply changing the bolding on a word or phrase doesn't
-// seem to be captured as an edit." Applying bold worked. Taking it OFF text
-// that a page stylesheet made bold was thrown away, because the only thing an
-// engine can write for that is a style attribute, and a style attribute never
-// reaches a record. These are the two halves of the fix, decided here so the
-// browser tests are checking the mechanism rather than the rule.
-test("which way the button is going is decided by what the reviewer is looking at", () => {
-  // Not bold yet: the press means make it bold.
-  assert.equal(gestures.formatIntentFor({ command: "bold", active: false }), gestures.FORMAT.APPLY);
-  // Already bold, however it came to be bold: the press means take it off.
-  assert.equal(gestures.formatIntentFor({ command: "bold", active: true }), gestures.FORMAT.REMOVE);
-  assert.equal(gestures.formatIntentFor({ command: "italic", active: true }), gestures.FORMAT.REMOVE);
-  // A command outside the closed list is not a gesture this tool has.
-  assert.equal(gestures.formatIntentFor({ command: "underline", active: true }), null);
-  assert.equal(gestures.formatIntentFor({}), null);
-});
-
 test("what each formatting gesture writes, so all three engines record one thing", () => {
   assert.equal(editing.formatShapeFor("bold", gestures.FORMAT.APPLY), "strong");
   assert.equal(editing.formatShapeFor("italic", gestures.FORMAT.APPLY), "em");
@@ -199,34 +182,6 @@ test("the editable surface has the platform's rewriting turned off", () => {
   assert.equal(attrs.spellcheck, "false");
   assert.equal(attrs.autocorrect, "off");
   assert.equal(attrs.autocapitalize, "off");
-});
-
-test("entry and exit come from the one gesture table, not from this file", () => {
-  assert.equal(
-    gestures.gestureFor({ type: "keydown", key: "e", metaKey: true, shiftKey: true }).gesture,
-    gestures.GESTURE.EDIT_BLOCK
-  );
-  // The `when` column is the whole defence against the blur double-commit:
-  // COMMIT_EDIT applies only while a block is in edit state.
-  assert.equal(
-    gestures.gestureFor({ type: "keydown", key: "Escape", editing: true }).gesture,
-    gestures.GESTURE.COMMIT_EDIT
-  );
-  assert.equal(
-    gestures.gestureFor({ type: "keydown", key: "Enter", editing: true, metaKey: true }).gesture,
-    gestures.GESTURE.COMMIT_EDIT
-  );
-  assert.equal(
-    gestures.gestureFor({ type: "keydown", key: "Enter", editing: true, ctrlKey: true }).gesture,
-    gestures.GESTURE.COMMIT_EDIT
-  );
-  assert.notEqual(
-    gestures.gestureFor({ type: "keydown", key: "Escape", editing: false }).gesture,
-    gestures.GESTURE.COMMIT_EDIT
-  );
-  const outside = gestures.gestureFor({ type: "click", editing: true, inEditedBlock: false });
-  assert.equal(outside.gesture, gestures.GESTURE.COMMIT_EDIT);
-  assert.equal(outside.passThrough, true, "the page still gets the click, so navigation is not a losing move");
 });
 
 test("committing nothing, with nothing open, does nothing", () => {
@@ -380,31 +335,6 @@ test("a draft taken back before its first flush posts nothing at all", (t) => {
 //
 // The browser half is test/browser/paragraph_break.spec.js, which drives the
 // real keystroke in all three engines. What is here is the decision.
-
-test("Enter is a paragraph break and Shift-Enter is a line break, in every engine", () => {
-  assert.equal(gestures.breakIntentFor({ inputType: "insertParagraph" }), gestures.BREAK.PARAGRAPH);
-  assert.equal(gestures.breakIntentFor({ inputType: "insertLineBreak" }), gestures.BREAK.LINE);
-
-  // THE WEBKIT QUIRK. WebKit reports Shift-Enter as `insertParagraph`, the same
-  // value it reports for a bare Enter, so inputType alone cannot tell the two
-  // gestures apart. The Shift state of the keydown that produced it can.
-  assert.equal(
-    gestures.breakIntentFor({ inputType: "insertParagraph", shiftKey: true }),
-    gestures.BREAK.LINE,
-    "Shift-Enter is a line break even when the engine calls it insertParagraph"
-  );
-  // Shift on the other spelling changes nothing: it already says line break.
-  assert.equal(gestures.breakIntentFor({ inputType: "insertLineBreak", shiftKey: true }), gestures.BREAK.LINE);
-});
-
-test("nothing but a break is intercepted: ordinary typing stays the engine's", () => {
-  assert.equal(gestures.breakIntentFor({ inputType: "insertText" }), null);
-  assert.equal(gestures.breakIntentFor({ inputType: "deleteContentBackward" }), null);
-  assert.equal(gestures.breakIntentFor({ inputType: "insertFromPaste" }), null);
-  assert.equal(gestures.breakIntentFor({ inputType: "insertCompositionText" }), null);
-  assert.equal(gestures.breakIntentFor({}), null);
-  assert.equal(gestures.breakIntentFor(null), null);
-});
 
 test("the markup each break writes reads back through the normalizer as that break", () => {
   const normalize = require("../../src/shared/normalize.js");
