@@ -19,8 +19,8 @@ as the repo's gates say (see [Regression specs](#regression-specs)).
 
 ## Launch
 
-From the checkout root, using the Node in `.nvmrc` (20 or later, because
-Playwright needs it):
+From the checkout root, using the Node in `.nvmrc` (24.12 or later, which is
+also what the lahe command itself needs):
 
 ```sh
 skills/verify-lahe/bin/lahe-verify up --run <name>

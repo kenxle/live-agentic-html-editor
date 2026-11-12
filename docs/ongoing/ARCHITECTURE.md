@@ -48,7 +48,7 @@ The code and the older docs call the server "the helper". It lives in `src/servi
 
 ## The stack
 
-- **Server:** plain Node, `node:` core modules and the global `fetch`. `engines.node` is `>=18.2.0`. The entry point is `bin/lahe.js`.
+- **Server:** plain Node, `node:` core modules and the global `fetch`. `engines.node` is `>=24.12.0`. The entry point is `bin/lahe.js`.
 - **Review layer:** vanilla browser JavaScript, standard DOM APIs, no framework. It ships as one built file, `dist/lahe-layer.js`, that the build script concatenates in the manifest's order.
 - **Menu bar app:** one Swift file plus a plist, built on the Mac with `xcrun`. AppKit, Foundation and CryptoKit only.
 - **Tests:** `node:test` for unit tests and Playwright (the one dev dependency) for the browser suite. CI on GitHub runs lint, the bundle check and the unit tests only. See [TESTING.md](TESTING.md).
