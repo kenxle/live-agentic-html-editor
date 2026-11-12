@@ -64,7 +64,7 @@ Each slice is one pull request that leaves main working. "Waits on" names the sl
 | **C1** Constants | Converts `markers`, `failures`, `style_rules`, `gestures` and `epoch` | checkpoint 0 | Sonnet |
 | **C2** Normalizer | Converts `normalize` (1,968 lines) | C1 | Sonnet |
 | **C4** Protocol | Converts `protocol` (2,277 lines). Moves the `SERVICE_CONTRACT` bump history from comments into a table in `docs/ongoing/code/contract.md`, and changes `protocol_wire.test.js:187` to require a row for the current number | C1 | Sonnet |
-| **C3** Record | Converts `record` (2,781 lines). Shapes, constants and parsers go to `contract/record.ts`; other logic goes to `domain/record-rules.ts` | C2 | Sonnet |
+| **C3** Record | Converts `record` (2,781 lines). Shapes, constants and parsers go to `src/contract/`; other logic goes to `src/domain/`. It also makes the run limits one source for C4's reply caps | C2, C4 | Sonnet |
 | **C5** Rules | Converts `lifecycle`, `review_format`, `merge`, `regions` and `uniqueness`. Moves `record_fixtures` to `test/support/` and out of the bundle. Removes the `contracts.js` barrel | C3 | Sonnet |
 
 C2 and C4 run in parallel. **Checkpoint 1** follows C5.
