@@ -10,6 +10,7 @@ import {
   acceptsNotesFlag,
   isRegisterableOrigin
 } from "../../../src/contract/review-write.ts";
+import { label } from "./support/untyped.ts";
 
 test("a review write accepts origins on three loopback hosts, at most 16 of them", () => {
   assert.deepEqual(LOOPBACK_ORIGIN_HOSTS, ["localhost", "127.0.0.1", "[::1]"]);
@@ -93,7 +94,7 @@ test("an origin on a host that is not exactly loopback, or on another scheme, is
 });
 
 test("an origin that is not text is refused", () => {
-  for (const origin of [3000, null, undefined, {}, ["null"], true]) assert.equal(isRegisterableOrigin(origin), false, String(origin));
+  for (const origin of [3000, null, undefined, {}, ["null"], true]) assert.equal(isRegisterableOrigin(origin), false, label(origin));
 });
 
 test("a review write marks a notes review only with the boolean true", () => {

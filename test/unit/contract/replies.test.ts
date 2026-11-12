@@ -20,10 +20,16 @@ import {
   parseReplyLine,
   splitCompleteLines
 } from "../../../src/contract/replies.ts";
-import { callUntyped, jsonMessage } from "./support/untyped.ts";
+import type { Reply, ReplyParse } from "../../../src/contract/replies.ts";
+import { callUntyped, jsonMessage, label } from "./support/untyped.ts";
 
 function line(fields: Readonly<Record<string, unknown>>): string {
   return JSON.stringify({ item: "itm_1", rev: 2, agent: "claude", ...fields });
+}
+
+function accepted(result: ReplyParse): Reply {
+  assert.ok(result.ok, result.ok ? "" : result.reason);
+  return result.reply;
 }
 
 function refusal(reason: string): unknown {
@@ -71,9 +77,9 @@ test("a not_handled reply also needs a reason and a question also needs text", (
   const noText = parseReplyLine('{"item":"c_7fa2","rev":2,"status":"question"}');
   assert.deepEqual(noText, refusal("status question needs item, rev, status, text; missing or wrong type: text"));
   const reason = parseReplyLine('{"item":"c_7fa2","rev":2,"status":"not_handled","reason":"cannot do that"}');
-  assert.equal(reason.ok ? reason.reply.reason : null, "cannot do that");
+  assert.equal(accepted(reason).reason, "cannot do that");
   const text = parseReplyLine('{"item":"c_7fa2","rev":2,"status":"question","text":"which one?"}');
-  assert.equal(text.ok ? text.reply.text : null, "which one?");
+  assert.equal(accepted(text).text, "which one?");
 });
 
 test("a status outside the three is refused, naming the status as JSON", () => {
@@ -138,10 +144,10 @@ test("a reason or text that a status requires must be a string: a number, a list
 test("a reason or text that the status does not require is let go when it is not a string, and costs the line nothing", () => {
   const handled = parseReplyLine('{"item":"c_1","rev":1,"status":"handled","reason":5,"text":{}}');
   assert.equal(handled.ok, true);
-  assert.equal(handled.ok ? handled.reply.reason : "x", null);
-  assert.equal(handled.ok ? handled.reply.text : "x", null);
+  assert.equal(accepted(handled).reason, null);
+  assert.equal(accepted(handled).text, null);
   const question = parseReplyLine('{"item":"c_1","rev":1,"status":"question","text":"which?","reason":5}');
-  assert.equal(question.ok ? question.reply.reason : "x", null);
+  assert.equal(accepted(question).reason, null);
 });
 
 test("a malformed line is refused with a reason, whatever it holds, and never throws", () => {
@@ -153,7 +159,7 @@ test("a malformed line is refused with a reason, whatever it holds, and never th
     assert.doesNotThrow(() => parseReplyLine(text), JSON.stringify(text));
     const got = parseReplyLine(text);
     assert.equal(got.ok, false, JSON.stringify(text));
-    assert.equal(got.ok ? "" : got.code, "REPLY_LINE_MALFORMED");
+    assert.equal(got.code, "REPLY_LINE_MALFORMED");
   }
   for (const text of ["null", "5", '"text"', "true", "[]", '[{"status":"handled"}]']) {
     assert.deepEqual(parseReplyLine(text), refusal("a reply line must be a JSON object"), text);
@@ -164,50 +170,50 @@ test("a malformed line is refused with a reason, whatever it holds, and never th
 
 test("user_needs_to_see_reply is true only for the boolean true, and anything else costs nothing", () => {
   const flagged = parseReplyLine('{"item":"c_7fa2","rev":2,"status":"handled","user_needs_to_see_reply":true}');
-  assert.equal(flagged.ok ? flagged.reply.user_needs_to_see_reply : null, true);
+  assert.equal(accepted(flagged).user_needs_to_see_reply, true);
   const absent = parseReplyLine('{"item":"c_7fa2","rev":2,"status":"handled"}');
-  assert.equal(absent.ok ? absent.reply.user_needs_to_see_reply : null, false, "absent means no, not unknown");
+  assert.equal(accepted(absent).user_needs_to_see_reply, false, "absent means no, not unknown");
   for (const value of ['"yes"', "1", "null", "{}", "false", '"true"', "[true]"]) {
     const parsed = parseReplyLine('{"item":"c_7fa2","rev":2,"status":"handled","user_needs_to_see_reply":' + value + "}");
     assert.equal(parsed.ok, true, value + " does not cost the agent the whole line");
-    assert.equal(parsed.ok ? parsed.reply.user_needs_to_see_reply : null, false, value + " is not a flag");
+    assert.equal(accepted(parsed).user_needs_to_see_reply, false, value + " is not a flag");
   }
 });
 
 test("an accepted reply carries a copy of the files list, or an empty list when files is not a list", () => {
   const files = ["a.html", { path: "b.html" }, 3];
   const withFiles = parseReplyLine(line({ status: "handled", files }));
-  assert.deepEqual(withFiles.ok ? withFiles.reply.files : null, files);
+  assert.deepEqual(accepted(withFiles).files, files);
   const text = JSON.stringify({ item: "itm_1", rev: 2, status: "handled", files });
   const first = parseReplyLine(text);
   const second = parseReplyLine(text);
-  assert.notEqual(first.ok ? first.reply.files : 1, second.ok ? second.reply.files : 2, "each reply gets its own list");
+  assert.notEqual(accepted(first).files, accepted(second).files, "each reply gets its own list");
   for (const value of ['"a.html"', "null", "{}", "5"]) {
     const parsed = parseReplyLine('{"item":"c_1","rev":1,"status":"handled","files":' + value + "}");
-    assert.deepEqual(parsed.ok ? parsed.reply.files : null, [], value);
+    assert.deepEqual(accepted(parsed).files, [], value);
   }
 });
 
 test("the line's agent beats the filename's agent, and a missing agent is the filename's, else null", () => {
   const withBoth = parseReplyLine('{"item":"c_1","rev":1,"status":"handled","agent":"codex"}', { filenameAgent: "claude" });
-  assert.equal(withBoth.ok ? withBoth.reply.agent : null, "codex");
+  assert.equal(accepted(withBoth).agent, "codex");
   const filenameOnly = parseReplyLine('{"item":"c_1","rev":1,"status":"handled"}', { filenameAgent: "claude" });
-  assert.equal(filenameOnly.ok ? filenameOnly.reply.agent : "x", "claude");
+  assert.equal(accepted(filenameOnly).agent, "claude");
   const neither = parseReplyLine('{"item":"c_1","rev":1,"status":"handled"}');
-  assert.equal(neither.ok ? neither.reply.agent : "x", null);
+  assert.equal(accepted(neither).agent, null);
   for (const value of ['""', "5", "null", "{}"]) {
     const got = parseReplyLine('{"item":"c_1","rev":1,"status":"handled","agent":' + value + "}", { filenameAgent: "claude" });
-    assert.equal(got.ok ? got.reply.agent : "x", "claude", value);
+    assert.equal(accepted(got).agent, "claude", value);
   }
   const nullFilename = parseReplyLine('{"item":"c_1","rev":1,"status":"handled"}', { filenameAgent: null });
-  assert.equal(nullFilename.ok ? nullFilename.reply.agent : "x", null);
+  assert.equal(accepted(nullFilename).agent, null);
 });
 
 test("an ordinary reply carries no proofread keys, and a proofread question carries both", () => {
   const plain = parseReplyLine(line({ status: "handled" }));
   assert.equal(plain.ok, true);
-  assert.equal(Object.hasOwn(plain.ok ? plain.reply : {}, "proofread"), false);
-  assert.equal(Object.hasOwn(plain.ok ? plain.reply : {}, "suggestions"), false);
+  assert.equal(Object.hasOwn(accepted(plain), "proofread"), false);
+  assert.equal(Object.hasOwn(accepted(plain), "suggestions"), false);
   const suggestions = [
     { block: 0, from: "teh", to: "the" },
     { block: 3, from: "its", to: "it's" }
@@ -216,19 +222,19 @@ test("an ordinary reply carries no proofread keys, and a proofread question carr
     line({ status: "question", text: "I placed your words as written. Two fixes you may want.", proofread: true, suggestions })
   );
   assert.equal(got.ok, true);
-  assert.equal(got.ok ? got.reply.proofread : null, true);
-  assert.deepEqual(got.ok ? got.reply.suggestions : null, suggestions);
+  assert.equal(accepted(got).proofread, true);
+  assert.deepEqual(accepted(got).suggestions, suggestions);
   const empty = parseReplyLine(line({ status: "question", text: "q", proofread: true }));
-  assert.equal(empty.ok ? empty.reply.proofread : null, true);
-  assert.deepEqual(empty.ok ? empty.reply.suggestions : null, [], "suggestions missing is an empty list");
+  assert.equal(accepted(empty).proofread, true);
+  assert.deepEqual(accepted(empty).suggestions, [], "suggestions missing is an empty list");
 });
 
 test("a suggestion keeps only block, from and to", () => {
   const got = parseReplyLine(
     line({ status: "question", text: "q", proofread: true, suggestions: [{ block: 1, from: "a", to: "b", extra: "dropped", note: 5 }] })
   );
-  assert.deepEqual(got.ok ? got.reply.suggestions : null, [{ block: 1, from: "a", to: "b" }]);
-  const first = got.ok ? got.reply.suggestions?.[0] : undefined;
+  assert.deepEqual(accepted(got).suggestions, [{ block: 1, from: "a", to: "b" }]);
+  const first = accepted(got).suggestions?.[0];
   assert.deepEqual(Object.keys(first ?? {}), ["block", "from", "to"]);
 });
 
@@ -305,7 +311,7 @@ test("the agent a reply file belongs to comes from its name, and a name that is 
   const refused = { ok: false, agent: null, reason: "reply file name is not replies.jsonl or replies-<agent>.jsonl" };
   const names = ["replies-../../etc/passwd.jsonl", "replies-.jsonl", "notes.txt", "replies-" + "a".repeat(65) + ".jsonl", "replies.json", "xreplies.jsonl", "replies-a.jsonl.bak", ""];
   for (const name of names) assert.deepEqual(agentFromFilename(name), refused, name);
-  for (const value of [undefined, null, 5, ["replies.jsonl"], {}]) assert.deepEqual(agentFromFilename(value), refused, String(value));
+  for (const value of [undefined, null, 5, ["replies.jsonl"], {}]) assert.deepEqual(agentFromFilename(value), refused, label(value));
 });
 
 test("the reply poll asks every 5 seconds and its cursor is a seq, never a timestamp", () => {
@@ -327,10 +333,10 @@ test("the reply poll tracks a byte offset and resets when a file shrinks", () =>
 
 test("a file size that is not a finite number of 0 or more is refused", () => {
   for (const size of [-1, NaN, Infinity, -Infinity]) {
-    assert.throws(() => nextReadOffset(0, size), { message: "nextReadOffset: fileSize must be a number" }, String(size));
+    assert.throws(() => nextReadOffset(0, size), { message: "nextReadOffset: fileSize must be a number" }, label(size));
   }
   for (const size of ["5", null, undefined, {}]) {
-    assert.throws(() => callUntyped(nextReadOffset, 0, size), { message: "nextReadOffset: fileSize must be a number" }, String(size));
+    assert.throws(() => callUntyped(nextReadOffset, 0, size), { message: "nextReadOffset: fileSize must be a number" }, label(size));
   }
 });
 

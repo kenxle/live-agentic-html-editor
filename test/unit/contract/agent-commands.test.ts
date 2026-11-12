@@ -12,7 +12,7 @@ import {
   stateDirFlag,
   takeoverCommand
 } from "../../../src/contract/agent-commands.ts";
-import { callUntyped } from "./support/untyped.ts";
+import { callUntyped, label } from "./support/untyped.ts";
 
 test("the exit codes are exactly these", () => {
   assert.deepEqual(CLI_EXIT, { OK: 0, HELPER_UNREACHABLE: 2, UNKNOWN_REVIEW: 3, BAD_USAGE: 4, SESSION_CLOSED: 5, SESSION_TAKEN_OVER: 6 });
@@ -27,8 +27,8 @@ test("the wake feed is a file of this name with these kinds and fields", () => {
 });
 
 test("no state folder means no flag, whatever else was passed", () => {
-  for (const dir of [undefined, null, ""]) assert.equal(stateDirFlag(dir), "", String(dir));
-  for (const dir of [5, {}, ["/tmp/x"], true]) assert.equal(callUntyped(stateDirFlag, dir), "", String(dir));
+  for (const dir of [undefined, null, ""]) assert.equal(stateDirFlag(dir), "", label(dir));
+  for (const dir of [5, {}, ["/tmp/x"], true]) assert.equal(callUntyped(stateDirFlag, dir), "", label(dir));
 });
 
 test("a state folder is a --state-dir flag, bare when the shell needs no quoting, in single quotes when it does", () => {

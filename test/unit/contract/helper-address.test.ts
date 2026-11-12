@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DEFAULT_HELPER_ORIGIN, DEFAULT_HOST, DEFAULT_PORT, hostAllowed } from "../../../src/contract/helper-address.ts";
+import { label } from "./support/untyped.ts";
 
 test("the helper listens on 127.0.0.1 port 7817 unless told otherwise", () => {
   assert.equal(DEFAULT_PORT, 7817);
@@ -40,5 +41,5 @@ test("a Host naming anything else is refused: a rebound name, a lookalike, anoth
 });
 
 test("a Host header that is missing or is not one string is refused", () => {
-  for (const host of [undefined, null, ["localhost"], 7817, {}]) assert.equal(hostAllowed(host), false, String(host));
+  for (const host of [undefined, null, ["localhost"], 7817, {}]) assert.equal(hostAllowed(host), false, label(host));
 });

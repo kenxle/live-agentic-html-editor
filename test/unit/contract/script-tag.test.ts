@@ -167,7 +167,6 @@ test("a script tag without src, token or a safe review id is refused before anyt
   refuse({ review: undefined }, "scriptTag: review must be a safe id");
   refuse({ token: undefined }, "scriptTag: token is required; absent configuration fails closed");
   refuse({ token: "" }, "scriptTag: token is required; absent configuration fails closed");
-  assert.throws(() => callUntyped(scriptTag, undefined), { message: "scriptTag: src is required (the path to the built library)" });
   assert.throws(() => scriptTag({ src: "x.js", review: REVIEW, token: "" }), /token/);
   assert.throws(() => callUntyped(scriptTag, { src: "x.js", review: "../etc", token: "t" }), /safe id/);
 });

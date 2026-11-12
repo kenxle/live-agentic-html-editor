@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { AGENT_LIVENESS, MONITOR, handoffMessage, livenessOverdue } from "../../../src/contract/agent-liveness.ts";
+import { label } from "./support/untyped.ts";
 
 test("the monitor's files, timings and fields are exactly these", () => {
   assert.deepEqual(MONITOR, {
@@ -131,7 +132,7 @@ test("a wait is overdue at the quiet limit only for no_agent after 2 minutes and
   assert.equal(livenessOverdue("waiting", STALE_MS), true);
   assert.equal(livenessOverdue("waiting", STALE_MS * 10), true);
   for (const waited of [0, QUIET_MS, STALE_MS, STALE_MS * 100, Number.MAX_SAFE_INTEGER]) {
-    assert.equal(livenessOverdue("working", waited), false, "working at " + String(waited));
+    assert.equal(livenessOverdue("working", waited), false, "working at " + label(waited));
   }
 });
 
@@ -140,8 +141,8 @@ test("a state with no words, or a wait that is not a number or is under the quie
     assert.equal(livenessOverdue(state, AGENT_LIVENESS.STALE_MS * 10), false, String(state));
   }
   for (const waited of [null, undefined, "600000", NaN, Infinity, -Infinity, {}, 0, -1, AGENT_LIVENESS.QUIET_MS - 1]) {
-    assert.equal(livenessOverdue("no_agent", waited), false, String(waited));
-    assert.equal(livenessOverdue("waiting", waited), false, String(waited));
+    assert.equal(livenessOverdue("no_agent", waited), false, label(waited));
+    assert.equal(livenessOverdue("waiting", waited), false, label(waited));
   }
 });
 
@@ -190,7 +191,7 @@ test("from the rail with a state folder outside the default, the message asks fo
       CONTINUE
     ].join("\n")
   );
-  assert.equal(/\/(Users|home|tmp|var)\b/.test(message), false, "the page is never sent a filesystem path");
+  assert.equal(/\/[A-Za-z]/.test(message.replace(/lahe session list|--state-dir/g, "")), false, "the page is never sent a filesystem path");
 });
 
 test("from the rail with no session to take over, the message points at the session list", () => {
@@ -316,8 +317,11 @@ test("there is one hand-off builder: the Library's message is the rail's with on
   }
 });
 
-test("the message is plain text with no token, no secret and no URL", () => {
-  for (const message of [rail("s_1", "coach", true), library("s_1", "coach", "/tmp/x", "req_1")]) {
+test("the message is plain text with no token, no secret, no URL, no markup and no em dash", () => {
+  for (const message of [rail("s_1", "coach", true), rail("s_1", null, false), library("s_1", "coach", "/tmp/x", "req_1")]) {
     assert.equal(/token|secret|http/i.test(message), false, message);
+    assert.equal(/<[a-z]/i.test(message), false, "plain text, no markup");
+    assert.equal(message.includes("\u2014"), false, "no em dashes");
   }
+  assert.match(rail("s_1", null, false).toLowerCase(), /take over/, "pasting it is the human's explicit request, which takeover needs");
 });

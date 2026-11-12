@@ -22,18 +22,15 @@ const CONFIG: ReviewAuthConfig = {
 type Overrides = Readonly<Record<string, string | undefined>>;
 
 function headers(overrides?: Overrides): RequestHeaders {
-  const base: Record<string, string | undefined> = {
+  const merged: Record<string, string | undefined> = {
     host: "127.0.0.1:7817",
     "x-lahe-client": "layer",
     "x-lahe-token": "tok_abc",
     "content-type": "application/json",
-    origin: "http://localhost:3000"
+    origin: "http://localhost:3000",
+    ...overrides
   };
-  for (const [name, value] of Object.entries(overrides ?? {})) {
-    if (value === undefined) delete base[name];
-    else base[name] = value;
-  }
-  return base;
+  return Object.fromEntries(Object.entries(merged).filter(([, value]) => value !== undefined));
 }
 
 function run(routeName: ReviewRouteName, requestHeaders: RequestHeaders, review: unknown = "rev_a", config: ReviewAuthConfig | null = CONFIG): CheckResult {

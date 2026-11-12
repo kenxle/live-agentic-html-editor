@@ -22,3 +22,20 @@ export function jsonMessage(text: string): string {
   }
   throw new Error("expected JSON.parse to refuse " + text);
 }
+
+export function label(value: unknown): string {
+  switch (typeof value) {
+    case "string":
+    case "object":
+      return JSON.stringify(value);
+    case "number":
+    case "boolean":
+    case "bigint":
+    case "undefined":
+      return String(value);
+    case "function":
+      return "function";
+    case "symbol":
+      return value.description ?? "symbol";
+  }
+}

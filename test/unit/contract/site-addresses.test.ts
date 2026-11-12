@@ -13,6 +13,7 @@ import {
   siteNameFromOrigin,
   siteOrigin
 } from "../../../src/contract/site-addresses.ts";
+import { label } from "./support/untyped.ts";
 
 const OPTIONS = { pagesPort: 1483 } as const;
 const WITH_LAHE = { pagesPort: 1483, laheNames: true } as const;
@@ -43,7 +44,7 @@ test("a site label is 1 to 63 lowercase letters and digits in runs joined by sin
   for (const label of ["a".repeat(64), "-a", "a-", "a--b", "xn--abc", "A", "a_b", "a.b", "", "a b", "é", "a\n", "ab--", "--"]) {
     assert.equal(isSiteLabel(label), false, JSON.stringify(label));
   }
-  for (const value of [5, null, undefined, ["a"], {}]) assert.equal(isSiteLabel(value), false, String(value));
+  for (const value of [5, null, undefined, ["a"], {}]) assert.equal(isSiteLabel(value), false, label(value));
 });
 
 test("a site name is one to four site labels joined by dots, at most 150 characters", () => {
@@ -55,7 +56,7 @@ test("a site name is one to four site labels joined by dots, at most 150 charact
   for (const name of ["a.b.c.d.e", "a..b", "a.", ".a", "A.b", "", "a.b.", "a.-b", "a.b-"]) {
     assert.equal(isSiteName(name), false, JSON.stringify(name));
   }
-  for (const value of [5, null, undefined, ["a"]]) assert.equal(isSiteName(value), false, String(value));
+  for (const value of [5, null, undefined, ["a"]]) assert.equal(isSiteName(value), false, label(value));
 });
 
 test("the four Host families are api, library, page and bad", () => {
@@ -116,7 +117,7 @@ test("every other Host is bad: a trailing dot, uppercase, too many labels, a for
   ];
   for (const host of bad) assert.deepEqual(classifyHost(host, WITH_LAHE), { family: "bad" }, JSON.stringify(host));
   for (const host of [undefined, null, 5, ["a.lahe.localhost"], {}]) {
-    assert.deepEqual(classifyHost(host, WITH_LAHE), { family: "bad" }, String(host));
+    assert.deepEqual(classifyHost(host, WITH_LAHE), { family: "bad" }, label(host));
   }
 });
 
@@ -141,7 +142,7 @@ test("an origin names its site at the pages port or with no port, and never othe
   assert.equal(siteNameFromOrigin("http://a.b.c.d.e.lahe.localhost", 1483), null);
   assert.equal(siteNameFromOrigin("http://a.b.lahe.localhost/", 1483), null);
   assert.equal(siteNameFromOrigin("http://a.b.lahe.localhost:1483/x", 1483), null);
-  for (const value of [undefined, null, 5, ["http://a.lahe.localhost"]]) assert.equal(siteNameFromOrigin(value, 1483), null, String(value));
+  for (const value of [undefined, null, 5, ["http://a.lahe.localhost"]]) assert.equal(siteNameFromOrigin(value, 1483), null, label(value));
 });
 
 test("a .lahe origin names its site only once the .lahe check has passed, and never the Library", () => {

@@ -4,6 +4,7 @@
 
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import { after, test } from "node:test";
 import vm from "node:vm";
 import * as agentCommands from "../../../src/contract/agent-commands.ts";
@@ -131,51 +132,59 @@ test("the old path is an ordinary object old code and tests may write to", () =>
 });
 
 const buildModule: unknown = load("../../../scripts/build-layer.js");
+const manifest: unknown = load("../../../src/shared/manifest.js");
+const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 
-interface BuiltFile {
-  readonly output: string;
-  readonly contents: string;
+function callExport(module: unknown, name: string, ...args: unknown[]): unknown {
+  assert.ok(isJsonObject(module));
+  const found = module[name];
+  assert.ok(typeof found === "function", name);
+  return Reflect.apply(found, module, args);
 }
 
-async function buildBoth(): Promise<readonly BuiltFile[]> {
-  assert.ok(isJsonObject(buildModule));
-  const buildAll = buildModule["buildAll"];
-  assert.ok(typeof buildAll === "function");
-  const built: unknown = await Reflect.apply(buildAll, buildModule, []);
-  assert.ok(Array.isArray(built));
-  const files: BuiltFile[] = [];
-  for (const entry of built) {
-    assert.ok(isJsonObject(entry));
-    const output = entry["output"];
-    const contents = entry["contents"];
-    assert.ok(typeof output === "string" && typeof contents === "string");
-    files.push({ output, contents });
-  }
-  return files;
+function entriesOf(list: unknown): readonly unknown[] {
+  assert.ok(Array.isArray(list));
+  return list;
+}
+
+function entryPath(entry: unknown): unknown {
+  assert.ok(isJsonObject(entry));
+  return entry["path"];
+}
+
+async function runProtocolBundle(entries: readonly unknown[], namespace: boolean): Promise<Readonly<Record<string, unknown>>> {
+  const code: unknown = await callExport(buildModule, "bundle", {
+    root: ROOT,
+    entries,
+    title: "the protocol, as the manifest places it",
+    namespace
+  });
+  assert.ok(typeof code === "string");
+  const page = { document: {} };
+  Object.assign(page, { window: page });
+  vm.createContext(page);
+  vm.runInContext(code, page);
+  const lahe: unknown = Reflect.get(page, "LAHE");
+  assert.ok(isJsonObject(lahe));
+  const protocol = lahe["protocol"];
+  assert.ok(isJsonObject(protocol));
+  return protocol;
 }
 
 after(async () => {
-  assert.ok(isJsonObject(buildModule));
-  const stop = buildModule["stop"];
-  assert.ok(typeof stop === "function");
-  await Reflect.apply(stop, buildModule, []);
+  await callExport(buildModule, "stop");
 });
 
-test("window.LAHE.protocol in the layer bundle and in the Library bundle is the same set of names", async () => {
-  const files = await buildBoth();
-  assert.deepEqual(
-    files.map((file) => file.output),
-    ["dist/lahe-layer.js", "dist/lahe-library.js"]
-  );
-  for (const file of files) {
-    const page = { document: {} };
-    Object.assign(page, { window: page });
-    vm.createContext(page);
-    vm.runInContext(file.contents, page);
-    const namespace: unknown = Reflect.get(page, "LAHE");
-    assert.ok(isJsonObject(namespace), file.output);
-    const protocol = namespace["protocol"];
-    assert.ok(isJsonObject(protocol), file.output);
-    assert.deepEqual(sorted(protocol), NAMES, file.output);
-  }
+test("window.LAHE.protocol, built from the layer's and the Library's own manifest entries, is the same set of names", async () => {
+  const layerEntries = entriesOf(callExport(manifest, "builtFiles"));
+  const upToProtocol = layerEntries.findIndex((entry) => entryPath(entry) === "src/contract/protocol.ts");
+  assert.ok(upToProtocol >= 0, "the layer's manifest registers src/contract/protocol.ts");
+  const libraryEntries = entriesOf(callExport(manifest, "libraryFiles"));
+  assert.equal(entryPath(libraryEntries[0]), "src/contract/protocol.ts", "the Library page loads the same protocol entry first");
+
+  const inLayer = await runProtocolBundle(layerEntries.slice(0, upToProtocol + 1), true);
+  const inLibrary = await runProtocolBundle(libraryEntries.slice(0, 1), false);
+  assert.deepEqual(sorted(inLayer), NAMES);
+  assert.deepEqual(sorted(inLibrary), NAMES);
+  for (const name of NAMES) assert.equal(typeof inLayer[name], typeof inLibrary[name], name);
 });

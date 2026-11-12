@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { SAFE_ID, isSafeId } from "../../../src/contract/safe-id.ts";
+import { label } from "./support/untyped.ts";
 
 test("a safe id is 1 to 64 ASCII letters, digits, dots, underscores and dashes, starting with a letter or digit", () => {
   for (const id of ["rev_a", "a", "a".repeat(64), "s.1-x_2", "0", "A9", "a.b", "a-", "a_"]) {
@@ -18,7 +19,7 @@ test("anything that could climb a path, hide a file, look like a flag or hold a 
 });
 
 test("a value that is not text is not a safe id", () => {
-  for (const value of [7, null, undefined, {}, ["a"], true]) assert.equal(isSafeId(value), false, String(value));
+  for (const value of [7, null, undefined, {}, ["a"], true]) assert.equal(isSafeId(value), false, label(value));
 });
 
 test("SAFE_ID is an unflagged pattern whose source other patterns can be built from", () => {

@@ -141,7 +141,7 @@ test("a payload key that names a base field is ignored, so a payload never chang
   assert.equal(e.event, "item.content");
   assert.equal(e.seq, null);
   assert.equal(e.item, "itm_1");
-  assert.equal(e.text, "kept");
+  assert.equal(e["text"], "kept");
   assert.deepEqual(Object.keys(e), [...BASE_KEYS, "text"]);
 });
 
@@ -206,9 +206,9 @@ test("an event line is the JSON of the event and one newline, whatever the page'
   assert.equal(line.endsWith("\n"), true);
   assert.equal(line.slice(0, -1).includes("\n"), false, "one event is one line");
   const back = parseEventLine(line.slice(0, -1));
-  assert.equal(back.ok, true);
-  assert.deepEqual(back.ok ? back.event : null, e);
-  assert.equal(back.ok ? back.event["text"] : null, text);
+  assert.ok(back.ok);
+  assert.deepEqual(back.event, e);
+  assert.equal(back.event["text"], text);
 });
 
 test("a line that is a JSON object with a known event and a non-empty event_id parses, with every field kept", () => {
