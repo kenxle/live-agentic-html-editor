@@ -792,6 +792,21 @@ test("the scrollbar geometry: past the content box and inside the border box", (
   assert.equal(isScrollbarPress({ x: 600, y: 300, ...root }), false);
 });
 
+test("the gutter includes both its edges: at least the content size and at most the box size", () => {
+  const sideGutter = { contentWidth: 185, contentHeight: 100, boxWidth: 200, boxHeight: 100 };
+  assert.equal(isScrollbarPress({ x: 185, y: 40, ...sideGutter }), true, "the content's own edge");
+  assert.equal(isScrollbarPress({ x: 200, y: 40, ...sideGutter }), true, "the box's own edge");
+  assert.equal(isScrollbarPress({ x: 201, y: 40, ...sideGutter }), false);
+  const bottomGutter = { contentWidth: 200, contentHeight: 85, boxWidth: 200, boxHeight: 100 };
+  assert.equal(isScrollbarPress({ x: 40, y: 85, ...bottomGutter }), true, "the content's own edge");
+  assert.equal(isScrollbarPress({ x: 40, y: 100, ...bottomGutter }), true, "the box's own edge");
+  assert.equal(isScrollbarPress({ x: 40, y: 101, ...bottomGutter }), false);
+});
+
+test("a measure of zero is no measure at all, so it never reads as a gutter", () => {
+  assert.equal(isScrollbarPress({ x: 5, y: 5, contentWidth: 0, contentHeight: 0, boxWidth: 10, boxHeight: 10 }), false);
+});
+
 test("a box with no gutter is an overlay scrollbar, which takes no space and receives no press", () => {
   const overlay = { contentWidth: 200, contentHeight: 100, boxWidth: 200, boxHeight: 100 };
   assert.equal(isScrollbarPress({ x: 199, y: 99, ...overlay }), false);
