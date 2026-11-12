@@ -65,7 +65,6 @@ const RENAMED_TAGS: ReadonlyMap<string, string> = new Map<string, string>([
 
 const MAX_CODE_POINT = 0x10ffff;
 const SCHEME_SHAPE = /^[a-zA-Z][a-zA-Z0-9+.-]*$/;
-const NOT_A_SCHEME = /[/?#]/;
 
 function codePointText(code: number): string {
   return code >= 0 && code <= MAX_CODE_POINT ? String.fromCodePoint(code) : "";
@@ -88,8 +87,7 @@ function isSafeUrl(value: string): boolean {
   const colon = resolved.indexOf(":");
   if (colon === -1) return true;
   const scheme = resolved.slice(0, colon);
-  if (NOT_A_SCHEME.test(scheme) || !SCHEME_SHAPE.test(scheme)) return true;
-  return SAFE_SCHEMES.has(scheme.toLowerCase());
+  return !SCHEME_SHAPE.test(scheme) || SAFE_SCHEMES.has(scheme.toLowerCase());
 }
 
 function lastValue(attributes: readonly TagAttribute[], name: string): string | null {

@@ -179,6 +179,9 @@ test("tidying drops edge space, leading and trailing breaks and empty elements, 
   assert.equal(accepted("p", "Line one<br>Line two<br>"), "Line one<br>Line two");
   assert.equal(accepted("ul", "<li>One</li>\n<li></li><li>Two <b>b</b></li>"), "<li>One</li><li>Two <strong>b</strong></li>");
   assert.equal(accepted("p", "<em> a</em>"), "<em>a</em>");
+  assert.equal(accepted("p", "<em/>words"), "words");
+  assert.equal(accepted("p", "a<strong/>b"), "ab");
+  refusal("ul", "<li/>words", "words outside an item in a list block");
   assert.equal(accepted("p", "a <em></em> b"), "a b");
   assert.equal(accepted("p", "<br>a"), "a");
   assert.equal(accepted("p", "  a  <br>  b  "), "a <br> b");

@@ -52,6 +52,7 @@ test("end is the index just past the closing angle bracket, or the length when n
   assert.equal(readTag("ab<p class=x>text", 2)?.end, 13);
   assert.equal(readTag("<p class=a", 0)?.end, 10);
   assert.equal(readTag("</p", 0)?.end, 3);
+  assert.equal(readTag("</p foo", 0)?.end, 7);
   assert.equal(readTag("<a title=\"unfinished", 0)?.end, 20);
 });
 

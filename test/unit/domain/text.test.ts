@@ -77,6 +77,8 @@ test("normalizeText throws a TypeError on a value that is not a string, rather t
 test("normalizeBlockText folds whitespace like normalizeText and keeps a break", () => {
   assert.equal(normalizeBlockText("  Hello   world.  "), "Hello world.");
   assert.equal(normalizeBlockText("Hello \n\n\n\n world."), "Hello\n\nworld.");
+  assert.equal(normalizeBlockText("a\n\n\nb"), "a\n\nb");
+  assert.equal(normalizeBlockText("a\n\nb"), "a\n\nb");
   assert.equal(normalizeBlockText("Hello\r\nworld."), "Hello\nworld.");
   assert.equal(normalizeBlockText("Hello\rworld."), "Hello\nworld.");
   assert.equal(normalizeBlockText("Hello\nworld."), "Hello\nworld.");

@@ -75,6 +75,9 @@ test("blockText folds the whitespace a source carries, and only that", () => {
 test("blockText keeps the whitespace inside a pre, where it is content", () => {
   assert.equal(blockText("<pre>line one\n   indented</pre>"), "line one\n   indented");
   assert.equal(blockText("<p>a   b</p><pre>c   d</pre>"), "a b\n\nc   d");
+  assert.equal(blockText("<pre>col1\tcol2\n\tindented</pre>"), "col1\tcol2\n\tindented");
+  assert.equal(textOf("<pre>col1\tcol2</pre>"), "col1\tcol2");
+  assert.equal(blockTextFromNode(el("pre", "col1\tcol2")), "col1\tcol2");
 });
 
 test("blockText reads no words from tool chrome, dropped elements, comments or the reset markers", () => {

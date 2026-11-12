@@ -184,8 +184,7 @@ function finishInline(children: readonly BlockNode[]): string {
   const nodes = pruneEmpty(children);
   trimStart(nodes);
   trimEnd(nodes);
-  const html = serialize(pruneEmpty(nodes));
-  return textOf(html) === "" ? "" : html;
+  return serialize(pruneEmpty(nodes));
 }
 
 export function cleanBlock(tag: unknown, html: unknown): CleanedBlock | BlockRefusal {
@@ -243,7 +242,6 @@ export function cleanBlock(tag: unknown, html: unknown): CleanedBlock | BlockRef
       if (top !== root) return refuse("a nested item");
       const item: ElementNode = { kind: "element", name: "li", children: [] };
       root.children.push(item);
-      if (stack.length > MAX_BLOCK_NESTING) return refuse("nesting deeper than " + String(MAX_BLOCK_NESTING));
       stack.push(item);
       if (parsed.selfClosing) stack.pop();
       continue;

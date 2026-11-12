@@ -96,6 +96,12 @@ test("the reader skips the marked file-name title, so an empty notes page has no
   assert.deepEqual(leavesOf(read("empty_notes.html")), []);
 });
 
+test("the reader skips the head, an element that is closed by its own slash, and everything inside them", () => {
+  assert.deepEqual(shape(leavesOf("<head><p>in the head</p></head><p>x</p>")), ["p: x"]);
+  assert.deepEqual(shape(leavesOf("<div/>loose words")), []);
+  assert.deepEqual(shape(leavesOf("<p>a</p><div/><p>b</p>")), ["p: a", "p: b"]);
+});
+
 test("the reader skips elements with no text", () => {
   assert.deepEqual(shape(leavesOf("<p></p><div><p> </p></div><p>Words</p><h2><br></h2>")), ["p: Words"]);
 });
@@ -332,9 +338,33 @@ test("a missing block that is not inside the next leaf is missing, not a clash",
 test("words must be whole words: a block's words inside a longer word are not a clash", () => {
   const run = [block("Alpha words here"), block("Beta")];
   assert.equal(runClash(run, leavesOf("<p>Alpha words here</p><p>Betamax tapes</p>")), null);
+  const tapes = [block("Alpha words here"), block("tapes")];
+  assert.equal(runClash(tapes, leavesOf("<p>Alpha words here</p><p>Betatapes here</p>")), null);
+  assert.deepEqual(runClash(tapes, leavesOf("<p>Alpha words here</p><p>Beta tapes here</p>")), { index: 1, blocks: 1, leaf: 1 });
   const accented = [block("Alpha words here"), block("Beta")];
   assert.equal(runClash(accented, leavesOf("<p>Alpha words here</p><p>Beta\u00E9 tapes</p>")), null);
   assert.equal(runClash(accented, leavesOf("<p>Alpha words here</p><p>Beta\u0431 tapes</p>")), null);
+});
+
+test("a leaf another block already uses is never a clash for a block before it", () => {
+  const run = [block("Alpha words here"), block("Gamma words"), block("Gamma words here")];
+  assert.equal(runClash(run, leavesOf("<p>Alpha words here</p><p>Gamma words here</p>")), null);
+});
+
+test("only the first missing block after a found one can clash, because the next leaf is where it would sit", () => {
+  const run = [block("Alpha words here"), block("Beta words here"), block("Gamma words here and stuff words")];
+  assert.equal(runClash(run, leavesOf("<p>Alpha words here</p><p>Gamma words here and stuff words plus more</p>")), null);
+});
+
+test("a clash covers the missing blocks inside the leaf and stops at the first that is not", () => {
+  const run = [
+    block("Alpha words here"),
+    block("Beta words here"),
+    block("Gamma words here"),
+    block("Delta unrelated words")
+  ];
+  const got = runClash(run, leavesOf("<p>Alpha words here</p><p>Beta words here Gamma words here and more</p>"));
+  assert.deepEqual(got, { index: 1, blocks: 2, leaf: 1 });
 });
 
 test("with nothing matched, only the first leaf after the anchor can clash", () => {

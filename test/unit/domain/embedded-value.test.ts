@@ -29,6 +29,10 @@ test("an embedded value is named by its media type, its length and a 64-bit dige
   assert.equal(embeddedName("data:image/svg+xml,<svg/>"), "embedded:image/svg+xml:25:4c06c0ac12134308");
 });
 
+test("the media type is the text before the first comma", () => {
+  assert.match(embeddedName("data:text/plain,a,b"), /^embedded:text\/plain:19:[0-9a-f]{16}$/);
+});
+
 test("two values of one size and type get different names, and one value always gets one name", () => {
   const a = embeddedName("data:image/png;base64,AAAA");
   const b = embeddedName("data:image/png;base64,AAAB");

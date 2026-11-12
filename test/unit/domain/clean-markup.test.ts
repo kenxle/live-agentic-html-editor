@@ -53,6 +53,8 @@ test("a URL attribute is kept only with no scheme or a web, mail or phone scheme
     "&#106avascript:x",
     " java\nscript:x",
     "javascript&colon;x",
+    "java&tab;script:x",
+    "java&newline;script:x",
     "vbscript:x",
     "ftp://x"
   ];
@@ -109,6 +111,8 @@ test("a void element is written with no end tag and a slash on it is dropped", (
   cleans("<p>a<br/>b<img src=x.png alt='z'/></p>", '<p>a<br>b<img alt="z" src="x.png"></p>');
   cleans("<p>a<br></br>b<hr></p>", "<p>a<br>b<hr></p>");
   cleans('<p>a<span data-lahe="wrap"/>b</p>', "<p>ab</p>");
+  cleans('<p>a<br data-lahe="wrap">b</p>', "<p>ab</p>");
+  cleans('<p>a<img data-lahe="chrome" src="x.png">b</p>', "<p>ab</p>");
 });
 
 test("a slash on an element that is not void opens it, as a browser does, so the output stays balanced", () => {

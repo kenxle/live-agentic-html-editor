@@ -81,9 +81,5 @@ export function emphasisRuns(html: string): readonly EmphasisRun[] {
       break;
     }
   }
-  for (let i = open.length - 1; i >= 0; i -= 1) {
-    const run = open[i];
-    if (run !== undefined) finishRun(runs, run);
-  }
   return runs;
 }
